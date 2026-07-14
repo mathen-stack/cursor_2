@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: Letter; margin: 0.6in 0.7in; }
+    :root {
+      --ink: #1a3a2a;
+      --muted: #4a5c52;
+      --rule: #c5d4cb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: #1f2a24;
+      font-size: 10.5pt;
+      line-height: 1.35;
+      margin: 0;
+    }
+    .name {
+      text-align: center;
+      font-size: {% if options.template.value == 'minimal' %}18pt{% else %}20pt{% endif %};
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 2pt;
+      letter-spacing: 0.02em;
+    }
+    .headline {
+      text-align: center;
+      font-style: italic;
+      color: var(--muted);
+      margin: 0 0 4pt;
+      font-size: 11pt;
+    }
+    .contact {
+      text-align: center;
+      font-size: 9pt;
+      color: var(--muted);
+      margin: 0 0 12pt;
+    }
+    h2 {
+      font-size: 10.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink);
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 2pt;
+      margin: 12pt 0 6pt;
+    }
+    .summary, .skills { margin: 0 0 4pt; }
+    .exp { margin-bottom: 8pt; }
+    .exp-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12pt;
+      font-weight: 700;
+      font-size: 10.5pt;
+    }
+    .exp-meta { font-weight: 400; color: var(--muted); font-size: 9pt; margin-top: 1pt; }
+    ul { margin: 4pt 0 0 16pt; padding: 0; }
+    li { margin-bottom: 2pt; }
+    .edu-title { font-weight: 700; }
+    .edu-meta { color: var(--muted); font-size: 9pt; }
+  </style>
+</head>
+<body>
+  <div class="name">{{ resume.full_name }}</div>
+  {% if resume.headline %}<div class="headline">{{ resume.headline }}</div>{% endif %}
+  <div class="contact">
+    {% set parts = [resume.location, resume.email, resume.phone, resume.linkedin_url] | reject('equalto', '') | reject('equalto', none) | list %}
+    {{ parts | join(' · ') }}
+  </div>
+
+  <h2>Summary</h2>
+  <p class="summary">{{ resume.summary }}</p>
+
+  {% if resume.skills %}
+  <h2>Skills</h2>
+  <p class="skills">{{ resume.skills | join(', ') }}</p>
+  {% endif %}
+
+  {% if resume.experiences %}
+  <h2>Experience</h2>
+  {% for exp in resume.experiences %}
+  <div class="exp">
+    <div class="exp-header">{{ exp.role }} — {{ exp.company }}</div>
+    <div class="exp-meta">
+      {% if exp.location %}{{ exp.location }} | {% endif %}{{ exp.start_date }} – {{ exp.end_date }}
+    </div>
+    <ul>
+      {% for b in exp.bullets %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if resume.education %}
+  <h2>Education</h2>
+  {% for ed in resume.education %}
+  <div class="exp">
+    <div class="edu-title">
+      {{ ed.degree }}{% if ed.field %} in {{ ed.field }}{% endif %} — {{ ed.school }}
+    </div>
+    <div class="edu-meta">
+      {% if ed.location %}{{ ed.location }}{% endif %}
+      {% if ed.start_date or ed.end_date %} · {{ ed.start_date }} – {{ ed.end_date }}{% endif %}
+    </div>
+    {% if ed.details %}<p>{{ ed.details }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if resume.certifications %}
+  <h2>Certifications</h2>
+  <ul>
+    {% for c in resume.certifications %}
+    <li>
+      {{ c.name }}{% if c.issuer %} — {{ c.issuer }}{% endif %}{% if c.date %} ({{ c.date }}){% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>
