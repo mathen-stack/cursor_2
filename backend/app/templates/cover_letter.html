@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: Letter; margin: 0.85in; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: #1f2a24;
+      font-size: 11pt;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .name { font-size: 16pt; font-weight: 700; color: #1a3a2a; margin: 0 0 4pt; }
+    .contact { font-size: 9pt; color: #4a5c52; margin: 0 0 28pt; }
+    p { margin: 0 0 12pt; }
+    .closing { margin-top: 18pt; margin-bottom: 4pt; }
+    .sig { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="name">{{ resume.full_name }}</div>
+  <div class="contact">
+    {% set parts = [resume.email, resume.phone, resume.location, resume.linkedin_url] | reject('equalto', '') | reject('equalto', none) | list %}
+    {{ parts | join(' · ') }}
+  </div>
+  <p>{{ letter.greeting }}</p>
+  {% for para in letter.body_paragraphs %}
+  <p>{{ para }}</p>
+  {% endfor %}
+  <p class="closing">{{ letter.closing }}</p>
+  <p class="sig">{{ letter.signature_name or resume.full_name }}</p>
+</body>
+</html>
