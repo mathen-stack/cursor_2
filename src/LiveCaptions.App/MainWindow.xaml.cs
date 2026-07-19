@@ -333,7 +333,7 @@ public partial class MainWindow : Window
         finally
         {
             _allowClose = true;
-            Dispatcher.BeginInvoke(Close);
+            _ = Dispatcher.BeginInvoke(Close);
         }
     }
 
