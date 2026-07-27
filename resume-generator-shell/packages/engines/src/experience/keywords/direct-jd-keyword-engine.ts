@@ -22,10 +22,18 @@ export interface DirectKeywordSelection {
 
 const LEADING_NOISE = /^(?:(?:you(?:'ll| will)?|the successful candidate(?: will)?|this role(?: will)?|responsible for|must|should|will|required to|expected to)\s+)?(?:architect|automate|build|collaborate|communicate|coordinate|conduct|create|define|deliver|deploy|design|develop|drive|ensure|establish|evaluate|implement|improve|integrate|lead|maintain|manage|mentor|monitor|optimize|own|partner|perform|present|productionize|reduce|scale|secure|support|test|translate|troubleshoot)(?:s|ed|ing)?\s+(?:with\s+|on\s+|for\s+|to\s+)?/i;
 
+const DANGLING_TAIL = /^(?:a|an|and|as|at|by|for|from|in|into|of|on|or|the|to|with|using|via|across|through|over|under|between|within|without|per|vs|versus)$/i;
+
 const GENERIC_PATTERNS: readonly PhrasePattern[] = [
-  { label: "action-object", pattern: /\b(?:deploy|monitor|optimize|build|design|develop|implement|integrate|lead|manage|automate|scale|secure|collaborate|communicate|conduct|perform)(?:s|ed|ing)?\s+(?:with\s+|on\s+|for\s+|to\s+)?[^.;:]{3,80}/gi },
+  {
+    label: "action-object",
+    // Bound to complete words (max 8) so the matcher cannot truncate mid-token
+    // at a fixed character budget like "polished user in".
+    pattern:
+      /\b(?:deploy|monitor|optimize|build|design|develop|implement|integrate|lead|manage|automate|scale|secure|collaborate|communicate|conduct|perform)(?:s|ed|ing)?\s+(?:with\s+|on\s+|for\s+|to\s+)?[A-Za-z][\w.+#/-]*(?:\s+[A-Za-z][\w.+#/-]*){0,7}/gi,
+  },
   { label: "stakeholders", pattern: /\b(?:product|platform|engineering|business|technical|executive|customer)(?:\s+and\s+(?:product|platform|engineering|business|technical|executive|customer))*\s+stakeholders?\b/gi },
-  { label: "platform-system", pattern: /\b(?:cloud|data|ml|ai|software|backend|frontend|platform)\s+(?:platforms?|systems?|services?|pipelines?|applications?|infrastructure)\b/gi },
+  { label: "platform-system", pattern: /\b(?:cloud|data|ml|ai|software|backend|frontend|front-end|platform)\s+(?:platforms?|systems?|services?|pipelines?|applications?|infrastructure|experiences?)\b/gi },
 ];
 
 function cloneRegExp(pattern: RegExp): RegExp {
@@ -38,6 +46,61 @@ function cleanMatchedText(value: string): string {
     .replace(/[\s,;:()\[\]{}.-]+$/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function finalizeKeywordPhrase(value: string): string | null {
+  const words = cleanMatchedText(value)
+    .split(/\s+/)
+    .map((word) =>
+      word
+        .replace(/^[\s,;:()\[\]{}-]+/, "")
+        .replace(/[\s,;:()\[\]{}.-]+$/, ""),
+    )
+    .filter(Boolean)
+    .slice(0, 8);
+  while (words.length > 0 && DANGLING_TAIL.test(words[words.length - 1] ?? "")) {
+    words.pop();
+  }
+  // Soft-skill JD lines often include adverbs that sentence normalization later
+  // removes as weak filler; drop them from allocated keywords up front.
+  const withoutWeak = words.filter(
+    (word) => !/^(?:successfully|effectively|various|closely|clearly)$/i.test(word),
+  );
+  const chosen = withoutWeak.length >= 2 ? withoutWeak : words;
+  if (chosen.length === 0) {
+    return null;
+  }
+  if (chosen.length === 1) {
+    const token = chosen[0] ?? "";
+    // Keep single-token tools/products (React.js, Vitest, Git) but reject tiny remnants.
+    if (!/[A-Z.]/.test(token) && token.length < 3) {
+      return null;
+    }
+  }
+
+  const finalized = chosen.join(" ");
+  // Reject adjective-only or soft-skill fragments that produce ungrammatical
+  // bullets such as "builds reliable" or "Led strong verbal ... skills".
+  if (
+    /^(?:strong|excellent|good|proven)\s+(?:verbal|written|communication|soft)\b/i.test(
+      finalized,
+    ) ||
+    /^verbal and written communication skills\b/i.test(finalized)
+  ) {
+    return null;
+  }
+  if (
+    /\b(?:build|builds|building|develop|develops|secure|secures)\s+(?:reliable|secure|scalable|robust|strong)\b/i.test(
+      finalized,
+    ) &&
+    finalized.split(/\s+/).length <= 3
+  ) {
+    return null;
+  }
+  if (/^(?:closely|effectively|successfully|clearly)\b/i.test(finalized)) {
+    return null;
+  }
+  return finalized;
 }
 
 function sourceOffsetForRequirement(requirement: JDRequirement): number {
@@ -55,7 +118,7 @@ function collectPatternCandidates(
   for (const definition of patterns) {
     const pattern = cloneRegExp(definition.pattern);
     for (const match of requirement.sourceText.matchAll(pattern)) {
-      const matched = cleanMatchedText(match[0]);
+      const matched = finalizeKeywordPhrase(match[0] ?? "");
       const localStart = match.index ?? -1;
       if (!matched || localStart < 0) {
         continue;
@@ -90,8 +153,8 @@ function fallbackCandidate(requirement: JDRequirement): DirectKeywordCandidate |
   }
 
   const stripped = source.replace(LEADING_NOISE, "").trim();
-  const candidateText = cleanMatchedText(
-    stripped.length >= 3 && stripped.length <= 100 ? stripped : source,
+  const candidateText = finalizeKeywordPhrase(
+    stripped.length >= 3 && stripped.split(/\s+/).length <= 8 ? stripped : source,
   );
   if (!candidateText) {
     return null;
@@ -246,6 +309,30 @@ export class DirectJDKeywordEngine {
         return alignedFallback ? [...matches, alignedFallback] : matches;
       }),
     );
+
+    if (candidates.length === 0) {
+      // When requirement-local matches are all rejected as weak fragments,
+      // fall back to unused curated JD phrases so planning can still allocate
+      // a grounded direct keyword without inventing unsupported wording.
+      const jdFallbacks = dedupeCandidates(
+        collectPatternCandidates(
+          {
+            ...primary,
+            sourceText: input.jobDescription.rawText,
+            evidence: [
+              {
+                sourceText: input.jobDescription.rawText,
+                startIndex: 0,
+                endIndex: input.jobDescription.rawText.length,
+              },
+            ],
+          },
+          [...DIRECT_JD_PHRASE_PATTERNS, ...EXPLICIT_TOOL_PATTERNS],
+          40,
+        ).filter((candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey)),
+      );
+      candidates.push(...jdFallbacks.slice(0, 3));
+    }
 
     if (candidates.length === 0) {
       throw new Error(`No JD-grounded direct keyword could be extracted for ${input.plan.bulletId}.`);

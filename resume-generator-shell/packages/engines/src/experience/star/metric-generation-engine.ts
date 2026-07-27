@@ -27,7 +27,7 @@ function directionForMeasure(
     return "decrease";
   }
   if (
-    /\b(accuracy|quality|velocity|throughput|reliability|availability|adoption|productivity|coverage|alignment|predictability|consistency|efficiency|scale|frequency)\b/i.test(
+    /\b(accuracy|quality|velocity|throughput|reliability|availability|adoption|productivity|coverage|alignment|predictability|consistency|efficiency|scale|frequency|interoperability|extensibility|maintainability|satisfaction|confidence)\b/i.test(
       measure,
     )
   ) {

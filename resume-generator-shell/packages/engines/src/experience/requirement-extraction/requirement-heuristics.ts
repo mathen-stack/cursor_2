@@ -77,6 +77,17 @@ export const TOOL_NAMES = [
   "Flask",
   "Django",
   "React",
+  "React.js",
+  "Next.js",
+  "Tailwind CSS",
+  "CSS Modules",
+  "DaisyUI",
+  "WebSockets",
+  "Vitest",
+  "Cypress",
+  "Jira",
+  "Confluence",
+  "Git",
   "Node.js",
   "PostgreSQL",
   "MySQL",
@@ -353,22 +364,33 @@ function createCandidate(
 }
 
 function extractToolCandidates(sourceText: string): RequirementCandidate[] {
-  const lower = sourceText.toLowerCase();
   const foundTools = TOOL_NAMES.filter((tool) => containsTool(sourceText, tool));
+  // Prefer the longest JD product spelling (React.js over React, Node.js over Node)
+  // so normalizedText stays lexically grounded in dotted evidence tokens.
+  const canonicalTools = foundTools.filter(
+    (tool) =>
+      !foundTools.some(
+        (other) =>
+          other !== tool &&
+          other.length > tool.length &&
+          containsTool(other, tool),
+      ),
+  );
 
-  if (foundTools.length === 0) {
+  if (canonicalTools.length === 0) {
     return [];
   }
 
-  const skillContext = /\b(experience|proficiency|knowledge|expertise|familiarity|required|preferred|skills?)\b/i.test(
-    sourceText,
-  );
-  if (!skillContext && foundTools.length === 1) {
+  const skillContext =
+    /\b(experience|proficiency|knowledge|expertise|familiarity|required|preferred|skills?)\b/i.test(
+      sourceText,
+    ) || /\(\s*\d+\+?\s*years?/i.test(sourceText);
+  if (!skillContext && canonicalTools.length === 1) {
     return [];
   }
 
   const necessity = inferNecessity(sourceText);
-  return foundTools.map((tool) =>
+  return canonicalTools.map((tool) =>
     createCandidate(sourceText, `Experience with ${tool}`, necessity),
   );
 }
@@ -446,10 +468,40 @@ function isLikelyRoleTitleSegment(sourceText: string): boolean {
   );
 }
 
+function isNonActionableSegment(sourceText: string): boolean {
+  const cleaned = sourceText.trim().replace(/[.?!:]+$/g, "").trim();
+  if (
+    /^(?:company description|job description|qualifications|expectations|additional (?:information|skills)|soft skills|our offer|position at|about the (?:role|job)|responsibilities|requirements)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
+  // Section banners such as "Expectations – the experience you need".
+  if (
+    /^[A-Za-z][^–—-]{0,48}\s*[–—-]\s+\S+/u.test(cleaned) &&
+    cleaned.split(/\s+/).length <= 12 &&
+    !/\b(?:build|develop|design|implement|deploy|collaborate|integrate|optimize|test)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
+  // Marketing / culture fluff that should never become achievement bullets.
+  if (
+    /\b(?:make an impact|limitless opportunities|grit\s*&\s*guts|employment with enjoyment|tech giants|unicorns)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function candidatesFromSegment(
   sourceText: string,
 ): RequirementCandidate[] {
-  if (isLikelyRoleTitleSegment(sourceText)) {
+  if (isLikelyRoleTitleSegment(sourceText) || isNonActionableSegment(sourceText)) {
     return [];
   }
   const candidates: RequirementCandidate[] = [];

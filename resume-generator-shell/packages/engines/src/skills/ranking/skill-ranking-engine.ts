@@ -27,6 +27,35 @@ function candidateWeight(candidate: SkillCandidate): number {
   );
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isNameContainedBy(
+  candidateName: string,
+  otherName: string,
+): boolean {
+  if (candidateName.length >= otherName.length) {
+    return false;
+  }
+  const pattern = new RegExp(
+    `(?:^|[^A-Za-z0-9])${escapeRegExp(candidateName)}(?=[^A-Za-z0-9]|$)`,
+    "i",
+  );
+  return pattern.test(otherName);
+}
+
+function dropContainedSkills(candidates: SkillCandidate[]): SkillCandidate[] {
+  return candidates.filter(
+    (candidate) =>
+      !candidates.some(
+        (other) =>
+          other.key !== candidate.key &&
+          isNameContainedBy(candidate.name, other.name),
+      ),
+  );
+}
+
 function isRequiredExplicit(candidate: SkillCandidate): boolean {
   return (
     candidate.source === "explicit" &&
@@ -185,7 +214,14 @@ export class SkillRankingEngine {
       return candidateWeight(right) - candidateWeight(left) || left.name.localeCompare(right.name);
     });
 
-    const selected: GeneratedSkill[] = selectedCandidates.map((candidate, index) => ({
+    const dedupedCandidates = dropContainedSkills(selectedCandidates);
+    for (const dropped of selectedCandidates) {
+      if (!dedupedCandidates.some((item) => item.key === dropped.key)) {
+        omitted.push(dropped.name);
+      }
+    }
+
+    const selected: GeneratedSkill[] = dedupedCandidates.map((candidate, index) => ({
       skillId: `SKILL-${String(index + 1).padStart(3, "0")}`,
       name: candidate.name,
       normalizedKey: candidate.key,

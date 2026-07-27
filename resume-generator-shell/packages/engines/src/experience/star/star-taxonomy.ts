@@ -58,7 +58,7 @@ export const STAR_DIMENSION_PROFILES: Readonly<
     businessImpactAlternates: [
       "shortened time to value for customer-facing improvements",
       "sped release readiness for customer-visible changes",
-      "cut the lag between finished work and production value",
+      "cutting the lag between finished work and production value",
     ],
     metricProfiles: [
       { metricType: "delivery", direction: "decrease", unit: "%", minimum: 31, maximum: 52, label: "deployment cycle time" },
@@ -286,7 +286,7 @@ export const STAR_DIMENSION_PROFILES: Readonly<
     businessImpactAlternates: [
       "reduced operational effort and accelerated reliable delivery",
       "eliminated brittle handoffs in end-to-end workflows",
-      "made integrated delivery paths faster and more dependable",
+      "making integrated delivery paths faster and more dependable",
     ],
     metricProfiles: [
       { metricType: "productivity", direction: "decrease", unit: "%", minimum: 28, maximum: 49, label: "manual processing effort" },

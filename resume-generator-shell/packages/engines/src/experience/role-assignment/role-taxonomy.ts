@@ -253,7 +253,12 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
   {
     family: "frontend-engineering",
     baseRole: "Frontend Engineer",
-    explicitPatterns: [/\bfront[- ]end engineer\b/i, /\bfrontend developer\b/i],
+    explicitPatterns: [
+      /\bfront[- ]end engineer\b/i,
+      /\bfrontend engineer\b/i,
+      /\bfrontend developer\b/i,
+      /\bfront[- ]end developer\b/i,
+    ],
     signals: [
       { phrase: "frontend engineering", weight: 8 },
       { phrase: "frontend", weight: 5 },

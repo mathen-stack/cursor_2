@@ -265,3 +265,18 @@ describe("Milestone 5 integration", () => {
     expect(result.validation.communicationCoverage).toBe(true);
   });
 });
+
+describe("direct keyword phrase integrity", () => {
+  it("does not allocate mid-word truncated or weak-adverb JD fragments", async () => {
+    const { output } = await createRealAllocation();
+    for (const keywordPackage of output.packages) {
+      for (const keyword of keywordPackage.directKeywords) {
+        expect(keyword.endsWith(",")).toBe(false);
+        expect(/\b(?:successfully|effectively)\b/i.test(keyword)).toBe(false);
+        expect(keyword.split(/\s+/).length).toBeLessThanOrEqual(8);
+        expect(/\s(?:in|to|and|with|of|for|the|a)$/i.test(keyword.trim())).toBe(false);
+        expect(keyword.includes("polished user in")).toBe(false);
+      }
+    }
+  });
+});

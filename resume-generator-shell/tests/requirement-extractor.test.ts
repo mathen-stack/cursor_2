@@ -255,6 +255,33 @@ describe("Real JD Requirement Extraction Engine", () => {
     expect(inputB).toEqual(snapshotB);
   });
 
+  it("keeps React.js tool requirements grounded without collapsing to React", async () => {
+    const jd = [
+      "Senior Frontend Engineer.",
+      "React.js (4+ years): Understanding of React.js fundamentals, hooks, and performance optimizations.",
+      "Next.js experience with server-side rendering is required.",
+      "Collaborate with cross-functional engineering teams on delivery quality.",
+      "Develop front-end applications using React.js and TypeScript.",
+      "TypeScript and RESTful APIs experience is required.",
+    ].join("\n");
+    const result = await new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    }).execute(createExtractorInput(jd));
+
+    const reactRequirements = result.requirements.filter((item) =>
+      /react/i.test(item.normalizedText),
+    );
+    expect(reactRequirements.length).toBeGreaterThan(0);
+    expect(
+      reactRequirements.every((item) => /React\.js/i.test(item.normalizedText)),
+    ).toBe(true);
+    expect(
+      reactRequirements.some((item) =>
+        /^Experience with React\.$/i.test(item.normalizedText),
+      ),
+    ).toBe(false);
+  });
+
   it("integrates the real extractor while downstream engines remain mocked", async () => {
     const input = createExtractorInput(compoundJd);
     const result = await createMilestone2ExperienceEngine().execute({

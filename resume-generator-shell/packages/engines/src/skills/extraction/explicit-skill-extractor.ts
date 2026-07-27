@@ -77,10 +77,34 @@ function findEvidence(text: string, definition: SkillDefinition): SkillEvidence[
     const pattern = aliasPattern(alias, definition.caseSensitive ?? false);
     for (const match of text.matchAll(pattern)) {
       if (typeof match.index !== "number" || !match[0]) continue;
+      const startIndex = match.index;
+      const endIndex = match.index + match[0].length;
+      // Skip matches that are only a fragment of a longer catalog alias
+      // (e.g. bare "CSS" inside "CSS Modules" or "Tailwind CSS").
+      const subsumed = SKILL_DEFINITIONS.some((other) => {
+        if (other.key === definition.key) return false;
+        return other.aliases.some((otherAlias) => {
+          if (otherAlias.length <= match[0]!.length) return false;
+          const otherPattern = aliasPattern(
+            otherAlias,
+            other.caseSensitive ?? false,
+          );
+          for (const otherMatch of text.matchAll(otherPattern)) {
+            if (typeof otherMatch.index !== "number" || !otherMatch[0]) continue;
+            const otherStart = otherMatch.index;
+            const otherEnd = otherMatch.index + otherMatch[0].length;
+            if (otherStart <= startIndex && otherEnd >= endIndex) {
+              return true;
+            }
+          }
+          return false;
+        });
+      });
+      if (subsumed) continue;
       const evidence = {
         sourceText: match[0],
-        startIndex: match.index,
-        endIndex: match.index + match[0].length,
+        startIndex,
+        endIndex,
       };
       byRange.set(`${evidence.startIndex}:${evidence.endIndex}`, evidence);
     }

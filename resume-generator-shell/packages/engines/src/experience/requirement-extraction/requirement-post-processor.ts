@@ -193,6 +193,28 @@ function lexicalTokens(value: string): Set<string> {
   );
 }
 
+function toolFamilyStem(token: string): string {
+  return token.toLowerCase().replace(/\.(?:js|ts|tsx|jsx)$/i, "");
+}
+
+function tokensOverlap(
+  normalizedTokens: ReadonlySet<string>,
+  sourceTokens: ReadonlySet<string>,
+): string[] {
+  return [...normalizedTokens].filter((token) => {
+    if (sourceTokens.has(token)) {
+      return true;
+    }
+    const stem = toolFamilyStem(token);
+    if (stem.length < 2) {
+      return false;
+    }
+    return [...sourceTokens].some(
+      (sourceToken) => toolFamilyStem(sourceToken) === stem,
+    );
+  });
+}
+
 function assertNormalizedTextGrounded(candidate: RequirementCandidate): void {
   const sourceTokens = lexicalTokens(candidate.sourceText);
   const normalizedTokens = lexicalTokens(candidate.normalizedText);
@@ -201,9 +223,7 @@ function assertNormalizedTextGrounded(candidate: RequirementCandidate): void {
     throw new Error("Requirement normalizedText contains no meaningful terms.");
   }
 
-  const overlap = [...normalizedTokens].filter((token) =>
-    sourceTokens.has(token),
-  );
+  const overlap = tokensOverlap(normalizedTokens, sourceTokens);
 
   if (overlap.length === 0) {
     throw new Error(

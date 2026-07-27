@@ -78,6 +78,28 @@ describe("Target role analysis", () => {
     expect(result.confidence).toBeGreaterThanOrEqual(0.95);
   });
 
+  it("does not treat state management wording as Engineering Manager seniority", () => {
+    const jobDescription = createJobDescription(
+      [
+        "Senior Frontend Engineer",
+        "React.js (4+ years): Understanding of React.js fundamentals, including component life-cycles, hooks, state management strategies, and performance optimizations.",
+        "Collaborate with cross-functional engineering teams and ship production user interfaces.",
+      ].join("\n"),
+    );
+    const requirements = [
+      requirement("REQ-001", "Build React.js user interfaces.", "technical-responsibility", "critical"),
+      requirement("REQ-002", "Collaborate with cross-functional teams.", "collaboration", "high"),
+      requirement("REQ-003", "Experience with TypeScript.", "technical-skill", "high"),
+    ];
+
+    const result = analyzeTargetRole(jobDescription, requirements);
+
+    expect(result.roleFamily).toBe("frontend-engineering");
+    expect(result.seniority).toBe("senior");
+    expect(result.targetRole).toBe("Senior Frontend Engineer");
+    expect(result.explicitTitleFound).toBe(true);
+  });
+
   it("infers a data engineering role when the JD omits a formal title", () => {
     const jobDescription = createJobDescription(
       "Build reliable batch and streaming data pipelines, develop ETL workflows with Spark and Airflow, optimize a cloud data warehouse, and partner with analytics stakeholders to improve data quality.",

@@ -221,7 +221,23 @@ export class SummaryKeywordAllocator {
     });
 
     const domains = ranked.filter((candidate) => candidate.category === "domain").slice(0, 2);
-    const technical = ranked.filter((candidate) => candidate.category === "technical").slice(0, this.maximumTechnicalKeywords);
+    const technicalRaw = ranked
+      .filter((candidate) => candidate.category === "technical")
+      .slice(0, this.maximumTechnicalKeywords + 3);
+    const technical = technicalRaw
+      .filter(
+        (candidate) =>
+          !technicalRaw.some(
+            (other) =>
+              other.normalizedKey !== candidate.normalizedKey &&
+              other.text.length > candidate.text.length &&
+              new RegExp(
+                `(?:^|[^A-Za-z0-9])${candidate.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[^A-Za-z0-9]|$)`,
+                "i",
+              ).test(other.text),
+          ),
+      )
+      .slice(0, this.maximumTechnicalKeywords);
     const outcomes = ranked.filter((candidate) => candidate.category === "outcome").slice(0, this.maximumOutcomeKeywords);
     const people = ranked.filter((candidate) => candidate.category === "leadership" || candidate.category === "collaboration").slice(0, this.maximumPeopleKeywords);
 

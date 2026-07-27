@@ -174,7 +174,18 @@ function inferSeniority(
   const lower = text.toLowerCase();
   if (/\bprincipal\b/.test(lower)) return "principal";
   if (/\bstaff\b/.test(lower)) return "staff";
-  if (/\bengineering manager\b|\bmanage(?:s|ment|r)\b/.test(lower)) return "manager";
+  // Require managerial ownership language. Do not treat technical compounds such
+  // as "state management", "memory management", or "content management" as
+  // Engineering Manager seniority signals.
+  if (
+    /\bengineering manager\b/.test(lower) ||
+    /\b(?:people|engineering|product|project|hiring)\s+manager\b/.test(lower) ||
+    /\bmanages?\s+(?:a\s+)?(?:cross-functional\s+)?(?:team|engineers|people|organization|org)\b/.test(
+      lower,
+    )
+  ) {
+    return "manager";
+  }
   if (/\btechnical lead\b|\bteam lead\b|\blead engineer\b/.test(lower)) return "lead";
   if (/\bsenior\b|\bsr\.\b/.test(lower)) return "senior";
   if (/\bjunior\b|\bjr\.\b/.test(lower)) return "junior";
@@ -233,7 +244,7 @@ function collectEvidence(
     lead: /\blead\b/i,
     staff: /\bstaff\b/i,
     principal: /\bprincipal\b/i,
-    manager: /\bmanager\b|\bmanagement\b/i,
+    manager: /\bengineering manager\b|\b(?:people|engineering|product|project)\s+manager\b/i,
   };
   const seniorityMatch = seniorityPattern[seniority].exec(text);
   if (seniorityMatch?.[0]) {

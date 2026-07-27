@@ -101,7 +101,9 @@ export class SummaryValidator {
 
     const duplicateKeyword = input.usedKeywords.some((keyword) => {
       const escaped = keyword.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const matches = input.summary.match(new RegExp(escaped, "gi"));
+      const matches = input.summary.match(
+        new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?=[^A-Za-z0-9]|$)`, "gi"),
+      );
       return (matches?.length ?? 0) > 1;
     });
     const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 12;

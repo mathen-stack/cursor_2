@@ -7,6 +7,7 @@ import type {
 } from "../types/composed-bullet";
 import {
   buildActionClause,
+  directKeywordRepresented,
   stripFirstPersonPronouns,
   substantiveKeyword,
 } from "./bullet-language";
@@ -83,11 +84,14 @@ export class RealBulletComposer implements BulletComposer {
 
       // Keep only unused direct JD phrases in the visible bullet so the same
       // noun phrase (e.g. "data pipelines") is not cloned across experiences.
-      // Also strip first-person JD wording so composed text stays third-person.
+      // Claim the substantive form composition embeds after weak-filler removal
+      // and leading-action stripping, so validation cannot require adverbs that
+      // normalizeBulletSentence deliberately deletes.
       const visibleDirectKeywords = keywordPackage.directKeywords
-        .map((keyword) => stripFirstPersonPronouns(keyword))
+        .map((keyword) => stripFirstPersonPronouns(keyword).replace(/[,:;]+$/g, "").trim())
+        .map((keyword) => substantiveKeyword(keyword) || keyword)
         .filter((keyword) => {
-          const key = canonicalKeywordKey(substantiveKeyword(keyword));
+          const key = canonicalKeywordKey(keyword);
           return Boolean(key) && !usedDirectScopeKeys.has(key);
         });
       const compositionPackage = {
@@ -131,6 +135,13 @@ export class RealBulletComposer implements BulletComposer {
       });
       patternsByBullet.set(plan.bulletId, composed.sentencePattern);
 
+      // Claim only directs that survived composition/sanitization. Scope cleanup
+      // may replace soft-skill or truncated fragments with ATS-safe wording, and
+      // validation must not require the discarded fragment to remain verbatim.
+      const claimedDirectKeywords = visibleDirectKeywords.filter((keyword) =>
+        directKeywordRepresented(composed.finalBullet, keyword),
+      );
+
       drafts.push({
         bulletId: plan.bulletId,
         requirementId: plan.requirementId,
@@ -139,7 +150,7 @@ export class RealBulletComposer implements BulletComposer {
         action: story.action,
         result: story.result,
         actionVerb: keywordPackage.actionVerb,
-        directKeywords: visibleDirectKeywords,
+        directKeywords: claimedDirectKeywords,
         supportingKeywords: [...compositionPackage.supportingKeywords],
         outcomeKeywords: [...compositionPackage.outcomeKeywords],
         finalBullet: composed.finalBullet,

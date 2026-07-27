@@ -486,8 +486,18 @@ export class AchievementThemePlanner {
     requirement: JDRequirement,
     roleFocusArea: string,
   ): string {
-    const requirementText = requirement.normalizedText.replace(/[.;:]+$/g, "");
-    const focus = roleFocusArea.replace(/[.;:]+$/g, "");
+    const requirementText = requirement.normalizedText
+      .replace(/[.;:]+$/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 10)
+      .join(" ");
+    const focus = roleFocusArea
+      .replace(/[.;:]+$/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 8)
+      .join(" ");
     return `${DIMENSION_LABELS[dimension]} for ${focus}: ${requirementText}`;
   }
 }

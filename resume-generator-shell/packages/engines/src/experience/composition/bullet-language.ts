@@ -32,6 +32,19 @@ const PRESERVED_TOKEN_CASE: Readonly<Record<string, string>> = {
   flask: "Flask",
   django: "Django",
   react: "React",
+  "react.js": "React.js",
+  "next.js": "Next.js",
+  // Keep single-token replacements only. Expanding "tailwind" into
+  // "Tailwind CSS" would duplicate the following CSS token.
+  tailwind: "Tailwind",
+  daisyui: "DaisyUI",
+  websockets: "WebSockets",
+  websocket: "WebSocket",
+  vitest: "Vitest",
+  cypress: "Cypress",
+  jira: "Jira",
+  confluence: "Confluence",
+  git: "Git",
   typescript: "TypeScript",
   javascript: "JavaScript",
   kafka: "Kafka",
@@ -39,8 +52,33 @@ const PRESERVED_TOKEN_CASE: Readonly<Record<string, string>> = {
   azure: "Azure",
   gcp: "GCP",
   sql: "SQL",
+  css: "CSS",
   dbt: "dbt",
 };
+
+const PRESERVED_PHRASES: ReadonlyArray<readonly [string, string]> = [
+  ["tailwind css", "Tailwind CSS"],
+  ["css modules", "CSS Modules"],
+  ["react.js", "React.js"],
+  ["next.js", "Next.js"],
+  ["restful apis", "RESTful APIs"],
+  ["rest apis", "REST APIs"],
+];
+
+const PRESERVED_PHRASE_TOKENS = new Set(
+  PRESERVED_PHRASES.flatMap(([, replacement]) => replacement.split(/\s+/)),
+);
+
+function applyPreservedPhrases(value: string): string {
+  let result = value;
+  for (const [needle, replacement] of PRESERVED_PHRASES) {
+    result = result.replace(
+      new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"),
+      replacement,
+    );
+  }
+  return result;
+}
 
 export function stripTerminal(value: string): string {
   return value.replace(/\s+/g, " ").trim().replace(TERMINAL_PUNCTUATION, "");
@@ -86,9 +124,17 @@ export function substantiveKeyword(keyword: string): string {
     .replace(/\s+(?:engineer|developer|scientist|architect|manager|specialist|analyst)$/i, "")
     .trim();
   const phrase = withoutSeniority || cleaned || stripTerminal(keyword);
-  return phrase
+  const withoutWeakFiller = phrase
+    .replace(WEAK_FILLER, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return applyPreservedPhrases(withoutWeakFiller)
     .split(/\s+/)
+    .filter(Boolean)
     .map((token) => {
+      if (PRESERVED_PHRASE_TOKENS.has(token)) {
+        return token;
+      }
       const preserved = PRESERVED_TOKEN_CASE[token.toLocaleLowerCase()];
       if (preserved) {
         return preserved;
@@ -119,12 +165,24 @@ function removeContainedPhrases(values: readonly string[]): string[] {
   const ordered = uniquePhrases(values).sort((left, right) => right.length - left.length);
   return ordered.filter((value, index) => {
     const lower = value.toLocaleLowerCase();
-    return !ordered.some(
-      (other, otherIndex) =>
-        otherIndex !== index &&
-        other.length > value.length &&
-        other.toLocaleLowerCase().includes(lower),
-    );
+    const compact = lower.replace(/\s+/g, " ").trim();
+    return !ordered.some((other, otherIndex) => {
+      if (otherIndex === index || other.length <= value.length) {
+        return false;
+      }
+      const otherLower = other.toLocaleLowerCase();
+      if (otherLower.includes(lower)) {
+        return true;
+      }
+      // Treat "CSS" as contained by "CSS Modules" / "Tailwind CSS" even when
+      // token boundaries differ only by separators.
+      const otherTokens = new Set(otherLower.split(/[^a-z0-9+#.]+/).filter(Boolean));
+      const valueTokens = compact.split(/[^a-z0-9+#.]+/).filter(Boolean);
+      return (
+        valueTokens.length > 0 &&
+        valueTokens.every((token) => otherTokens.has(token))
+      );
+    });
   });
 }
 
@@ -195,29 +253,83 @@ export function buildActionClause(input: {
   const inferredMethods = supportValues.filter(
     (keyword) => !explicitTools.includes(keyword),
   );
-  const supportClause = [
-    explicitTools.length > 0 ? ` using ${joinNatural(explicitTools)}` : "",
-    inferredMethods.length > 0 ? ` through ${joinNatural(inferredMethods)}` : "",
-  ].join("");
   const verb = stripTerminal(input.keywordPackage.actionVerb);
-  const normalizedDirectScope =
+  let normalizedDirectScope =
     /mentor|coach/i.test(verb) && /^(?:engineer mentoring|mentoring)$/i.test(directScope)
       ? "engineers on architecture decisions and delivery practices"
       : directScope;
+
+  // Soft-skill prose and truncated JD fragments make ungrammatical bullets when
+  // used as the action object. Replace them with ATS-safe collaboration or
+  // delivery scopes grounded in the role focus.
+  if (
+    /^(?:strong|excellent|good|proven)?\s*verbal and written communication skills\b/i.test(
+      normalizedDirectScope,
+    ) ||
+    /^(?:communication skills)\b/i.test(normalizedDirectScope)
+  ) {
+    normalizedDirectScope =
+      compactFocus ||
+      "cross-functional collaboration with product and engineering stakeholders";
+  }
+  if (
+    /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
+    /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
+    /^production frontend delivery outcomes$/i.test(normalizedDirectScope)
+  ) {
+    const toolScope = joinNatural(
+      [...explicitTools, ...inferredMethods].slice(0, 2),
+    );
+    normalizedDirectScope =
+      toolScope ||
+      compactFocus ||
+      compactTheme ||
+      "scalable React.js and TypeScript interfaces";
+  }
+  const activeSupportClause = (() => {
+    const lowerScope = normalizedDirectScope.toLocaleLowerCase();
+    const remainingTools = explicitTools.filter(
+      (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
+    );
+    const remainingMethods = inferredMethods.filter(
+      (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
+    );
+    return [
+      remainingTools.length > 0 ? ` using ${joinNatural(remainingTools)}` : "",
+      remainingMethods.length > 0 ? ` through ${joinNatural(remainingMethods)}` : "",
+    ].join("");
+  })();
+  if (/\bdelivery coordination required\b/i.test(normalizedDirectScope)) {
+    normalizedDirectScope = normalizedDirectScope.replace(
+      /\bdelivery coordination required\b/gi,
+      "delivery coordination",
+    );
+  }
+  if (/^(?:stakeholder alignment)\b/i.test(normalizedDirectScope) && /^align/i.test(verb)) {
+    normalizedDirectScope =
+      "cross-functional priorities with product and engineering stakeholders";
+  }
+  if (/^(?:real-time communication)\b/i.test(normalizedDirectScope) && /^communicat/i.test(verb)) {
+    normalizedDirectScope = "WebSocket-based realtime product updates";
+  }
 
   if (input.plan.communicationFocused) {
     const looksLikeGenericAlignment =
       /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration)$/i.test(
         normalizedDirectScope,
       );
+    const looksLikeSoftSkillProse =
+      /^(?:strong|excellent|good|proven)\b/i.test(normalizedDirectScope) ||
+      /communication skills/i.test(normalizedDirectScope);
     const communicationScope =
       !looksLikeGenericAlignment &&
-      /stakeholder|collaborat|product|business|requirements|team/i.test(
+      !looksLikeSoftSkillProse &&
+      /stakeholder|collaborat|product|business|requirements|team|cross-functional|cross-team/i.test(
         normalizedDirectScope,
       )
         ? normalizedDirectScope
-        : `stakeholder alignment for ${compactFocus || normalizedDirectScope}`;
-    return stripTerminal(`${verb} ${communicationScope}${supportClause}`);
+        : `cross-functional collaboration with ${compactFocus || "product and engineering stakeholders"}`;
+    return stripTerminal(`${verb} ${communicationScope}${activeSupportClause}`);
   }
 
   if (input.plan.leadershipFocused) {
@@ -226,17 +338,17 @@ export function buildActionClause(input: {
     )
       ? normalizedDirectScope
       : `technical direction for ${normalizedDirectScope}`;
-    return stripTerminal(`${verb} ${leadershipScope}${supportClause}`);
+    return stripTerminal(`${verb} ${leadershipScope}${activeSupportClause}`);
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
     const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
       ? normalizedDirectScope
       : `engineering capability around ${normalizedDirectScope}`;
-    return stripTerminal(`${verb} ${mentoringScope}${supportClause}`);
+    return stripTerminal(`${verb} ${mentoringScope}${activeSupportClause}`);
   }
 
-  return stripTerminal(`${verb} ${normalizedDirectScope}${supportClause}`);
+  return stripTerminal(`${verb} ${normalizedDirectScope}${activeSupportClause}`);
 }
 
 export function metricAsGerund(metric: StarMetric): string {
@@ -302,8 +414,11 @@ export function businessImpactAsGerund(story: StarStory, maximumWords = 11): str
     .replace(/^lowered\b/i, "lowering")
     .replace(/^reduced\b/i, "reducing")
     .replace(/^shortened\b/i, "shortening")
-    .replace(/^expanded\b/i, "expanding")
+    .replace(/^made\b/i, "making")
+    .replace(/^enabled\b/i, "enabling")
     .replace(/^supported\b/i, "supporting")
+    .replace(/^expanded\b/i, "expanding")
+    .replace(/^cut\b/i, "cutting")
     .trim();
   return lowerFirst(cleaned.split(/\s+/).slice(0, maximumWords).join(" "));
 }
@@ -349,12 +464,19 @@ export function containsPhraseConcept(text: string, phrase: string): boolean {
 
 export function directKeywordRepresented(text: string, keyword: string): boolean {
   const normalizedText = stripFirstPersonPronouns(text);
-  const normalizedKeyword = stripFirstPersonPronouns(keyword);
+  const normalizedKeyword = stripFirstPersonPronouns(keyword).replace(/[,:;]+$/g, "");
   const exact = normalizedText
     .toLocaleLowerCase()
     .includes(normalizedKeyword.toLocaleLowerCase());
+  if (exact) {
+    return true;
+  }
+  const substantive = substantiveKeyword(normalizedKeyword);
+  if (!substantive) {
+    return true;
+  }
   return (
-    exact ||
-    containsPhraseConcept(normalizedText, substantiveKeyword(normalizedKeyword))
+    normalizedText.toLocaleLowerCase().includes(substantive.toLocaleLowerCase()) ||
+    containsPhraseConcept(normalizedText, substantive)
   );
 }

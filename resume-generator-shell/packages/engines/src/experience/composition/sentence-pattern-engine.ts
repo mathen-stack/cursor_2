@@ -108,14 +108,11 @@ function buildWithPattern(input: {
 }
 
 function requiredPhrases(keywordPackage: KeywordPackage): string[] {
-  const shortDirects = keywordPackage.directKeywords
+  const directPhrases = keywordPackage.directKeywords
     .map((keyword) => substantiveKeyword(stripFirstPersonPronouns(keyword)))
-    .filter((keyword) => {
-      const count = keyword.split(/\s+/).filter(Boolean).length;
-      return count > 0 && count <= 8;
-    });
+    .filter(Boolean);
   return [
-    ...shortDirects,
+    ...directPhrases,
     ...keywordPackage.supportingKeywords.map(stripFirstPersonPronouns),
     ...keywordPackage.outcomeKeywords.map(stripFirstPersonPronouns),
   ].filter(Boolean);
@@ -125,12 +122,31 @@ function containsPhrase(text: string, phrase: string): boolean {
   return text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase());
 }
 
-function shortenActionClause(actionClause: string, maximumWords: number): string {
+function shortenActionClause(
+  actionClause: string,
+  maximumWords: number,
+  preserve: readonly string[] = [],
+): string {
   const tokens = stripFirstPersonPronouns(actionClause).split(/\s+/).filter(Boolean);
   if (tokens.length <= maximumWords) {
     return tokens.join(" ");
   }
-  return tokens.slice(0, maximumWords).join(" ");
+
+  let shortened = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhrase(shortened, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    if (phraseTokens.length === 0 || phraseTokens.length >= maximumWords) {
+      continue;
+    }
+    const keep = Math.max(4, maximumWords - phraseTokens.length - 1);
+    shortened = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  return shortened;
 }
 
 function compressToMaximumWords(
@@ -225,7 +241,11 @@ export class SentencePatternEngine {
     ];
 
     const candidates = actionBudgets.flatMap((budget) => {
-      const actionClause = shortenActionClause(input.actionClause, budget);
+      const actionClause = shortenActionClause(
+        input.actionClause,
+        budget,
+        preserve,
+      );
       return buildCandidates({
         ...input,
         actionClause,

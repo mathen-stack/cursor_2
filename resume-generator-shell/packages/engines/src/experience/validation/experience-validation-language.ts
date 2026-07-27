@@ -13,7 +13,7 @@ const PASSIVE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|desi
 const METRIC = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)(?=\s|[,.]|$)/i;
 const BUSINESS_IMPACT = /\b(?:customer|user|revenue|cost|delivery|adoption|risk|quality|reliability|availability|productivity|efficiency|time-to-market|stakeholder|business|operations?)\b/i;
 const SENIOR_SIGNAL = /\b(?:architect(?:ed|ure)?|strategy|roadmap|standard|governance|mentored|led|leadership|design review|technical direction|cross-functional|stakeholder)\b/i;
-const COMMUNICATION_SIGNAL = /\b(?:collaborat|communicat|stakeholder|cross-functional|product|business|requirements|presented|facilitated|alignment|partnered)\w*\b/i;
+const COMMUNICATION_SIGNAL = /\b(?:collaborat|communicat|stakeholder|cross-functional|cross-team|product|business|requirements|presented|facilitated|alignment|partnered|partner with)\w*\b/i;
 
 export function normalizeText(value: string): string {
   return canonicalKeywordKey(value)
