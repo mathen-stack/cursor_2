@@ -302,9 +302,12 @@ export class RealExperienceValidator implements ExperienceValidator {
         addFailure(bullet.bulletId, "jd-traceability");
       }
 
-      const directCoverage = bullet.directKeywords.length > 0 && bullet.directKeywords.every(
-        (keyword: string) => directKeywordRepresented(bullet.finalBullet, keyword),
-      );
+      const directCoverage =
+        bullet.directKeywords.length === 0 ||
+        (bullet.directKeywords.length > 0 &&
+          bullet.directKeywords.every((keyword: string) =>
+            directKeywordRepresented(bullet.finalBullet, keyword),
+          ));
       const supportingCoverage = bullet.supportingKeywords.length > 0 && bullet.supportingKeywords.every(
         (keyword: string) => bullet.finalBullet.toLowerCase().includes(keyword.toLowerCase()),
       );

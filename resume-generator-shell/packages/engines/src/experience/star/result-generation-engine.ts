@@ -32,7 +32,7 @@ export class ResultGenerationEngine {
       ? "strengthened"
       : "improved";
     const result = sentence(
-      `${metricText}, which ${firstImpactVerb} ${outcomes || profile.technicalImpact} and ${profile.businessImpact}`,
+      `${metricText}, which ${firstImpactVerb} ${outcomes || profile.technicalImpact}`,
     );
 
     return {

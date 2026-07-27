@@ -79,18 +79,20 @@ function buildWithPattern(input: {
     case "action-delivered-impact":
       return normalizeBulletSentence(
         outcomes
-          ? `${input.actionClause}, delivering ${metricNoun} and measurable gains in ${outcomes}`
+          ? `${input.actionClause}, delivering ${metricNoun} while advancing ${outcomes}`
           : `${input.actionClause}, delivering ${metricNoun} while ${businessGerund}`,
       );
     case "action-metric-business-impact": {
-      const impact = input.includeBusinessImpact
-        ? businessObject || outcomes || input.plan.achievementTheme
-        : outcomes || businessObject || input.plan.achievementTheme;
-      const outcomeClause = outcomes
-        ? ` and improving ${outcomes}`
-        : "";
+      // Avoid cloning the same outcome in both "improving X" and "enabling better X".
+      if (outcomes) {
+        return normalizeBulletSentence(
+          `${input.actionClause}, ${metricGerund} and improving ${outcomes}`,
+        );
+      }
+      const impact =
+        businessObject || input.plan.achievementTheme || "delivery outcomes";
       return normalizeBulletSentence(
-        `${input.actionClause}, ${metricGerund}${outcomeClause}, enabling ${impact}`,
+        `${input.actionClause}, ${metricGerund}, enabling ${impact}`,
       );
     }
     case "action-metric-outcome":

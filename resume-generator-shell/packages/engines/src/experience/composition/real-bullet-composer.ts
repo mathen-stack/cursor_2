@@ -5,13 +5,14 @@ import type {
   BulletSentencePattern,
   ExperienceBullet,
 } from "../types/composed-bullet";
-import { buildActionClause } from "./bullet-language";
+import { buildActionClause, substantiveKeyword } from "./bullet-language";
 import { validateBulletComposition } from "./bullet-composition-validator";
 import { SentencePatternEngine } from "./sentence-pattern-engine";
 import {
   SentenceQualityValidator,
   type SentenceQualityValidatorOptions,
 } from "./sentence-quality-validator";
+import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 
 export interface RealBulletComposerOptions extends SentenceQualityValidatorOptions {
   sentencePatternEngine?: SentencePatternEngine;
@@ -41,6 +42,7 @@ export class RealBulletComposer implements BulletComposer {
     );
     const patternsByBullet = new Map<string, BulletSentencePattern>();
     const drafts: ExperienceBullet[] = [];
+    const usedDirectScopeKeys = new Set<string>();
 
     const orderedPlans = [...input.plans].sort(
       (left, right) =>
@@ -67,11 +69,37 @@ export class RealBulletComposer implements BulletComposer {
         throw new Error(`Bullet composition rejected unapproved STAR story ${plan.bulletId}.`);
       }
 
-      const actionClause = buildActionClause({ plan, keywordPackage, story });
+      // Keep only unused direct JD phrases in the visible bullet so the same
+      // noun phrase (e.g. "data pipelines") is not cloned across experiences.
+      const visibleDirectKeywords = keywordPackage.directKeywords.filter((keyword) => {
+        const key = canonicalKeywordKey(substantiveKeyword(keyword));
+        return Boolean(key) && !usedDirectScopeKeys.has(key);
+      });
+      const compositionPackage = {
+        ...keywordPackage,
+        directKeywords: visibleDirectKeywords,
+        directKeywordEvidence: keywordPackage.directKeywordEvidence.filter((evidence) =>
+          visibleDirectKeywords.some(
+            (keyword) =>
+              keyword.toLocaleLowerCase() === evidence.keyword.toLocaleLowerCase(),
+          ),
+        ),
+      };
+
+      const actionClause = buildActionClause({
+        plan,
+        keywordPackage: compositionPackage,
+        story,
+      });
+      for (const keyword of keywordPackage.directKeywords) {
+        const key = canonicalKeywordKey(substantiveKeyword(keyword));
+        if (key) usedDirectScopeKeys.add(key);
+      }
+
       const composed = this.sentencePatternEngine.compose({
         actionClause,
         plan,
-        keywordPackage,
+        keywordPackage: compositionPackage,
         story,
         minimumWords: this.sentenceQualityValidator.minimumWords,
         maximumWords: this.sentenceQualityValidator.maximumWords,
@@ -86,7 +114,7 @@ export class RealBulletComposer implements BulletComposer {
         action: story.action,
         result: story.result,
         actionVerb: keywordPackage.actionVerb,
-        directKeywords: [...keywordPackage.directKeywords],
+        directKeywords: visibleDirectKeywords,
         supportingKeywords: [...keywordPackage.supportingKeywords],
         outcomeKeywords: [...keywordPackage.outcomeKeywords],
         finalBullet: composed.finalBullet,

@@ -37,10 +37,14 @@ function allOutcomesUsed(text: string, keywordPackage: KeywordPackage): boolean 
   );
 }
 
-function allDirectRepresented(text: string, keywordPackage: KeywordPackage): boolean {
-  return keywordPackage.directKeywords.every((keyword) =>
-    directKeywordRepresented(text, keyword),
-  );
+function allDirectRepresented(
+  text: string,
+  keywords: readonly string[],
+): boolean {
+  if (keywords.length === 0) {
+    return true;
+  }
+  return keywords.every((keyword) => directKeywordRepresented(text, keyword));
 }
 
 function roundScore(value: number): number {
@@ -82,7 +86,10 @@ export class SentenceQualityValidator {
       text,
       input.keywordPackage.actionVerb,
     );
-    const directKeywordCoverage = allDirectRepresented(text, input.keywordPackage);
+    const directKeywordCoverage = allDirectRepresented(
+      text,
+      input.bullet.directKeywords,
+    );
     const supportingKeywordCoverage = allSupportingUsed(text, input.keywordPackage);
     const outcomeKeywordCoverage = allOutcomesUsed(text, input.keywordPackage);
     const quantifiedImpactPresent = QUANTIFIED.test(text);

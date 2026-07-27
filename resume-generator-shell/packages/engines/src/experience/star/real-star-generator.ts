@@ -45,16 +45,17 @@ export class RealStarGenerator implements StarGenerator {
     const assignmentsById = new Map(input.assignments.map((item) => [item.experienceId, item]));
     const requirementsById = new Map(input.requirements.map((item) => [item.requirementId, item]));
     const packagesByBullet = new Map(input.keywordPackages.map((item) => [item.bulletId, item]));
-    const usedMetricPatternsByRole = new Map<string, Set<string>>();
+    const usedMetricPatterns = new Set<string>();
     for (const existing of [
       ...(input.reservedStories ?? []),
       ...(input.previousStories ?? []),
     ]) {
-      const used = usedMetricPatternsByRole.get(existing.experienceId) ?? new Set<string>();
       for (const metric of existing.metrics) {
-        used.add(`${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`);
+        usedMetricPatterns.add(
+          `${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`,
+        );
+        usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
       }
-      usedMetricPatternsByRole.set(existing.experienceId, used);
     }
     void input.regenerationAttempt;
     const stories: StarStory[] = [];
@@ -91,12 +92,16 @@ export class RealStarGenerator implements StarGenerator {
       const situation = this.situationEngine.generate(common);
       const task = this.taskEngine.generate(common);
       const action = this.actionEngine.generate(common);
-      const usedMetricPatternKeys = usedMetricPatternsByRole.get(plan.experienceId) ?? new Set<string>();
-      const metrics = this.metricEngine.generate({ ...common, usedMetricPatternKeys });
+      const metrics = this.metricEngine.generate({
+        ...common,
+        usedMetricPatternKeys: usedMetricPatterns,
+      });
       for (const metric of metrics) {
-        usedMetricPatternKeys.add(`${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`);
+        usedMetricPatterns.add(
+          `${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`,
+        );
+        usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
       }
-      usedMetricPatternsByRole.set(plan.experienceId, usedMetricPatternKeys);
       const result = this.resultEngine.generate({ ...common, metrics });
       const draft = {
         bulletId: plan.bulletId,

@@ -60,7 +60,7 @@ export function normalizeBulletSentence(value: string): string {
   return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}.`;
 }
 
-function substantiveKeyword(keyword: string): string {
+export function substantiveKeyword(keyword: string): string {
   if (/^mentor(?:ed|ing|s)?\s+engineers?\b/i.test(keyword.trim())) {
     return "engineer mentoring";
   }
@@ -121,10 +121,22 @@ export function buildActionClause(input: {
     input.keywordPackage.directKeywords.map(substantiveKeyword),
   );
   const joinedDirectScope = joinNatural(directScopes);
+  const themeScope = cleanScope(input.plan.achievementTheme || "");
+  const dimensionScope = input.plan.achievementDimension.replace(/-/g, " ");
+  const focusScope = cleanScope(input.plan.roleFocusArea || "");
+  const shortFallback =
+    themeScope.split(/\s+/).filter(Boolean).length > 0 &&
+    themeScope.split(/\s+/).length <= 6
+      ? themeScope
+      : focusScope.split(/\s+/).filter(Boolean).length > 0 &&
+          focusScope.split(/\s+/).length <= 6 &&
+          !/,| and | through /i.test(focusScope)
+        ? focusScope
+        : dimensionScope;
   const directScope =
     joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
       ? joinedDirectScope
-      : cleanScope(input.plan.roleFocusArea || input.plan.achievementTheme);
+      : shortFallback;
   const supportValues = removeContainedPhrases(
     input.keywordPackage.supportingKeywords.filter(
       (keyword) =>
