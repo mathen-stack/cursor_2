@@ -88,7 +88,7 @@ export const STAR_DIMENSION_PROFILES: Readonly<
     situationProblem:
       "limited production visibility made failures difficult to detect and diagnose before users were affected",
     taskOwnership:
-      "establish proactive monitoring and operational controls for critical services",
+      "establish continuous monitoring and operational controls for critical services",
     actionMethod:
       "implementing telemetry, alerting, service-level indicators, and incident feedback loops",
     technicalImpact: "increased service stability and shortened incident detection",

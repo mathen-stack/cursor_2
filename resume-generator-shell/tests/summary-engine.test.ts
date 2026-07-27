@@ -141,6 +141,8 @@ describe("production Summary Engine", () => {
     expect(output.validation.noWeakLanguage).toBe(true);
     expect(output.validation.noKeywordStuffing).toBe(true);
     expect(output.validation.atsLanguageApproved).toBe(true);
+    expect(output.summary).not.toMatch(/\bdynamic\b/i);
+    expect(output.summary).not.toMatch(/\bproactive\b/i);
   });
 
   it("keeps simultaneous JD summary runs isolated", async () => {

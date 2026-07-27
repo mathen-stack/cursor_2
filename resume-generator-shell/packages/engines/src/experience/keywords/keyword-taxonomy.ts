@@ -198,7 +198,7 @@ export const SUPPORTING_BY_CATEGORY: Readonly<Record<RequirementCategory, readon
   performance: [
     "performance profiling",
     "caching",
-    "dynamic batching",
+    "adaptive batching",
     "load testing",
     "query optimization",
     "resource tuning",
@@ -295,7 +295,7 @@ export const SUPPORTING_BY_DIMENSION: Readonly<Record<AchievementDimension, read
     "load testing",
     "caching",
     "resource tuning",
-    "dynamic batching",
+    "adaptive batching",
     "hot-path optimization",
     "concurrency tuning",
     "latency budgeting",

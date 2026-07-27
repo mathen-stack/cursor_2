@@ -9,6 +9,8 @@ const STOP_WORDS = new Set([
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_OPENING = /^(?:Responsible for|Worked on|Helped with|Assisted with|Participated in|Involved in)\b/i;
 const FILLER = /\b(?:successfully|effectively|various|multiple different|numerous various|very|really)\b/i;
+const VAGUE_BUZZWORDS =
+  /\b(?:dynamic|proactive|synergistic|go[- ]getter|hard[- ]working|team player|results[- ]driven|proven track record|seasoned|passionate|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker)\b/i;
 const PASSIVE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|designed|deployed|managed|created|optimized|led|completed)\b/i;
 const METRIC = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)(?=\s|[,.]|$)/i;
 const BUSINESS_IMPACT = /\b(?:customer|user|revenue|cost|delivery|adoption|risk|quality|reliability|availability|productivity|efficiency|time-to-market|stakeholder|business|operations?)\b/i;
@@ -119,6 +121,9 @@ export function atsLanguageErrors(value: string): string[] {
   if (FIRST_PERSON.test(value)) errors.push("Uses a first-person pronoun.");
   if (WEAK_OPENING.test(value)) errors.push("Starts with weak responsibility language.");
   if (FILLER.test(value)) errors.push("Contains filler or self-congratulatory wording.");
+  if (VAGUE_BUZZWORDS.test(value)) {
+    errors.push("Contains vague resume buzzwords that should be replaced with concrete evidence.");
+  }
   if (PASSIVE.test(value)) errors.push("Uses avoidable passive voice.");
   if (!/^[A-Z][A-Za-z-]+\s/.test(value)) errors.push("Does not begin with a clear action verb.");
   if (!value.endsWith(".")) errors.push("Does not end with a period.");

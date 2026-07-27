@@ -121,6 +121,8 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
       expect(bullet).not.toMatch(/\bCoordinat\w*\b.*\bcoordination\b/i);
       expect(bullet).not.toMatch(/\bthroughput\b.*\bthroughput\b/i);
       expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
+      expect(bullet).not.toMatch(/\bdynamic\b/i);
+      expect(bullet).not.toMatch(/\bproactive\b/i);
     }
 
     const percentAmounts = bullets
