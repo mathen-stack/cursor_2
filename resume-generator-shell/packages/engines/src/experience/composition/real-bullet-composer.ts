@@ -5,7 +5,7 @@ import type {
   BulletSentencePattern,
   ExperienceBullet,
 } from "../types/composed-bullet";
-import { buildActionClause, substantiveKeyword } from "./bullet-language";
+import { buildActionClause, stripFirstPersonPronouns, substantiveKeyword } from "./bullet-language";
 import { validateBulletComposition } from "./bullet-composition-validator";
 import { SentencePatternEngine } from "./sentence-pattern-engine";
 import {
@@ -71,17 +71,29 @@ export class RealBulletComposer implements BulletComposer {
 
       // Keep only unused direct JD phrases in the visible bullet so the same
       // noun phrase (e.g. "data pipelines") is not cloned across experiences.
-      const visibleDirectKeywords = keywordPackage.directKeywords.filter((keyword) => {
-        const key = canonicalKeywordKey(substantiveKeyword(keyword));
-        return Boolean(key) && !usedDirectScopeKeys.has(key);
-      });
+      // Also strip first-person JD wording so composed text stays third-person.
+      const visibleDirectKeywords = keywordPackage.directKeywords
+        .map((keyword) => stripFirstPersonPronouns(keyword))
+        .filter((keyword) => {
+          const key = canonicalKeywordKey(substantiveKeyword(keyword));
+          return Boolean(key) && !usedDirectScopeKeys.has(key);
+        });
       const compositionPackage = {
         ...keywordPackage,
         directKeywords: visibleDirectKeywords,
+        supportingKeywords: keywordPackage.supportingKeywords
+          .map((keyword) => stripFirstPersonPronouns(keyword))
+          .filter(Boolean),
+        outcomeKeywords: keywordPackage.outcomeKeywords
+          .map((keyword) => stripFirstPersonPronouns(keyword))
+          .filter(Boolean),
         directKeywordEvidence: keywordPackage.directKeywordEvidence.filter((evidence) =>
           visibleDirectKeywords.some(
             (keyword) =>
-              keyword.toLocaleLowerCase() === evidence.keyword.toLocaleLowerCase(),
+              stripFirstPersonPronouns(keyword).toLocaleLowerCase() ===
+                stripFirstPersonPronouns(evidence.keyword).toLocaleLowerCase() ||
+              canonicalKeywordKey(substantiveKeyword(keyword)) ===
+                canonicalKeywordKey(substantiveKeyword(evidence.keyword)),
           ),
         ),
       };
@@ -115,8 +127,8 @@ export class RealBulletComposer implements BulletComposer {
         result: story.result,
         actionVerb: keywordPackage.actionVerb,
         directKeywords: visibleDirectKeywords,
-        supportingKeywords: [...keywordPackage.supportingKeywords],
-        outcomeKeywords: [...keywordPackage.outcomeKeywords],
+        supportingKeywords: [...compositionPackage.supportingKeywords],
+        outcomeKeywords: [...compositionPackage.outcomeKeywords],
         finalBullet: composed.finalBullet,
         strengthScore: 0,
         distinctivenessScore: 0,
@@ -126,7 +138,18 @@ export class RealBulletComposer implements BulletComposer {
 
     const validation = validateBulletComposition({
       plans: input.plans,
-      keywordPackages: input.keywordPackages,
+      keywordPackages: drafts.map((bullet) => {
+        const original = packagesByBullet.get(bullet.bulletId);
+        if (!original) {
+          throw new Error(`Missing keyword package for composed bullet ${bullet.bulletId}.`);
+        }
+        return {
+          ...original,
+          directKeywords: bullet.directKeywords,
+          supportingKeywords: bullet.supportingKeywords,
+          outcomeKeywords: bullet.outcomeKeywords,
+        };
+      }),
       stories: input.stories,
       bullets: drafts,
       patternsByBullet,

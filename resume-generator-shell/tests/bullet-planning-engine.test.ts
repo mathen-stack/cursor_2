@@ -146,7 +146,7 @@ describe("Real requirement allocation and bullet planning", () => {
     expect(output.validation?.criticalRequirementCoverage).toBe(true);
   });
 
-  it("covers overflow critical requirements as supporting when bullet capacity is exhausted", async () => {
+  it("covers overflow critical requirements via planning coverage when bullet capacity is exhausted", async () => {
     const categories: JDRequirement["category"][] = [
       "architecture",
       "deployment",
@@ -182,6 +182,7 @@ describe("Real requirement allocation and bullet planning", () => {
       output.plans.flatMap((plan) => [
         plan.requirementId,
         ...plan.supportingRequirementIds,
+        ...(plan.coverageRequirementIds ?? []),
       ]),
     );
 
@@ -190,7 +191,12 @@ describe("Real requirement allocation and bullet planning", () => {
     expect(output.validation?.overallStatus).toBe("approved");
     expect(
       output.validation?.warnings.some((warning) =>
-        /supporting coverage/i.test(warning),
+        /planning coverage/i.test(warning),
+      ),
+    ).toBe(true);
+    expect(
+      output.plans.some(
+        (plan) => (plan.coverageRequirementIds?.length ?? 0) > 0,
       ),
     ).toBe(true);
   });

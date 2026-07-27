@@ -91,6 +91,9 @@ export function validateBulletPlans(
     ...plan.supportingRequirementIds
       .filter((requirementId) => !requirementIds.has(requirementId))
       .map((requirementId) => `${plan.bulletId}:${requirementId}`),
+    ...(plan.coverageRequirementIds ?? [])
+      .filter((requirementId) => !requirementIds.has(requirementId))
+      .map((requirementId) => `${plan.bulletId}:${requirementId}`),
   ]);
 
   const invalidAllocationReferences = input.allocations
@@ -110,6 +113,7 @@ export function validateBulletPlans(
     input.plans.flatMap((plan) => [
       plan.requirementId,
       ...plan.supportingRequirementIds,
+      ...(plan.coverageRequirementIds ?? []),
     ]),
   );
   const uncoveredCriticalRequirementIds = eligibleRequirements
@@ -191,17 +195,20 @@ export function validateBulletPlans(
     const primaryRequirementIds = new Set(
       input.plans.map((plan) => plan.requirementId),
     );
-    const supportingOnlyCriticalIds = eligibleRequirements
+    const coverageOnlyCriticalIds = eligibleRequirements
       .filter(
         (requirement) =>
           requirement.priority === "critical" &&
           coveredRequirementIds.has(requirement.requirementId) &&
-          !primaryRequirementIds.has(requirement.requirementId),
+          !primaryRequirementIds.has(requirement.requirementId) &&
+          !input.plans.some((plan) =>
+            plan.supportingRequirementIds.includes(requirement.requirementId),
+          ),
       )
       .map((requirement) => requirement.requirementId);
-    if (supportingOnlyCriticalIds.length > 0) {
+    if (coverageOnlyCriticalIds.length > 0) {
       warnings.push(
-        `Some critical requirements were attached as supporting coverage because distinct bullet capacity was exhausted: ${supportingOnlyCriticalIds.join(", ")}.`,
+        `Some critical requirements were recorded as planning coverage because distinct bullet capacity was exhausted: ${coverageOnlyCriticalIds.join(", ")}.`,
       );
     }
   }

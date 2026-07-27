@@ -46,14 +46,30 @@ export function stripTerminal(value: string): string {
   return value.replace(/\s+/g, " ").trim().replace(TERMINAL_PUNCTUATION, "");
 }
 
-export function normalizeBulletSentence(value: string): string {
-  const normalized = value
-    .replace(WEAK_FILLER, "")
+/**
+ * Resume bullets must stay third-person. JD wording often contains "our/we/us";
+ * strip those pronouns so composed text and keyword checks stay consistent.
+ */
+export function stripFirstPersonPronouns(value: string): string {
+  return value
+    .replace(/\b(?:I|me|my|mine|we|us|our|ours)\b/gi, " ")
+    .replace(/\s+'/g, "'")
     .replace(/\s+,/g, ",")
     .replace(/,\s*,+/g, ", ")
     .replace(/\s+/g, " ")
-    .trim()
-    .replace(/[.!?]+$/g, "");
+    .trim();
+}
+
+export function normalizeBulletSentence(value: string): string {
+  const normalized = stripFirstPersonPronouns(
+    value
+      .replace(WEAK_FILLER, "")
+      .replace(/\s+,/g, ",")
+      .replace(/,\s*,+/g, ", ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[.!?]+$/g, ""),
+  );
   if (!normalized) {
     return "";
   }
@@ -64,7 +80,7 @@ export function substantiveKeyword(keyword: string): string {
   if (/^mentor(?:ed|ing|s)?\s+engineers?\b/i.test(keyword.trim())) {
     return "engineer mentoring";
   }
-  const cleaned = cleanScope(keyword);
+  const cleaned = cleanScope(stripFirstPersonPronouns(keyword));
   const withoutSeniority = cleaned
     .replace(/^(?:entry[- ]level|junior|mid[- ]level|senior|lead|staff|principal|chief)\s+/i, "")
     .replace(/\s+(?:engineer|developer|scientist|architect|manager|specialist|analyst)$/i, "")
@@ -121,9 +137,13 @@ export function buildActionClause(input: {
     input.keywordPackage.directKeywords.map(substantiveKeyword),
   );
   const joinedDirectScope = joinNatural(directScopes);
-  const themeScope = cleanScope(input.plan.achievementTheme || "");
+  const themeScope = cleanScope(
+    stripFirstPersonPronouns(input.plan.achievementTheme || ""),
+  );
   const dimensionScope = input.plan.achievementDimension.replace(/-/g, " ");
-  const focusScope = cleanScope(input.plan.roleFocusArea || "");
+  const focusScope = cleanScope(
+    stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
+  );
   const shortFallback =
     themeScope.split(/\s+/).filter(Boolean).length > 0 &&
     themeScope.split(/\s+/).length <= 6
@@ -138,15 +158,20 @@ export function buildActionClause(input: {
       ? joinedDirectScope
       : shortFallback;
   const supportValues = removeContainedPhrases(
-    input.keywordPackage.supportingKeywords.filter(
-      (keyword) =>
-        !directScope.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()),
-    ),
+    input.keywordPackage.supportingKeywords
+      .map(stripFirstPersonPronouns)
+      .filter(
+        (keyword) =>
+          Boolean(keyword) &&
+          !directScope.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()),
+      ),
   );
   const explicitTools = supportValues.filter((keyword) =>
     input.keywordPackage.supportingKeywordDetails.some(
       (detail) =>
-        detail.keyword === keyword && detail.origin === "explicit-jd-tool",
+        stripFirstPersonPronouns(detail.keyword).toLocaleLowerCase() ===
+          keyword.toLocaleLowerCase() &&
+        detail.origin === "explicit-jd-tool",
     ),
   );
   const inferredMethods = supportValues.filter(
@@ -218,16 +243,20 @@ export function uncoveredOutcomeKeywords(input: {
   metrics: readonly StarMetric[];
   keywordPackage: KeywordPackage;
 }): string[] {
-  const coveredText = `${input.actionClause} ${input.metrics
-    .map((metric) => `${metric.displayText} ${metric.measure}`)
-    .join(" ")}`.toLocaleLowerCase();
-  return uniquePhrases(input.keywordPackage.outcomeKeywords).filter(
-    (keyword) => !coveredText.includes(keyword.toLocaleLowerCase()),
+  const coveredText = stripFirstPersonPronouns(
+    `${input.actionClause} ${input.metrics
+      .map((metric) => `${metric.displayText} ${metric.measure}`)
+      .join(" ")}`,
+  ).toLocaleLowerCase();
+  return uniquePhrases(
+    input.keywordPackage.outcomeKeywords.map(stripFirstPersonPronouns),
+  ).filter(
+    (keyword) => keyword && !coveredText.includes(keyword.toLocaleLowerCase()),
   );
 }
 
 export function compactBusinessImpact(story: StarStory, maximumWords = 9): string {
-  const cleaned = stripTerminal(story.businessImpact).trim();
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact)).trim();
   const object = cleaned
     .replace(/^improved\s+/i, "better ")
     .replace(/^increased\s+/i, "greater ")
@@ -242,7 +271,7 @@ export function compactBusinessImpact(story: StarStory, maximumWords = 9): strin
 }
 
 export function businessImpactAsGerund(story: StarStory, maximumWords = 11): string {
-  const cleaned = stripTerminal(story.businessImpact)
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact))
     .replace(/^improved\b/i, "improving")
     .replace(/^increased\b/i, "increasing")
     .replace(/^accelerated\b/i, "accelerating")
@@ -256,7 +285,7 @@ export function businessImpactAsGerund(story: StarStory, maximumWords = 11): str
 }
 
 export function businessImpactAsInfinitive(story: StarStory, maximumWords = 11): string {
-  const cleaned = stripTerminal(story.businessImpact)
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact))
     .replace(/^improved\b/i, "improve")
     .replace(/^increased\b/i, "increase")
     .replace(/^accelerated\b/i, "accelerate")
@@ -295,6 +324,13 @@ export function containsPhraseConcept(text: string, phrase: string): boolean {
 }
 
 export function directKeywordRepresented(text: string, keyword: string): boolean {
-  const exact = text.toLocaleLowerCase().includes(keyword.toLocaleLowerCase());
-  return exact || containsPhraseConcept(text, substantiveKeyword(keyword));
+  const normalizedText = stripFirstPersonPronouns(text);
+  const normalizedKeyword = stripFirstPersonPronouns(keyword);
+  const exact = normalizedText
+    .toLocaleLowerCase()
+    .includes(normalizedKeyword.toLocaleLowerCase());
+  return (
+    exact ||
+    containsPhraseConcept(normalizedText, substantiveKeyword(normalizedKeyword))
+  );
 }

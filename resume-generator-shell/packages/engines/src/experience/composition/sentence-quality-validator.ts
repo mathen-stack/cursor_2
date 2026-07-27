@@ -9,6 +9,7 @@ import type { StarStory } from "../types/star-story";
 import {
   directKeywordRepresented,
   sentenceCount,
+  stripFirstPersonPronouns,
   wordCount,
 } from "./bullet-language";
 
@@ -24,16 +25,16 @@ function startsWithVerb(text: string, verb: string): boolean {
 }
 
 function allSupportingUsed(text: string, keywordPackage: KeywordPackage): boolean {
-  const lower = text.toLocaleLowerCase();
+  const lower = stripFirstPersonPronouns(text).toLocaleLowerCase();
   return keywordPackage.supportingKeywords.every((keyword) =>
-    lower.includes(keyword.toLocaleLowerCase()),
+    lower.includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
   );
 }
 
 function allOutcomesUsed(text: string, keywordPackage: KeywordPackage): boolean {
-  const lower = text.toLocaleLowerCase();
+  const lower = stripFirstPersonPronouns(text).toLocaleLowerCase();
   return keywordPackage.outcomeKeywords.every((keyword) =>
-    lower.includes(keyword.toLocaleLowerCase()),
+    lower.includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
   );
 }
 

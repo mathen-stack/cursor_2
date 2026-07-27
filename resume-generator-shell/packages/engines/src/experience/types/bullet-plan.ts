@@ -55,6 +55,12 @@ export interface BulletPlanItem {
   sequence: number;
   requirementId: string;
   supportingRequirementIds: string[];
+  /**
+   * Critical (or other) requirements counted as covered for planning validation
+   * only. Unlike supportingRequirementIds, these do not feed keyword allocation
+   * or STAR composition.
+   */
+  coverageRequirementIds?: string[];
   requirementAllocationKind: RequirementAllocationKind;
   achievementDimension: AchievementDimension;
   achievementTheme: string;

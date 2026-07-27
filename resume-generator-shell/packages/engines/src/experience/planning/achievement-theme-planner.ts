@@ -268,6 +268,7 @@ export class AchievementThemePlanner {
         sequence,
         requirementId: selection.requirement.requirementId,
         supportingRequirementIds,
+        coverageRequirementIds: [],
         requirementAllocationKind: selection.allocationKind,
         achievementDimension: dimension,
         achievementTheme: theme,

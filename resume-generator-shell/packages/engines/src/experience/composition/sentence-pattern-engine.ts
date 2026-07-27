@@ -12,6 +12,7 @@ import {
   metricAsGerund,
   metricAsNoun,
   normalizeBulletSentence,
+  stripFirstPersonPronouns,
   uncoveredOutcomeKeywords,
   wordCount,
 } from "./bullet-language";
@@ -105,6 +106,15 @@ function buildWithPattern(input: {
   }
 }
 
+function compressToMaximumWords(text: string, maximumWords: number): string {
+  const cleaned = stripFirstPersonPronouns(text.replace(/[.!?]+$/g, "").trim());
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return normalizeBulletSentence(cleaned);
+  }
+  return normalizeBulletSentence(tokens.slice(0, maximumWords).join(" "));
+}
+
 export class SentencePatternEngine {
   compose(input: {
     actionClause: string;
@@ -152,22 +162,41 @@ export class SentencePatternEngine {
       );
     }
 
-    const longEnough = candidates
-      .filter((candidate) => wordCount(candidate.finalBullet) >= minimumWords)
+    const underMaximum = candidates
+      .filter((candidate) => wordCount(candidate.finalBullet) <= input.maximumWords)
       .sort(
         (left, right) =>
-          wordCount(left.finalBullet) - wordCount(right.finalBullet),
+          wordCount(right.finalBullet) - wordCount(left.finalBullet),
       );
-    if (longEnough[0] && wordCount(longEnough[0].finalBullet) <= input.maximumWords + 8) {
-      // Prefer a slightly longer but complete achievement over a too-short bullet.
-      return longEnough[0];
+    if (underMaximum[0] && wordCount(underMaximum[0].finalBullet) >= minimumWords) {
+      return underMaximum[0];
+    }
+
+    // Prefer the shortest complete candidate, then compress into the scan-friendly
+    // word limit rather than shipping an overlong bullet that fails validation.
+    const shortest = [...candidates].sort(
+      (left, right) =>
+        wordCount(left.finalBullet) - wordCount(right.finalBullet),
+    )[0];
+    if (shortest) {
+      const compressed = compressToMaximumWords(
+        shortest.finalBullet,
+        input.maximumWords,
+      );
+      if (wordCount(compressed) >= minimumWords) {
+        return {
+          finalBullet: compressed,
+          sentencePattern: shortest.sentencePattern,
+        };
+      }
     }
 
     const base =
       candidates.find((candidate) => candidate.sentencePattern === preferredPattern)
         ?.finalBullet ?? candidates[0]?.finalBullet ?? "";
-    const expanded = normalizeBulletSentence(
+    const expanded = compressToMaximumWords(
       `${base.replace(/[.!?]+$/g, "")}, enabling stronger delivery outcomes for product and engineering stakeholders`,
+      input.maximumWords,
     );
     return {
       finalBullet: expanded,

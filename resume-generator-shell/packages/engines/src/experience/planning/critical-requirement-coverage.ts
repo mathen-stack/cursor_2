@@ -28,14 +28,15 @@ function coveredRequirementIds(plans: BulletPlanItem[]): Set<string> {
     plans.flatMap((plan) => [
       plan.requirementId,
       ...plan.supportingRequirementIds,
+      ...(plan.coverageRequirementIds ?? []),
     ]),
   );
 }
 
 /**
  * When the JD has more critical experience requirements than distinct bullet
- * slots, attach leftover criticals as supportingRequirementIds so planning
- * validation still passes without inventing extra bullets.
+ * slots, record leftovers on coverageRequirementIds so planning validation
+ * still passes without inventing extra bullets or polluting keyword allocation.
  */
 export function ensureCriticalRequirementCoverage(input: {
   plans: BulletPlanItem[];
@@ -57,6 +58,7 @@ export function ensureCriticalRequirementCoverage(input: {
     return input.plans.map((plan) => ({
       ...plan,
       supportingRequirementIds: [...plan.supportingRequirementIds],
+      coverageRequirementIds: [...(plan.coverageRequirementIds ?? [])],
     }));
   }
 
@@ -76,6 +78,7 @@ export function ensureCriticalRequirementCoverage(input: {
   const plans = input.plans.map((plan) => ({
     ...plan,
     supportingRequirementIds: [...plan.supportingRequirementIds],
+    coverageRequirementIds: [...(plan.coverageRequirementIds ?? [])],
   }));
 
   for (const requirement of uncoveredCriticals) {
@@ -83,7 +86,7 @@ export function ensureCriticalRequirementCoverage(input: {
       requirement.requirementId,
     );
     const rankedPlans = plans
-      .map((plan, index) => {
+      .map((plan) => {
         const assignment = assignmentByExperience.get(plan.experienceId);
         if (!assignment) {
           return null;
@@ -91,20 +94,18 @@ export function ensureCriticalRequirementCoverage(input: {
         const fitScore = requirementRoleFitScore(requirement, assignment);
         const preferredBonus =
           preferredExperienceId === plan.experienceId ? 50 : 0;
-        const supportingPenalty = plan.supportingRequirementIds.length * 3;
+        const coveragePenalty = (plan.coverageRequirementIds?.length ?? 0) * 3;
         const alreadyPrimary =
           plan.requirementId === requirement.requirementId ? 1000 : 0;
         return {
-          index,
           plan,
-          score: fitScore + preferredBonus - supportingPenalty + alreadyPrimary,
+          score: fitScore + preferredBonus - coveragePenalty + alreadyPrimary,
         };
       })
       .filter(
         (
           item,
         ): item is {
-          index: number;
           plan: BulletPlanItem;
           score: number;
         } => item !== null,
@@ -123,14 +124,19 @@ export function ensureCriticalRequirementCoverage(input: {
       );
     }
 
+    const coverageIds = selected.plan.coverageRequirementIds ?? [];
     if (
       selected.plan.requirementId !== requirement.requirementId &&
-      !selected.plan.supportingRequirementIds.includes(requirement.requirementId)
+      !selected.plan.supportingRequirementIds.includes(
+        requirement.requirementId,
+      ) &&
+      !coverageIds.includes(requirement.requirementId)
     ) {
-      selected.plan.supportingRequirementIds.push(requirement.requirementId);
+      coverageIds.push(requirement.requirementId);
+      selected.plan.coverageRequirementIds = coverageIds;
       selected.plan.planningRationale = [
         selected.plan.planningRationale,
-        `Attached critical ${requirement.requirementId} as supporting coverage because distinct bullet capacity was already exhausted.`,
+        `Recorded critical ${requirement.requirementId} as planning coverage because distinct bullet capacity was already exhausted.`,
       ]
         .filter(Boolean)
         .join(" ");
