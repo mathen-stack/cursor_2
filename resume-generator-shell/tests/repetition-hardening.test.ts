@@ -79,9 +79,30 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
     );
     expect(stakeholderScope.length).toBeLessThanOrEqual(1);
 
+    const deliveryPlanningScope = bullets.filter((bullet) =>
+      /cross-functional collaboration and delivery planning(?:\s+required)?/i.test(
+        bullet,
+      ),
+    );
+    expect(deliveryPlanningScope.length).toBeLessThanOrEqual(1);
+
+    // No 4+ word action-object phrase should be cloned across bullets.
+    const actionScopes = bullets.map((bullet) => {
+      const withoutVerb = bullet.replace(/^[A-Za-z-]+\s+/, "");
+      return withoutVerb
+        .replace(/\s+(?:using|through|,)\s+.+$/i, "")
+        .toLowerCase()
+        .trim();
+    });
+    const multiWordScopes = actionScopes.filter(
+      (scope) => scope.split(/\s+/).length >= 4,
+    );
+    expect(new Set(multiWordScopes).size).toBe(multiWordScopes.length);
+
     for (const bullet of bullets) {
       expect(bullet).not.toMatch(/\bCoordinat\w*\b.*\bcoordination\b/i);
       expect(bullet).not.toMatch(/\bthroughput\b.*\bthroughput\b/i);
+      expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
     }
   });
 });

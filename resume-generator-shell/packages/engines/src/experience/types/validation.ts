@@ -31,7 +31,8 @@ export type ExperienceValidationIssueCode =
   | "structural-repetition"
   | "achievement-repetition"
   | "metric-repetition"
-  | "intra-bullet-repetition";
+  | "intra-bullet-repetition"
+  | "action-scope-repetition";
 
 export interface ExperienceValidationIssue {
   issueCode: ExperienceValidationIssueCode;

@@ -1,5 +1,8 @@
 import type { CareerEntry } from "@resume/contracts";
-import { directKeywordRepresented } from "../composition/bullet-language";
+import {
+  directKeywordRepresented,
+  extractActionObjectScope,
+} from "../composition/bullet-language";
 import { canonicalActionVerbKey, canonicalKeywordKey } from "../keywords/keyword-normalizer";
 import type { ExperienceBullet } from "../types/composed-bullet";
 import type {
@@ -233,6 +236,21 @@ export class RealExperienceValidator implements ExperienceValidator {
       (item) => metricFingerprint(item.bullet.finalBullet),
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
+    const actionScopeRepetitionGroups = duplicatesBy(
+      bulletContexts,
+      (item) => {
+        const scope = extractActionObjectScope(
+          item.bullet.finalBullet,
+          item.bullet.actionVerb,
+        );
+        // Only lock multi-word action objects (3+ tokens) document-wide.
+        if (scope.split(/\s+/).filter(Boolean).length < 3) {
+          return `unique:${item.bullet.bulletId}`;
+        }
+        return `scope:${normalizeText(scope)}`;
+      },
+    ).map((group) => group.map((item) => item.bullet.bulletId));
+
     const achievementRepetitionGroups = pairGroups(
       bulletContexts,
       (left, right) => {
@@ -280,6 +298,11 @@ export class RealExperienceValidator implements ExperienceValidator {
     applyDuplicateGroups(structuralRepetitionGroups, "structural-repetition", "Two bullets use an overly similar sentence structure.", "warning");
     applyDuplicateGroups(achievementRepetitionGroups, "achievement-repetition", "Two bullets are grounded in the same underlying achievement.");
     applyDuplicateGroups(metricRepetitionGroups, "metric-repetition", "A metric measure pattern is repeated across the resume.");
+    applyDuplicateGroups(
+      actionScopeRepetitionGroups,
+      "action-scope-repetition",
+      "The same multi-word action scope is cloned across bullets.",
+    );
 
     const bulletDiagnostics: ExperienceBulletDiagnostic[] = [];
     for (const context of bulletContexts) {

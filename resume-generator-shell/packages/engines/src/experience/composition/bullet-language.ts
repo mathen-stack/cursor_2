@@ -5,6 +5,73 @@ import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 import { cleanScope } from "../star/star-language";
 import { joinNatural, lowerFirst } from "../star/star-utils";
 
+const STAR_OWNERSHIP_BOILERPLATE =
+  /\b(?:effort to|responsibility to|owned the|took responsibility|delivery planning required|collaboration and delivery planning|collaborative delivery planning|cross-functional collaboration and delivery planning|cross-team product partnership|stakeholder communication loops|requirements discovery with partners|technical direction and cross-team execution)\b/i;
+
+const COMMUNICATION_SCOPE_VARIANTS = [
+  "cross-functional collaboration with product and engineering stakeholders",
+  "product and engineering partnership on delivery priorities",
+  "stakeholder communication across product and platform teams",
+  "requirements alignment with product and business partners",
+  "cross-team delivery planning with product stakeholders",
+  "architecture and delivery discussions with engineering partners",
+] as const;
+
+function isUsedScope(scope: string, usedScopeKeys?: ReadonlySet<string>): boolean {
+  if (!usedScopeKeys || usedScopeKeys.size === 0) {
+    return false;
+  }
+  const key = canonicalKeywordKey(substantiveKeyword(scope));
+  if (key && usedScopeKeys.has(key)) {
+    return true;
+  }
+  const words = scope.split(/\s+/).filter(Boolean);
+  for (let index = 0; index < words.length - 2; index += 1) {
+    const windowKey = canonicalKeywordKey(
+      substantiveKeyword(words.slice(index, index + 3).join(" ")),
+    );
+    if (windowKey && usedScopeKeys.has(windowKey)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pickUnusedCommunicationScope(
+  preferred: string | undefined,
+  usedScopeKeys: ReadonlySet<string> | undefined,
+  seed: string,
+): string {
+  const candidates = [
+    preferred,
+    ...COMMUNICATION_SCOPE_VARIANTS,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  const unused = candidates.find((candidate) => !isUsedScope(candidate, usedScopeKeys));
+  if (unused) {
+    return unused;
+  }
+  // Deterministic last-resort variant so concurrent roles never share one clone.
+  const index =
+    Math.abs(
+      [...seed].reduce((hash, char) => hash + char.charCodeAt(0), 0),
+    ) % COMMUNICATION_SCOPE_VARIANTS.length;
+  return `${COMMUNICATION_SCOPE_VARIANTS[index]} for ${seed.toLowerCase()}`;
+}
+
+/** Visible action-object text used for document-wide scope uniqueness. */
+export function extractActionObjectScope(bulletText: string, actionVerb?: string): string {
+  let text = stripFirstPersonPronouns(bulletText).replace(/[.!?]+$/g, "").trim();
+  if (actionVerb) {
+    text = text.replace(new RegExp(`^${actionVerb}\\s+`, "i"), "").trim();
+  } else {
+    text = text.replace(/^[A-Za-z-]+\s+/, "").trim();
+  }
+  return text
+    .replace(/\s+(?:using|through|,)\s+.+$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const TERMINAL_PUNCTUATION = /[.!?;:,]+$/g;
 const LEADING_CONNECTOR = /^(?:which|that|and|while|thereby|resulting in)\s+/i;
 const WEAK_FILLER = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various|multiple tasks|successfully|effectively)\b/gi;
@@ -238,6 +305,7 @@ export function buildActionClause(input: {
   plan: BulletPlanItem;
   keywordPackage: KeywordPackage;
   story: StarStory;
+  usedScopeKeys?: ReadonlySet<string>;
 }): string {
   const directScopes = removeContainedPhrases(
     input.keywordPackage.directKeywords.map(substantiveKeyword),
@@ -263,14 +331,13 @@ export function buildActionClause(input: {
   const compactTaskRaw = substantiveKeyword(input.story.task)
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 6)
-    .join(" ");
+    .slice(0, 8)
+    .join(" ")
+    .replace(/\brequired\b$/i, "")
+    .trim();
   // STAR ownership boilerplate is not a usable action object.
   const compactTask =
-    compactTaskRaw &&
-    !/\b(?:effort to|responsibility to|owned the|took responsibility)\b/i.test(
-      compactTaskRaw,
-    )
+    compactTaskRaw && !STAR_OWNERSHIP_BOILERPLATE.test(compactTaskRaw)
       ? compactTaskRaw
       : "";
   // Never fall back to bare achievement-dimension labels such as
@@ -343,7 +410,8 @@ export function buildActionClause(input: {
   if (
     /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
     /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
-    /^production(?:\s+\w+)?\s+delivery outcomes$/i.test(normalizedDirectScope)
+    /^production(?:\s+\w+)?\s+delivery outcomes$/i.test(normalizedDirectScope) ||
+    STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope)
   ) {
     const toolScope = joinNatural(explicitTools.slice(0, 2));
     const methodScope = joinNatural(inferredMethods.slice(0, 2));
@@ -398,8 +466,8 @@ export function buildActionClause(input: {
     }
     return keyword;
   });
-  const activeSupportClause = (() => {
-    const lowerScope = normalizedDirectScope.toLocaleLowerCase();
+  const buildSupportClause = (scopeText: string): string => {
+    const lowerScope = scopeText.toLocaleLowerCase();
     const remainingTools = explicitTools.filter(
       (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
     );
@@ -410,7 +478,7 @@ export function buildActionClause(input: {
       remainingTools.length > 0 ? ` using ${joinNatural(remainingTools)}` : "",
       remainingMethods.length > 0 ? ` through ${joinNatural(remainingMethods)}` : "",
     ].join("");
-  })();
+  };
   if (/\bdelivery coordination required\b/i.test(normalizedDirectScope)) {
     normalizedDirectScope = normalizedDirectScope.replace(
       /\bdelivery coordination required\b/gi,
@@ -432,19 +500,37 @@ export function buildActionClause(input: {
       ) ||
       /\bstakeholder alignment and delivery (?:coordination|priorities)\b/i.test(
         normalizedDirectScope,
-      );
+      ) ||
+      STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope) ||
+      isUsedScope(normalizedDirectScope, input.usedScopeKeys);
     const looksLikeSoftSkillProse =
       /^(?:strong|excellent|good|proven)\b/i.test(normalizedDirectScope) ||
       /communication skills/i.test(normalizedDirectScope);
-    const communicationScope =
+    // Supporting methods must stay in the "through" clause — never promote them
+    // to the action object for communication bullets, or they disappear when the
+    // scope is replaced with a collaboration variant.
+    const looksLikeSupportingAsScope =
+      filteredMethods.length > 0 &&
+      filteredMethods.every((keyword) =>
+        normalizedDirectScope.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()),
+      );
+    const preferredScope =
       !looksLikeGenericAlignment &&
       !looksLikeSoftSkillProse &&
+      !looksLikeSupportingAsScope &&
       /stakeholder|collaborat|product|business|requirements|team|cross-functional|cross-team/i.test(
         normalizedDirectScope,
       )
         ? normalizedDirectScope
-        : `cross-functional collaboration with ${compactFocus || "product and engineering stakeholders"}`;
-    return stripTerminal(`${verb} ${communicationScope}${activeSupportClause}`);
+        : undefined;
+    const communicationScope = pickUnusedCommunicationScope(
+      preferredScope,
+      input.usedScopeKeys,
+      input.plan.bulletId,
+    );
+    return stripTerminal(
+      `${verb} ${communicationScope}${buildSupportClause(communicationScope)}`,
+    );
   }
 
   if (input.plan.leadershipFocused) {
@@ -453,17 +539,40 @@ export function buildActionClause(input: {
     )
       ? normalizedDirectScope
       : `technical direction for ${normalizedDirectScope}`;
-    return stripTerminal(`${verb} ${leadershipScope}${activeSupportClause}`);
+    return stripTerminal(
+      `${verb} ${leadershipScope}${buildSupportClause(leadershipScope)}`,
+    );
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
     const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
       ? normalizedDirectScope
       : `engineering capability around ${normalizedDirectScope}`;
-    return stripTerminal(`${verb} ${mentoringScope}${activeSupportClause}`);
+    return stripTerminal(
+      `${verb} ${mentoringScope}${buildSupportClause(mentoringScope)}`,
+    );
   }
 
-  return stripTerminal(`${verb} ${normalizedDirectScope}${activeSupportClause}`);
+  // Non-communication bullets also avoid cloning a previously used action object.
+  if (isUsedScope(normalizedDirectScope, input.usedScopeKeys)) {
+    const methodScope = joinNatural(filteredMethods.slice(0, 2));
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    normalizedDirectScope =
+      [toolScope, compactFocus, `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`]
+        .find((candidate) => candidate && !isUsedScope(candidate, input.usedScopeKeys)) ||
+      `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`;
+    // Prefer not to consume methods as the object when we can keep them in "through".
+    if (methodScope && normalizedDirectScope === methodScope) {
+      normalizedDirectScope =
+        compactFocus ||
+        toolScope ||
+        `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`;
+    }
+  }
+
+  return stripTerminal(
+    `${verb} ${normalizedDirectScope}${buildSupportClause(normalizedDirectScope)}`,
+  );
 }
 
 export function metricAsGerund(metric: StarMetric): string {

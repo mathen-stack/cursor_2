@@ -175,6 +175,7 @@ export class RealBulletComposer implements BulletComposer {
         plan,
         keywordPackage: compositionPackage,
         story,
+        usedScopeKeys: usedDirectScopeKeys,
       });
       for (const keyword of keywordPackage.directKeywords) {
         const key = canonicalKeywordKey(substantiveKeyword(keyword));
