@@ -64,6 +64,21 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
       ),
     ).toHaveLength(1);
 
+    // Long JD noun phrases must not be pasted into every bullet after direct
+    // keyword inventory is exhausted.
+    expect(
+      bullets.filter((bullet) =>
+        /scalable machine learning models in production environments/i.test(
+          bullet,
+        ),
+      ).length,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      bullets.filter((bullet) =>
+        /stakeholder alignment and delivery coordination required/i.test(bullet),
+      ),
+    ).toHaveLength(0);
+
     const businessClosings = bullets
       .map((bullet) => {
         const match = bullet.match(

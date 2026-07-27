@@ -1,9 +1,105 @@
-import type { BulletPlanItem } from "../types/bullet-plan";
+import type {
+  AchievementDimension,
+  BulletPlanItem,
+} from "../types/bullet-plan";
 import type { KeywordPackage } from "../types/keyword-package";
 import type { StarMetric, StarStory } from "../types/star-story";
 import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 import { cleanScope } from "../star/star-language";
 import { joinNatural, lowerFirst } from "../star/star-utils";
+
+/**
+ * Unique short noun phrases used when direct JD scopes are exhausted.
+ * Avoid bare achievement-dimension labels — those clone across roles.
+ */
+const UNIQUE_SCOPE_POOL: Readonly<
+  Record<AchievementDimension, readonly string[]>
+> = {
+  "architecture-design": [
+    "service boundary standards",
+    "integration design patterns",
+    "resilient system blueprints",
+    "modular platform contracts",
+  ],
+  "production-delivery": [
+    "release readiness controls",
+    "deployment automation paths",
+    "production rollout gates",
+    "repeatable ship workflows",
+  ],
+  "performance-optimization": [
+    "critical path latency",
+    "runtime efficiency targets",
+    "request throughput capacity",
+    "hot-path resource tuning",
+  ],
+  "reliability-observability": [
+    "production health signals",
+    "incident detection coverage",
+    "service-level telemetry",
+    "operational alert fidelity",
+  ],
+  "quality-automation": [
+    "automated validation gates",
+    "regression coverage controls",
+    "repeatable quality checks",
+    "delivery workflow orchestration",
+  ],
+  "scalability-capacity": [
+    "peak traffic headroom",
+    "workload partitioning controls",
+    "elastic capacity targets",
+    "horizontal scale pathways",
+  ],
+  "cost-efficiency": [
+    "idle capacity reduction",
+    "compute spend efficiency",
+    "infrastructure utilization targets",
+    "unit-cost operating controls",
+  ],
+  "security-governance": [
+    "access control coverage",
+    "policy enforcement checks",
+    "secure delivery practices",
+    "audit-ready control paths",
+  ],
+  "data-quality": [
+    "ingestion integrity checks",
+    "pipeline validation rules",
+    "lineage accuracy controls",
+    "downstream data trust signals",
+  ],
+  "customer-business-impact": [
+    "customer-facing reliability outcomes",
+    "product adoption levers",
+    "measurable value delivery",
+    "outcome-focused ship priorities",
+  ],
+  "cross-functional-alignment": [
+    "requirement tradeoff clarity",
+    "shared delivery success criteria",
+    "cross-team planning agreements",
+    "interface ownership decisions",
+  ],
+  "technical-leadership": [
+    "engineering decision clarity",
+    "design review standards",
+    "workstream execution ownership",
+    "technical roadmap priorities",
+  ],
+  "mentoring-knowledge-sharing": [
+    "engineering coaching loops",
+    "shared practice documentation",
+    "onboarding enablement paths",
+    "team capability workshops",
+  ],
+  "implementation-integration": [
+    "service interface contracts",
+    "end-to-end workflow handoffs",
+    "integration reliability paths",
+    "automated system connections",
+  ],
+};
 
 const TERMINAL_PUNCTUATION = /[.!?;:,]+$/g;
 const LEADING_CONNECTOR = /^(?:which|that|and|while|thereby|resulting in)\s+/i;
@@ -128,15 +224,122 @@ function removeContainedPhrases(values: readonly string[]): string[] {
   });
 }
 
-export function buildActionClause(input: {
+function scopeTokenSet(key: string): Set<string> {
+  return new Set(key.split("|").filter(Boolean));
+}
+
+function scopeOverlapRatio(leftKey: string, rightKey: string): number {
+  const left = scopeTokenSet(leftKey);
+  const right = scopeTokenSet(rightKey);
+  if (left.size === 0 || right.size === 0) {
+    return 0;
+  }
+  let overlap = 0;
+  for (const token of left) {
+    if (right.has(token)) {
+      overlap += 1;
+    }
+  }
+  return overlap / Math.min(left.size, right.size);
+}
+
+/** True when a candidate noun phrase is still unused document-wide. */
+export function isUnusedVisibleScope(
+  phrase: string,
+  usedScopeKeys: ReadonlySet<string>,
+): boolean {
+  const cleaned = substantiveKeyword(stripFirstPersonPronouns(phrase));
+  const key = canonicalKeywordKey(cleaned);
+  if (!cleaned || !key) {
+    return false;
+  }
+  if (usedScopeKeys.has(key)) {
+    return false;
+  }
+  // Reject when the candidate shares a long consecutive word span already locked
+  // from a prior bullet (e.g. "machine learning models in production").
+  const words = cleaned
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9\s./+-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let start = 0; start < words.length; start += 1) {
+    for (let size = 3; size <= Math.min(8, words.length - start); size += 1) {
+      const windowKey = canonicalKeywordKey(words.slice(start, start + size).join(" "));
+      if (windowKey && usedScopeKeys.has(windowKey)) {
+        return false;
+      }
+    }
+  }
+  for (const usedKey of usedScopeKeys) {
+    if (scopeTokenSet(usedKey).size < 2) {
+      continue;
+    }
+    if (scopeOverlapRatio(key, usedKey) >= 0.6) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Lock multi-word visible scopes from composed text so later bullets cannot
+ * fall back onto the same JD noun phrase (even via focus/theme text).
+ */
+export function registerVisibleScopeKeys(
+  text: string,
+  usedScopeKeys: Set<string>,
+): void {
+  const cleaned = stripFirstPersonPronouns(stripTerminal(text));
+  if (!cleaned) {
+    return;
+  }
+  const words = cleaned
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9\s./+-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let start = 0; start < words.length; start += 1) {
+    for (let size = 3; size <= Math.min(10, words.length - start); size += 1) {
+      const phrase = words.slice(start, start + size).join(" ");
+      const key = canonicalKeywordKey(phrase);
+      if (key && key.split("|").filter(Boolean).length >= 3) {
+        usedScopeKeys.add(key);
+      }
+    }
+  }
+  const fullKey = canonicalKeywordKey(cleaned);
+  if (fullKey) {
+    usedScopeKeys.add(fullKey);
+  }
+}
+
+function pickUniqueDimensionScope(
+  plan: BulletPlanItem,
+  usedScopeKeys: ReadonlySet<string>,
+): string {
+  const pool = UNIQUE_SCOPE_POOL[plan.achievementDimension] ?? [
+    "targeted delivery outcomes",
+  ];
+  const offset = Math.max(0, plan.sequence - 1);
+  for (let index = 0; index < pool.length; index += 1) {
+    const candidate = pool[(index + offset) % pool.length];
+    if (candidate && isUnusedVisibleScope(candidate, usedScopeKeys)) {
+      return candidate;
+    }
+  }
+  for (const candidate of pool) {
+    if (isUnusedVisibleScope(candidate, usedScopeKeys)) {
+      return candidate;
+    }
+  }
+  return `${pool[offset % pool.length] ?? "targeted delivery outcomes"} ${plan.sequence}`;
+}
+
+function selectShortFallbackScope(input: {
   plan: BulletPlanItem;
-  keywordPackage: KeywordPackage;
-  story: StarStory;
+  usedScopeKeys: ReadonlySet<string>;
 }): string {
-  const directScopes = removeContainedPhrases(
-    input.keywordPackage.directKeywords.map(substantiveKeyword),
-  );
-  const joinedDirectScope = joinNatural(directScopes);
   const themeScope = cleanScope(
     stripFirstPersonPronouns(input.plan.achievementTheme || ""),
   );
@@ -144,29 +347,43 @@ export function buildActionClause(input: {
     stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
   );
   const compactFocus =
-    focusScope.split(/\s+/).filter(Boolean).length > 0 &&
+    focusScope.split(/\s+/).filter(Boolean).length >= 2 &&
     focusScope.split(/\s+/).length <= 8 &&
     !/,| and | through /i.test(focusScope)
       ? focusScope
       : "";
   const compactTheme =
-    themeScope.split(/\s+/).filter(Boolean).length > 0 &&
+    themeScope.split(/\s+/).filter(Boolean).length >= 2 &&
     themeScope.split(/\s+/).length <= 6
       ? themeScope
       : "";
-  const compactTask = substantiveKeyword(input.story.task)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 6)
-    .join(" ");
-  // Never fall back to bare achievement-dimension labels such as
-  // "cross functional alignment" or "reliability observability" — those clone
-  // across roles whenever the same dimension is reused.
-  const shortFallback =
-    compactFocus ||
-    compactTheme ||
-    compactTask ||
-    "production delivery outcomes";
+  // Never fall back to STAR task boilerplate ("stakeholder alignment and
+  // delivery coordination required") or bare dimension labels — those clone.
+  for (const candidate of [compactFocus, compactTheme]) {
+    if (candidate && isUnusedVisibleScope(candidate, input.usedScopeKeys)) {
+      return candidate;
+    }
+  }
+  return pickUniqueDimensionScope(input.plan, input.usedScopeKeys);
+}
+
+export function buildActionClause(input: {
+  plan: BulletPlanItem;
+  keywordPackage: KeywordPackage;
+  story: StarStory;
+  usedScopeKeys?: ReadonlySet<string>;
+}): string {
+  const usedScopeKeys = input.usedScopeKeys ?? new Set<string>();
+  const directScopes = removeContainedPhrases(
+    input.keywordPackage.directKeywords
+      .map(substantiveKeyword)
+      .filter((keyword) => isUnusedVisibleScope(keyword, usedScopeKeys)),
+  );
+  const joinedDirectScope = joinNatural(directScopes);
+  const shortFallback = selectShortFallbackScope({
+    plan: input.plan,
+    usedScopeKeys,
+  });
   const directScope =
     joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
       ? joinedDirectScope
@@ -212,27 +429,41 @@ export function buildActionClause(input: {
       );
     const communicationScope =
       !looksLikeGenericAlignment &&
-      /stakeholder|collaborat|product|business|requirements|team/i.test(
+      /stakeholder|collaborat|product|business|requirements|team|agreement|tradeoff|criteria|ownership/i.test(
         normalizedDirectScope,
       )
         ? normalizedDirectScope
-        : `stakeholder alignment for ${compactFocus || normalizedDirectScope}`;
+        : pickUniqueDimensionScope(
+            {
+              ...input.plan,
+              achievementDimension: "cross-functional-alignment",
+            },
+            usedScopeKeys,
+          );
     return stripTerminal(`${verb} ${communicationScope}${supportClause}`);
   }
 
   if (input.plan.leadershipFocused) {
-    const leadershipScope = /strategy|direction|leadership|architecture decision|roadmap/i.test(
+    const leadershipScope = /strategy|direction|leadership|architecture decision|roadmap|clarity|ownership|review/i.test(
       normalizedDirectScope,
     )
       ? normalizedDirectScope
-      : `technical direction for ${normalizedDirectScope}`;
+      : pickUniqueDimensionScope(
+          {
+            ...input.plan,
+            achievementDimension: "technical-leadership",
+          },
+          usedScopeKeys,
+        );
     return stripTerminal(`${verb} ${leadershipScope}${supportClause}`);
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
-    const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
+    const mentoringScope = /mentor|coach|knowledge|engineer|onboard|workshop|capability/i.test(
+      normalizedDirectScope,
+    )
       ? normalizedDirectScope
-      : `engineering capability around ${normalizedDirectScope}`;
+      : pickUniqueDimensionScope(input.plan, usedScopeKeys);
     return stripTerminal(`${verb} ${mentoringScope}${supportClause}`);
   }
 

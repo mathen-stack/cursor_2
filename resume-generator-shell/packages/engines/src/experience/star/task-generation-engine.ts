@@ -18,9 +18,9 @@ export class TaskGenerationEngine {
     void input.jobDescription;
     const profile = STAR_DIMENSION_PROFILES[input.plan.achievementDimension];
     const ownership = input.plan.leadershipFocused
-      ? "Owned the technical direction and cross-team execution required to"
+      ? "Owned the technical direction and cross-team execution needed to"
       : input.plan.communicationFocused
-        ? "Owned stakeholder alignment and delivery coordination required to"
+        ? "Owned the stakeholder coordination needed to"
         : input.assignment.seniority === "entry" || input.assignment.seniority === "junior"
           ? "Took responsibility to"
           : "Owned the effort to";

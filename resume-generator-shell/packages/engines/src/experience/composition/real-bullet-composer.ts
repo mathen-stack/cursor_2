@@ -8,6 +8,8 @@ import type {
 import {
   buildActionClause,
   directKeywordRepresented,
+  isUnusedVisibleScope,
+  registerVisibleScopeKeys,
   stripFirstPersonPronouns,
   substantiveKeyword,
 } from "./bullet-language";
@@ -70,6 +72,7 @@ export class RealBulletComposer implements BulletComposer {
         const key = canonicalKeywordKey(substantiveKeyword(keyword));
         if (key) usedDirectScopeKeys.add(key);
       }
+      registerVisibleScopeKeys(reserved.finalBullet, usedDirectScopeKeys);
     }
 
     const orderedPlans = [...input.plans].sort(
@@ -101,10 +104,9 @@ export class RealBulletComposer implements BulletComposer {
       // noun phrase (e.g. "data pipelines") is not cloned across experiences.
       // Claim the substantive form that composition actually inserts into text.
       const visibleDirectKeywords = uniqueSubstantiveKeywords(
-        keywordPackage.directKeywords.filter((keyword) => {
-          const key = canonicalKeywordKey(substantiveKeyword(keyword));
-          return Boolean(key) && !usedDirectScopeKeys.has(key);
-        }),
+        keywordPackage.directKeywords.filter((keyword) =>
+          isUnusedVisibleScope(keyword, usedDirectScopeKeys),
+        ),
       );
       const compositionPackage = {
         ...keywordPackage,
@@ -128,11 +130,14 @@ export class RealBulletComposer implements BulletComposer {
         plan,
         keywordPackage: compositionPackage,
         story,
+        usedScopeKeys: usedDirectScopeKeys,
       });
+      // Lock allocated JD phrases immediately so later bullets cannot fall back
+      // onto the same noun phrase via focus/theme text.
       for (const keyword of keywordPackage.directKeywords) {
-        const key = canonicalKeywordKey(substantiveKeyword(keyword));
-        if (key) usedDirectScopeKeys.add(key);
+        registerVisibleScopeKeys(keyword, usedDirectScopeKeys);
       }
+      registerVisibleScopeKeys(actionClause, usedDirectScopeKeys);
 
       let composed = this.sentencePatternEngine.compose({
         actionClause,
@@ -159,6 +164,8 @@ export class RealBulletComposer implements BulletComposer {
           patternOffset: (input.regenerationAttempt ?? 0) + 1,
         });
       }
+
+      registerVisibleScopeKeys(composed.finalBullet, usedDirectScopeKeys);
 
       // Only claim directs that survived composition/compression so sentence
       // validation cannot reject the bullet for truncated JD phrases.
