@@ -110,24 +110,66 @@ export class SentencePatternEngine {
     keywordPackage: KeywordPackage;
     story: StarStory;
     maximumWords: number;
+    minimumWords?: number;
     patternOffset?: number;
   }): { finalBullet: string; sentencePattern: BulletSentencePattern } {
+    const minimumWords = input.minimumWords ?? 16;
     const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
-    const preferred = buildWithPattern({
-      ...input,
-      pattern: preferredPattern,
-      includeBusinessImpact: true,
+    const candidatePatterns: BulletSentencePattern[] = [
+      preferredPattern,
+      ...GENERAL_PATTERNS,
+      "action-metric-business-impact",
+    ];
+    const uniquePatterns = [...new Set(candidatePatterns)];
+
+    const candidates = uniquePatterns.flatMap((pattern) => {
+      const withImpact = buildWithPattern({
+        ...input,
+        pattern,
+        includeBusinessImpact: true,
+      });
+      const withoutImpact = buildWithPattern({
+        ...input,
+        pattern,
+        includeBusinessImpact: false,
+      });
+      return [
+        { finalBullet: withImpact, sentencePattern: pattern },
+        { finalBullet: withoutImpact, sentencePattern: pattern },
+      ];
     });
-    if (wordCount(preferred) <= input.maximumWords) {
-      return { finalBullet: preferred, sentencePattern: preferredPattern };
+
+    const inRange = candidates.filter((candidate) => {
+      const count = wordCount(candidate.finalBullet);
+      return count >= minimumWords && count <= input.maximumWords;
+    });
+    if (inRange.length > 0) {
+      return (
+        inRange.find((candidate) => candidate.sentencePattern === preferredPattern) ??
+        inRange[0]!
+      );
     }
 
-    const compactPattern: BulletSentencePattern = "action-metric-outcome";
-    const compact = buildWithPattern({
-      ...input,
-      pattern: compactPattern,
-      includeBusinessImpact: false,
-    });
-    return { finalBullet: compact, sentencePattern: compactPattern };
+    const longEnough = candidates
+      .filter((candidate) => wordCount(candidate.finalBullet) >= minimumWords)
+      .sort(
+        (left, right) =>
+          wordCount(left.finalBullet) - wordCount(right.finalBullet),
+      );
+    if (longEnough[0] && wordCount(longEnough[0].finalBullet) <= input.maximumWords + 8) {
+      // Prefer a slightly longer but complete achievement over a too-short bullet.
+      return longEnough[0];
+    }
+
+    const base =
+      candidates.find((candidate) => candidate.sentencePattern === preferredPattern)
+        ?.finalBullet ?? candidates[0]?.finalBullet ?? "";
+    const expanded = normalizeBulletSentence(
+      `${base.replace(/[.!?]+$/g, "")}, enabling stronger delivery outcomes for product and engineering stakeholders`,
+    );
+    return {
+      finalBullet: expanded,
+      sentencePattern: preferredPattern,
+    };
   }
 }

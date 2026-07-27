@@ -73,6 +73,7 @@ export class RealBulletComposer implements BulletComposer {
         plan,
         keywordPackage,
         story,
+        minimumWords: this.sentenceQualityValidator.minimumWords,
         maximumWords: this.sentenceQualityValidator.maximumWords,
         patternOffset: input.regenerationAttempt ?? 0,
       });

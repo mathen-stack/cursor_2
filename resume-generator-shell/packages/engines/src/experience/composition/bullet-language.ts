@@ -165,9 +165,13 @@ export function buildActionClause(input: {
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
-    const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(directScope)
-      ? directScope
-      : `engineering capability around ${directScope}`;
+    const mentoringScope =
+      /^(?:engineer mentoring|mentoring)$/i.test(directScope) ||
+      (/mentor|coach/i.test(verb) && /mentor/i.test(directScope))
+        ? "engineers on architecture decisions and delivery practices"
+        : /mentor|coach|knowledge|engineer|onboard/i.test(directScope)
+          ? directScope
+          : `engineering capability around ${directScope}`;
     return stripTerminal(`${verb} ${mentoringScope}${supportClause}`);
   }
 

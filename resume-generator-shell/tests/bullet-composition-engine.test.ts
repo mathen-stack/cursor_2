@@ -9,10 +9,14 @@ import {
   RealRoleAssignmentEngine,
   RealStarGenerator,
   RuleBasedRequirementModel,
+  SentencePatternEngine,
   createMilestone7ExperienceEngine,
   sentenceCount,
   wordCount,
 } from "@resume/engines";
+import type { BulletPlanItem } from "../packages/engines/src/experience/types/bullet-plan";
+import type { KeywordPackage } from "../packages/engines/src/experience/types/keyword-package";
+import type { StarStory } from "../packages/engines/src/experience/types/star-story";
 
 const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
 
@@ -228,5 +232,78 @@ describe("Milestone 7 integration", () => {
       ),
     ).toBe(true);
     expect(result.validation.communicationCoverage).toBe(true);
+  });
+});
+
+describe("Sentence pattern length recovery", () => {
+  it("expands undersized bullets to the minimum word count", () => {
+    const engine = new SentencePatternEngine();
+    const plan = {
+      bulletId: "EXP-003-B-001",
+      experienceId: "EXP-003",
+      requirementId: "REQ-005",
+      sequence: 1,
+      achievementDimension: "mentoring-knowledge-sharing",
+      achievementTheme: "mentoring",
+      roleFocusArea: "mentoring",
+      communicationFocused: false,
+      leadershipFocused: false,
+      requirementAllocationKind: "primary",
+      allocationRationale: "test",
+    } as BulletPlanItem;
+    const keywordPackage = {
+      bulletId: "EXP-003-B-001",
+      experienceId: "EXP-003",
+      requirementId: "REQ-005",
+      achievementDimension: "mentoring-knowledge-sharing",
+      actionVerb: "Mentored",
+      actionVerbCanonicalKey: "mentor",
+      directKeywords: ["Mentor engineers"],
+      directKeywordEvidence: [],
+      supportingKeywords: ["mentoring"],
+      supportingKeywordDetails: [],
+      outcomeKeywords: ["engineering velocity"],
+      outcomeKeywordDetails: [],
+      allocationRationale: "test",
+    } as KeywordPackage;
+    const story = {
+      bulletId: "EXP-003-B-001",
+      experienceId: "EXP-003",
+      requirementId: "REQ-005",
+      situation: "Capability gaps slowed delivery.",
+      task: "Raise engineering capability.",
+      action: "Mentored engineers through mentoring.",
+      result: "Increased team delivery velocity by 29%.",
+      businessImpact: "improved delivery predictability and team effectiveness",
+      metrics: [
+        {
+          metricId: "m1",
+          metricType: "percentage",
+          direction: "increase",
+          value: 29,
+          unit: "%",
+          measure: "team delivery velocity",
+          outcomeKeyword: "engineering velocity",
+          displayText: "increased team delivery velocity by 29%",
+          rationale: "test",
+          provenance: "generated-hypothetical",
+        },
+      ],
+      status: "approved",
+      coherenceScore: 9,
+      metricPlausibilityScore: 9,
+    } as StarStory;
+
+    const composed = engine.compose({
+      actionClause: "Mentored engineers through mentoring",
+      plan,
+      keywordPackage,
+      story,
+      minimumWords: 16,
+      maximumWords: 46,
+    });
+
+    expect(wordCount(composed.finalBullet)).toBeGreaterThanOrEqual(16);
+    expect(composed.finalBullet.toLowerCase()).toContain("mentored");
   });
 });
