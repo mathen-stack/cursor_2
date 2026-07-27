@@ -1,9 +1,15 @@
 import type {
   EngineExecutionTelemetry,
   EngineOutputBase,
+  EvidenceEnhancementReport,
+  ExperienceEngineOutput,
   FinalResumeData,
+  JobDescription,
   ResumeGenerationRequest,
   ResumeOrchestrationTelemetry,
+  SkillsEngineOutput,
+  SummaryEngineOutput,
+  UserProfile,
 } from "@resume/contracts";
 import { assertContextMatch } from "../context/assert-context-match";
 import { createGenerationContext } from "../context/create-generation-context";
@@ -17,6 +23,21 @@ import {
 } from "../readiness/resume-worded-readiness-engine";
 import { ImmutableFinalResumeAssembler } from "../assembly/final-resume-assembler";
 import type { EngineRegistry } from "../registry/engine-registry";
+
+/** Optional additive enhancer; proposals must be pre-validated by the callee. */
+export type SourceEvidenceEnhancer = (input: {
+  sourceResumeText: string;
+  jobDescription: JobDescription;
+  profile: UserProfile;
+  summary: SummaryEngineOutput;
+  skills: SkillsEngineOutput;
+  experience: ExperienceEngineOutput;
+}) => {
+  summary: SummaryEngineOutput;
+  skills: SkillsEngineOutput;
+  experience: ExperienceEngineOutput;
+  report: EvidenceEnhancementReport;
+};
 
 export class ResumeEngineRejectedError extends Error {
   readonly rejectedEngines: string[];
@@ -87,6 +108,7 @@ export class ResumeOrchestrator {
       new ImmutableFinalResumeAssembler(),
     private readonly readinessEvaluator: ResumeReadinessEvaluator =
       new ResumeWordedReadinessEngine(),
+    private readonly sourceEvidenceEnhancer?: SourceEvidenceEnhancer,
   ) {}
 
   async generate(request: ResumeGenerationRequest): Promise<FinalResumeData> {
@@ -142,6 +164,37 @@ export class ResumeOrchestrator {
       throw new ResumeEngineRejectedError(outputs);
     }
 
+    // Additive evidence layer: runs only after original engines approve.
+    // Rejected proposals keep baseline outputs (original rules remain authoritative).
+    let summaryOutput = summaryResult.output;
+    let skillsOutput = skillsResult.output;
+    let experienceOutput = experienceResult.output;
+    let evidenceEnhancement: EvidenceEnhancementReport | undefined;
+    if (
+      safeRequest.sourceResumeText &&
+      this.sourceEvidenceEnhancer &&
+      safeRequest.sourceResumeText.trim().length >= 40
+    ) {
+      const enhanced = this.sourceEvidenceEnhancer({
+        sourceResumeText: safeRequest.sourceResumeText,
+        jobDescription: safeRequest.jobDescription,
+        profile: safeRequest.profile,
+        summary: summaryOutput,
+        skills: skillsOutput,
+        experience: experienceOutput,
+      });
+      if (
+        enhanced.summary.status === "approved" &&
+        enhanced.skills.status === "approved" &&
+        enhanced.experience.status === "approved"
+      ) {
+        summaryOutput = enhanced.summary;
+        skillsOutput = enhanced.skills;
+        experienceOutput = enhanced.experience;
+        evidenceEnhancement = enhanced.report;
+      }
+    }
+
     const orchestration: ResumeOrchestrationTelemetry = {
       startedAt,
       finishedAt: new Date().toISOString(),
@@ -158,9 +211,9 @@ export class ResumeOrchestrator {
       context,
       jobDescription: safeRequest.jobDescription,
       profile: safeRequest.profile,
-      summary: summaryResult.output,
-      skills: skillsResult.output,
-      experience: experienceResult.output,
+      summary: summaryOutput,
+      skills: skillsOutput,
+      experience: experienceOutput,
       template: templateResult.output,
       orchestration,
     });
@@ -168,6 +221,7 @@ export class ResumeOrchestrator {
     return deepFreeze({
       ...assembled,
       readiness,
+      ...(evidenceEnhancement ? { evidenceEnhancement } : {}),
     });
   }
 }

@@ -15,24 +15,31 @@ import type {
   TemplateEngineOutput,
   TemplateSectionId,
 } from "../engines/template";
+import type { EvidenceEnhancementReport } from "../evidence/source-evidence";
 import type { ResumeWordedReadinessReport } from "./readiness";
 
 export const ResumeGenerationRequestSchema = z.object({
   jobDescription: JobDescriptionSchema,
   profile: UserProfileSchema,
   locale: z.string().min(2).default("en-US"),
+  /** Optional original resume text used only for additive evidence enhancement. */
+  sourceResumeText: z.string().min(40).optional(),
 });
 
 export interface ResumeGenerationRequest {
   jobDescription: JobDescription;
   profile: UserProfile;
   locale: string;
+  /** Optional original resume text used only for additive evidence enhancement. */
+  sourceResumeText?: string;
 }
 
 export const ResumeGenerationSubmissionSchema = z.object({
   jobDescriptionText: z.string().min(50),
   profile: UserProfileSchema,
   locale: z.string().min(2).default("en-US"),
+  /** Optional original resume text used only for additive evidence enhancement. */
+  sourceResumeText: z.string().min(40).optional(),
 });
 
 export type ResumeGenerationSubmission = z.infer<
@@ -148,4 +155,9 @@ export interface FinalResumeData {
   orchestration: ResumeOrchestrationTelemetry;
   /** Evaluation-only metadata. It never changes assembled resume content. */
   readiness?: ResumeWordedReadinessReport;
+  /**
+   * Additive evidence enhancement audit trail. Content changes only happen when
+   * proposals pass existing validators; rejected proposals keep original text.
+   */
+  evidenceEnhancement?: EvidenceEnhancementReport;
 }

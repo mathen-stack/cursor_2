@@ -11,3 +11,4 @@ export * from "./resume/export";
 export * from "./production/experience-generation";
 
 export * from "./resume/readiness";
+export * from "./evidence/source-evidence";

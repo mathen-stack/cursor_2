@@ -45,6 +45,7 @@ function newEducationEntry(index: number): UserProfile["education"][number] {
 
 export default function ResumeGenerator() {
   const [jobDescriptionText, setJobDescriptionText] = useState(SAMPLE_JD);
+  const [sourceResumeText, setSourceResumeText] = useState("");
   const [profile, setProfile] = useState<UserProfile>({
     profileId: "PROFILE-DEMO",
     personalInformation: {
@@ -198,6 +199,9 @@ export default function ResumeGenerator() {
           jobDescriptionText,
           profile,
           locale: "en-US",
+          ...(sourceResumeText.trim().length >= 40
+            ? { sourceResumeText: sourceResumeText.trim() }
+            : {}),
         }),
       });
       const payload = (await response.json()) as
@@ -230,6 +234,22 @@ export default function ResumeGenerator() {
               value={jobDescriptionText}
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                 setJobDescriptionText(event.target.value)
+              }
+            />
+          </label>
+
+          <label>
+            <strong>Original resume (optional evidence source)</strong>
+            <p style={{ margin: "4px 0 0", color: "#475569", fontSize: 13 }}>
+              Used only to strengthen Summary/Skills/Experience with grounded evidence.
+              Leave empty to keep original generation behavior unchanged.
+            </p>
+            <textarea
+              style={{ ...inputStyle, minHeight: 160, marginTop: 6, resize: "vertical" }}
+              value={sourceResumeText}
+              placeholder="Paste the candidate's original resume text…"
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                setSourceResumeText(event.target.value)
               }
             />
           </label>
@@ -477,6 +497,35 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
         ))}
       </div>
       {exportError ? <p style={{ color: "#b91c1c" }}>{exportError}</p> : null}
+
+      {resume.evidenceEnhancement ? (
+        <section
+          style={{
+            marginTop: 20,
+            padding: 18,
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+            background: "#f8fafc",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Source evidence enhancement</h3>
+          <p style={{ margin: "4px 0 0" }}>
+            Accepted {resume.evidenceEnhancement.acceptedProposalIds.length} · Rejected{" "}
+            {resume.evidenceEnhancement.rejectedProposalIds.length} · Claims{" "}
+            {resume.evidenceEnhancement.bundle.claims.length}
+          </p>
+          <ul style={{ marginBottom: 0 }}>
+            {resume.evidenceEnhancement.proposals.slice(0, 8).map((proposal) => (
+              <li key={proposal.proposalId} style={{ marginTop: 6 }}>
+                <strong>{proposal.decision}</strong> [{proposal.targetSection}] {proposal.description}
+                {proposal.rejectionReasons.length > 0
+                  ? ` · reasons: ${proposal.rejectionReasons.join(", ")}`
+                  : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {resume.readiness ? (
         <section

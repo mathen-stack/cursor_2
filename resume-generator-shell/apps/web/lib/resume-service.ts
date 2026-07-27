@@ -4,6 +4,7 @@ import {
   ResumeOrchestrator,
 } from "@resume/core";
 import {
+  SourceEvidenceEnhancementEngine,
   createProductionExperienceEngine,
   createProductionSkillsEngine,
   createProductionSummaryEngine,
@@ -27,6 +28,7 @@ export function getResumeGenerationService(): ResumeGenerationService {
   const experienceBundle = createProductionExperienceEngine({
     modelProvider,
   });
+  const evidenceEnhancer = new SourceEvidenceEnhancementEngine();
   const orchestrator = new ResumeOrchestrator(
     {
       experience: experienceBundle.engine,
@@ -35,6 +37,8 @@ export function getResumeGenerationService(): ResumeGenerationService {
       template: createProductionTemplateEngine(),
     },
     new ImmutableFinalResumeAssembler(),
+    undefined,
+    (input) => evidenceEnhancer.enhance(input),
   );
   const service = new ResumeGenerationService(orchestrator, {
     store: getGenerationRunStore(),
