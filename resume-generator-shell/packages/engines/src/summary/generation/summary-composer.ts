@@ -59,13 +59,16 @@ function sentenceTwo(
   return `Expertise includes ${techText}, with engineering decisions focused on ${outcomeText}.`;
 }
 
+const LEADERSHIP_SENTENCE =
+  "Provides technical leadership, mentors engineers, and aligns architecture decisions with product priorities and measurable business needs.";
+
 function sentenceThree(
   people: readonly SummaryKeyword[],
   targetRole: SummaryTargetRole,
 ): string {
   const peopleKeys = new Set(people.map((keyword) => keyword.normalizedKey));
   if (peopleKeys.has("MENTORING") || peopleKeys.has("TECHNICAL_LEADERSHIP")) {
-    return "Provides technical leadership, mentors engineers, and aligns architecture decisions with product priorities and measurable business needs.";
+    return LEADERSHIP_SENTENCE;
   }
   if (people.length > 0) {
     const hasBusinessRequirements = peopleKeys.has("BUSINESS_REQUIREMENTS");
@@ -106,16 +109,36 @@ export class SummaryComposer {
     const outcomes = input.keywords.filter((keyword) => keyword.category === "outcome");
     const people = input.keywords.filter((keyword) => keyword.category === "leadership" || keyword.category === "collaboration");
 
+    const peopleKeys = new Set(people.map((keyword) => keyword.normalizedKey));
+    const usesLeadershipSentence =
+      peopleKeys.has("MENTORING") || peopleKeys.has("TECHNICAL_LEADERSHIP");
+    // Avoid claiming the same phrase twice when the leadership sentence already
+    // hardcodes technical leadership / architecture decisions wording.
     let selectedTechnical = technical
       .filter(
         (keyword) => !input.targetRole.title
           .toLowerCase()
           .includes(keyword.text.toLowerCase()),
       )
+      .filter((keyword) => {
+        if (!usesLeadershipSentence) {
+          return true;
+        }
+        return !LEADERSHIP_SENTENCE.toLowerCase().includes(keyword.text.toLowerCase());
+      })
       .slice(0, 6);
+    // Drop outcome phrases that are already covered by a longer technical phrase
+    // (e.g. "availability" inside "High Availability") so composition does not
+    // look stuffed while preserving the stronger JD-grounded wording.
+    let selectedOutcomes = outcomes.filter(
+      (outcome) =>
+        !selectedTechnical.some((keyword) =>
+          keyword.text.toLocaleLowerCase().includes(outcome.text.toLocaleLowerCase()),
+        ),
+    );
     let summary = [
       sentenceOne(input.targetRole, input.experienceYears, domains),
-      sentenceTwo(selectedTechnical, outcomes),
+      sentenceTwo(selectedTechnical, selectedOutcomes),
       sentenceThree(people, input.targetRole),
     ].join(" ");
 
@@ -123,14 +146,45 @@ export class SummaryComposer {
       selectedTechnical = selectedTechnical.slice(0, -1);
       summary = [
         sentenceOne(input.targetRole, input.experienceYears, domains),
-        sentenceTwo(selectedTechnical, outcomes),
+        sentenceTwo(selectedTechnical, selectedOutcomes),
         sentenceThree(people, input.targetRole),
       ].join(" ");
     }
 
     summary = ensureMinimumWords(summary, input.targetRole);
+
+    // Keep used-keyword count within the validator ceiling without changing the
+    // sentence template: drop lowest-priority technical, then outcome, phrases.
+    const maxUsedKeywords = 14;
+    const projected = () =>
+      [...domains, ...selectedTechnical, ...selectedOutcomes, ...people].filter(
+        (keyword) => summary.toLowerCase().includes(keyword.text.toLowerCase()),
+      );
+    while (projected().length > maxUsedKeywords && selectedTechnical.length > 3) {
+      selectedTechnical = selectedTechnical.slice(0, -1);
+      summary = ensureMinimumWords(
+        [
+          sentenceOne(input.targetRole, input.experienceYears, domains),
+          sentenceTwo(selectedTechnical, selectedOutcomes),
+          sentenceThree(people, input.targetRole),
+        ].join(" "),
+        input.targetRole,
+      );
+    }
+    while (projected().length > maxUsedKeywords && selectedOutcomes.length > 1) {
+      selectedOutcomes = selectedOutcomes.slice(0, -1);
+      summary = ensureMinimumWords(
+        [
+          sentenceOne(input.targetRole, input.experienceYears, domains),
+          sentenceTwo(selectedTechnical, selectedOutcomes),
+          sentenceThree(people, input.targetRole),
+        ].join(" "),
+        input.targetRole,
+      );
+    }
+
     const usedKeys = new Set<string>();
-    for (const keyword of [...domains, ...selectedTechnical, ...outcomes, ...people]) {
+    for (const keyword of [...domains, ...selectedTechnical, ...selectedOutcomes, ...people]) {
       if (summary.toLowerCase().includes(keyword.text.toLowerCase())) {
         usedKeys.add(keyword.normalizedKey);
       }

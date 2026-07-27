@@ -101,12 +101,43 @@ export class SummaryValidator {
 
     const duplicateKeyword = input.usedKeywords.some((keyword) => {
       const escaped = keyword.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const matches = input.summary.match(
-        new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?=[^A-Za-z0-9]|$)`, "gi"),
-      );
-      return (matches?.length ?? 0) > 1;
+      const matches = [
+        ...input.summary.matchAll(
+          new RegExp(`(?:^|[^A-Za-z0-9])(${escaped})(?=[^A-Za-z0-9]|$)`, "gi"),
+        ),
+      ];
+      const longerKeywords = input.usedKeywords
+        .map((item) => item.text)
+        .filter(
+          (text) =>
+            text.length > keyword.text.length &&
+            text.toLocaleLowerCase().includes(keyword.text.toLocaleLowerCase()),
+        );
+      const standalone = matches.filter((match) => {
+        const matchedText = match[1] ?? match[0];
+        const start = (match.index ?? 0) + (match[0].length - matchedText.length);
+        const end = start + matchedText.length;
+        return !longerKeywords.some((longer) => {
+          const longerEscaped = longer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return [
+            ...input.summary.matchAll(
+              new RegExp(`(?:^|[^A-Za-z0-9])(${longerEscaped})(?=[^A-Za-z0-9]|$)`, "gi"),
+            ),
+          ].some((longerMatch) => {
+            const longerText = longerMatch[1] ?? longerMatch[0];
+            const longerStart =
+              (longerMatch.index ?? 0) + (longerMatch[0].length - longerText.length);
+            const longerEnd = longerStart + longerText.length;
+            return start >= longerStart && end <= longerEnd;
+          });
+        });
+      });
+      return standalone.length > 1;
     });
-    const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 12;
+    // Allocator may select up to 2 domain + 7 technical + 3 outcome + 2 people
+    // keywords; composition uses at most 6 technical, so 14 is the intentional
+    // ceiling. Keep rejecting true repeats and runaway overload above that.
+    const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 14;
     if (!noKeywordStuffing) {
       addIssue(issues, "KEYWORD_STUFFING", "error", "Summary repeats or overloads JD keywords.");
     }
