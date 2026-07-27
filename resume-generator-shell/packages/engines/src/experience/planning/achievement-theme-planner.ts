@@ -351,6 +351,11 @@ export class AchievementThemePlanner {
         } => Boolean(item.requirement),
       )
       .sort((left, right) => {
+        const leftCritical = left.requirement.priority === "critical" ? 1 : 0;
+        const rightCritical = right.requirement.priority === "critical" ? 1 : 0;
+        if (leftCritical !== rightCritical) {
+          return rightCritical - leftCritical;
+        }
         const scoreDifference = right.allocation.score - left.allocation.score;
         if (scoreDifference !== 0) {
           return scoreDifference;
@@ -375,6 +380,11 @@ export class AchievementThemePlanner {
 
     const bestAdditionalRequirements = [...eligibleRequirements].sort(
       (left, right) => {
+        const leftCritical = left.priority === "critical" ? 1 : 0;
+        const rightCritical = right.priority === "critical" ? 1 : 0;
+        if (leftCritical !== rightCritical) {
+          return rightCritical - leftCritical;
+        }
         const fitDifference =
           requirementRoleFitScore(right, input.assignment) -
           requirementRoleFitScore(left, input.assignment);

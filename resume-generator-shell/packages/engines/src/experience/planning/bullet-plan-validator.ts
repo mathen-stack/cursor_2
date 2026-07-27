@@ -187,6 +187,23 @@ export function validateBulletPlans(
     errors.push(
       `Uncovered critical requirements: ${uncoveredCriticalRequirementIds.join(", ")}.`,
     );
+  } else {
+    const primaryRequirementIds = new Set(
+      input.plans.map((plan) => plan.requirementId),
+    );
+    const supportingOnlyCriticalIds = eligibleRequirements
+      .filter(
+        (requirement) =>
+          requirement.priority === "critical" &&
+          coveredRequirementIds.has(requirement.requirementId) &&
+          !primaryRequirementIds.has(requirement.requirementId),
+      )
+      .map((requirement) => requirement.requirementId);
+    if (supportingOnlyCriticalIds.length > 0) {
+      warnings.push(
+        `Some critical requirements were attached as supporting coverage because distinct bullet capacity was exhausted: ${supportingOnlyCriticalIds.join(", ")}.`,
+      );
+    }
   }
   if (highPriorityRequirementCoverage < 1) {
     warnings.push(

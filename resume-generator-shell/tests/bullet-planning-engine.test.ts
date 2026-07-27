@@ -146,6 +146,55 @@ describe("Real requirement allocation and bullet planning", () => {
     expect(output.validation?.criticalRequirementCoverage).toBe(true);
   });
 
+  it("covers overflow critical requirements as supporting when bullet capacity is exhausted", async () => {
+    const categories: JDRequirement["category"][] = [
+      "architecture",
+      "deployment",
+      "monitoring",
+      "performance",
+      "data",
+      "security",
+      "collaboration",
+      "leadership",
+      "business-outcome",
+      "technical-responsibility",
+    ];
+    const requirements = Array.from({ length: 34 }, (_, index) =>
+      requirement(
+        `REQ-${String(index + 1).padStart(3, "0")}`,
+        `Deliver outcome capability number ${index + 1} for enterprise platforms.`,
+        categories[index % categories.length]!,
+        "critical",
+      ),
+    );
+    const jobDescription = createJobDescription(
+      requirements.map((item) => item.normalizedText).join(" "),
+    );
+    const output = await new RealBulletPlanner().execute({
+      context: createGenerationContext("PROFILE-MANY-CRITICAL", jobDescription),
+      jobDescription,
+      assignments,
+      requirements,
+      minimumBulletsPerRole: 5,
+    });
+
+    const coveredRequirementIds = new Set(
+      output.plans.flatMap((plan) => [
+        plan.requirementId,
+        ...plan.supportingRequirementIds,
+      ]),
+    );
+
+    expect(coveredRequirementIds.has("REQ-034")).toBe(true);
+    expect(output.validation?.criticalRequirementCoverage).toBe(true);
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(
+      output.validation?.warnings.some((warning) =>
+        /supporting coverage/i.test(warning),
+      ),
+    ).toBe(true);
+  });
+
   it("uses explicit reused-grounding plans only when the JD has too few distinct experience requirements", async () => {
     const jobDescription = createJobDescription(
       "Senior Backend Engineer. Build reliable APIs. Collaborate with product stakeholders.",

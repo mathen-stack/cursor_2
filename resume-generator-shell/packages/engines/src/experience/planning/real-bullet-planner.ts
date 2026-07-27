@@ -2,6 +2,7 @@ import type { BulletPlanner, BulletPlannerInput, BulletPlannerOutput } from "../
 import { AchievementThemePlanner } from "./achievement-theme-planner";
 import { RoleBulletCountPlanner } from "./bullet-count-planner";
 import { validateBulletPlans } from "./bullet-plan-validator";
+import { ensureCriticalRequirementCoverage } from "./critical-requirement-coverage";
 import { RequirementRoleAllocator } from "./requirement-role-allocator";
 
 export interface RealBulletPlannerOptions {
@@ -46,7 +47,7 @@ export class RealBulletPlanner implements BulletPlanner {
     const countByExperience = new Map(
       bulletCounts.map((count) => [count.experienceId, count]),
     );
-    const plans = [...input.assignments]
+    const draftedPlans = [...input.assignments]
       .sort((left, right) => left.chronologyRank - right.chronologyRank)
       .flatMap((assignment) => {
         const count = countByExperience.get(assignment.experienceId);
@@ -64,6 +65,13 @@ export class RealBulletPlanner implements BulletPlanner {
           allocations: requirementAllocations,
         });
       });
+
+    const plans = ensureCriticalRequirementCoverage({
+      plans: draftedPlans,
+      requirements: input.requirements,
+      assignments: input.assignments,
+      allocations: requirementAllocations,
+    });
 
     const validation = validateBulletPlans({
       assignments: input.assignments,
