@@ -145,37 +145,37 @@ export function buildActionClause(input: {
     inferredMethods.length > 0 ? ` through ${joinNatural(inferredMethods)}` : "",
   ].join("");
   const verb = stripTerminal(input.keywordPackage.actionVerb);
+  const normalizedDirectScope =
+    /mentor|coach/i.test(verb) && /^(?:engineer mentoring|mentoring)$/i.test(directScope)
+      ? "engineers on architecture decisions and delivery practices"
+      : directScope;
 
   if (input.plan.communicationFocused) {
     const communicationScope = /stakeholder|cross-functional|collaborat|alignment|team/i.test(
-      directScope,
+      normalizedDirectScope,
     )
-      ? directScope
-      : `cross-functional delivery for ${directScope}`;
+      ? normalizedDirectScope
+      : `cross-functional delivery for ${normalizedDirectScope}`;
     return stripTerminal(`${verb} ${communicationScope}${supportClause}`);
   }
 
   if (input.plan.leadershipFocused) {
     const leadershipScope = /strategy|direction|leadership|architecture decision|roadmap/i.test(
-      directScope,
+      normalizedDirectScope,
     )
-      ? directScope
-      : `technical direction for ${directScope}`;
+      ? normalizedDirectScope
+      : `technical direction for ${normalizedDirectScope}`;
     return stripTerminal(`${verb} ${leadershipScope}${supportClause}`);
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
-    const mentoringScope =
-      /^(?:engineer mentoring|mentoring)$/i.test(directScope) ||
-      (/mentor|coach/i.test(verb) && /mentor/i.test(directScope))
-        ? "engineers on architecture decisions and delivery practices"
-        : /mentor|coach|knowledge|engineer|onboard/i.test(directScope)
-          ? directScope
-          : `engineering capability around ${directScope}`;
+    const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
+      ? normalizedDirectScope
+      : `engineering capability around ${normalizedDirectScope}`;
     return stripTerminal(`${verb} ${mentoringScope}${supportClause}`);
   }
 
-  return stripTerminal(`${verb} ${directScope}${supportClause}`);
+  return stripTerminal(`${verb} ${normalizedDirectScope}${supportClause}`);
 }
 
 export function metricAsGerund(metric: StarMetric): string {
