@@ -1,0 +1,22 @@
+{
+  "name": "resume-generator",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @resume/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@resume/core": "workspace:*",
+    "@resume/contracts": "workspace:*",
+    "@resume/engines": "workspace:*",
+    "@resume/rendering": "workspace:*"
+  }
+}
