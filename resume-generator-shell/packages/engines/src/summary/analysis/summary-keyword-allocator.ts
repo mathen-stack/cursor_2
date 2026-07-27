@@ -121,6 +121,17 @@ function coreStackBoost(roleFamily: string, normalizedKey: string): number {
     "backend-engineering": ["NODE_JS", "TYPESCRIPT", "PYTHON", "JAVA"],
     "machine-learning": ["PYTHON", "PYTORCH", "TENSORFLOW", "MLFLOW", "KUBERNETES", "DOCKER"],
     "data-engineering": ["PYTHON", "SPARK", "AIRFLOW", "SQL", "KUBERNETES"],
+    // Additive multi-stack core boosts (original entries above are unchanged).
+    "mobile-engineering": ["REACT_NATIVE", "SWIFT", "KOTLIN", "FLUTTER", "TYPESCRIPT"],
+    "qa-engineering": ["PLAYWRIGHT", "SELENIUM", "CYPRESS", "JUNIT", "TEST_AUTOMATION"],
+    "database-engineering": ["POSTGRESQL", "MYSQL", "SQL", "REDIS", "MONGODB"],
+    "embedded-engineering": ["C", "CPP", "RTOS", "FIRMWARE", "EMBEDDED_LINUX"],
+    "blockchain-engineering": ["SOLIDITY", "ETHEREUM", "WEB3", "HARDHAT", "RUST"],
+    "cloud-engineering": ["AWS", "AZURE", "GCP", "TERRAFORM", "KUBERNETES"],
+    "devops-engineering": ["KUBERNETES", "DOCKER", "TERRAFORM", "GITHUB_ACTIONS", "PROMETHEUS"],
+    "platform-engineering": ["KUBERNETES", "DOCKER", "TERRAFORM", "GITHUB_ACTIONS"],
+    "security-engineering": ["SECURITY", "OAUTH", "OIDC", "IAM", "ENCRYPTION"],
+    "data-science": ["PYTHON", "SQL", "SCIKIT_LEARN", "XGBOOST", "PANDAS"],
   };
   const core = coreByFamily[roleFamily];
   if (!core) return 0;

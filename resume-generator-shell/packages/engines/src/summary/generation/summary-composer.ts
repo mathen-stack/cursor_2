@@ -26,6 +26,12 @@ const ROLE_FAMILY_FOCUS: Readonly<Record<string, string>> = {
   "frontend-engineering": "user-facing web applications",
   "full-stack-engineering": "full-stack applications",
   "software-engineering": "production software",
+  // Additive multi-stack focus phrases (original entries above are unchanged).
+  "mobile-engineering": "mobile applications",
+  "qa-engineering": "quality engineering and test automation",
+  "database-engineering": "database platforms",
+  "embedded-engineering": "embedded systems",
+  "blockchain-engineering": "blockchain and smart-contract systems",
 };
 
 function list(items: readonly string[]): string {

@@ -97,6 +97,17 @@ export const DIRECT_JD_PHRASE_PATTERNS: readonly PhrasePattern[] = [
   { label: "workflow automation", pattern: /\bworkflow automation\b/gi },
   { label: "technical documentation", pattern: /\btechnical documentation\b/gi },
   { label: "knowledge sharing", pattern: /\bknowledge sharing\b/gi },
+  // Additive multi-stack phrases (original patterns above are unchanged).
+  { label: "mobile applications", pattern: /\bmobile applications?\b/gi },
+  { label: "React Native", pattern: /\breact native\b/gi },
+  { label: "test automation", pattern: /\btest automation\b/gi },
+  { label: "quality assurance", pattern: /\bquality assurance\b/gi },
+  { label: "query optimization", pattern: /\bquery optimization\b/gi },
+  { label: "schema design", pattern: /\bschema design\b/gi },
+  { label: "embedded systems", pattern: /\bembedded systems?\b/gi },
+  { label: "firmware development", pattern: /\bfirmware development\b/gi },
+  { label: "smart contracts", pattern: /\bsmart contracts?\b/gi },
+  { label: "blockchain platforms", pattern: /\bblockchain platforms?\b/gi },
 ];
 
 export const EXPLICIT_TOOL_PATTERNS: readonly PhrasePattern[] = [
@@ -149,6 +160,19 @@ export const EXPLICIT_TOOL_PATTERNS: readonly PhrasePattern[] = [
   { label: "Git", pattern: /\bGit\b/g },
   { label: "Flask", pattern: /\bFlask\b/gi },
   { label: "Django", pattern: /\bDjango\b/gi },
+  // Additive multi-stack tools (original patterns above are unchanged).
+  { label: "React Native", pattern: /\bReact Native\b/gi },
+  { label: "Flutter", pattern: /\bFlutter\b/gi },
+  { label: "Swift", pattern: /\bSwift\b/gi },
+  { label: "Kotlin", pattern: /\bKotlin\b/gi },
+  { label: "Playwright", pattern: /\bPlaywright\b/gi },
+  { label: "Selenium", pattern: /\bSelenium\b/gi },
+  { label: "JUnit", pattern: /\bJUnit\b/gi },
+  { label: "Hardhat", pattern: /\bHardhat\b/gi },
+  { label: "Solidity", pattern: /\bSolidity\b/gi },
+  { label: "Ethereum", pattern: /\bEthereum\b/gi },
+  { label: "Web3", pattern: /\bWeb3\b/gi },
+  { label: "RTOS", pattern: /\bRTOS\b/gi },
 ];
 
 export const SUPPORTING_BY_CATEGORY: Readonly<Record<RequirementCategory, readonly string[]>> = {

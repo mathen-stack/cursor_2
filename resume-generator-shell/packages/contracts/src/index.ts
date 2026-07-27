@@ -1,6 +1,7 @@
 export * from "./common/generation-context";
 export * from "./common/job-description";
 export * from "./common/profile";
+export * from "./common/engineering-stack";
 export * from "./engines/base";
 export * from "./engines/experience";
 export * from "./engines/skills";

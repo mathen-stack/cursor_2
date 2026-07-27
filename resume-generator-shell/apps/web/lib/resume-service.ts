@@ -8,6 +8,7 @@ import {
   createProductionSkillsEngine,
   createProductionSummaryEngine,
   createProductionTemplateEngine,
+  detectEngineeringStacks,
   loadExperienceModelProviderConfig,
 } from "@resume/engines";
 import { getGenerationRunStore } from "./generation-store";
@@ -35,6 +36,8 @@ export function getResumeGenerationService(): ResumeGenerationService {
       template: createProductionTemplateEngine(),
     },
     new ImmutableFinalResumeAssembler(),
+    undefined,
+    detectEngineeringStacks,
   );
   const service = new ResumeGenerationService(orchestrator, {
     store: getGenerationRunStore(),

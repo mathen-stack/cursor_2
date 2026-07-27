@@ -12,6 +12,11 @@ export const SKILL_CATEGORY_ORDER = [
   "Security & Compliance",
   "Architecture & Engineering",
   "Leadership & Delivery",
+  // Additive multi-stack categories (original categories above are unchanged).
+  "Mobile Development",
+  "QA & Test Automation",
+  "Embedded Systems",
+  "Blockchain",
 ] as const;
 
 export type SkillCategoryName = (typeof SKILL_CATEGORY_ORDER)[number];
@@ -28,6 +33,12 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "PYTHON", name: "Python", category: "Programming Languages", aliases: ["Python"] },
   { key: "JAVA", name: "Java", category: "Programming Languages", aliases: ["Java"] },
   { key: "JAVASCRIPT", name: "JavaScript", category: "Programming Languages", aliases: ["JavaScript", "Javascript"] },
+  { key: "C", name: "C", category: "Programming Languages", aliases: ["C"], caseSensitive: true },
+  { key: "CPP", name: "C++", category: "Programming Languages", aliases: ["C++", "Cpp"] },
+  { key: "RUST", name: "Rust", category: "Programming Languages", aliases: ["Rust"] },
+  { key: "SWIFT", name: "Swift", category: "Programming Languages", aliases: ["Swift"] },
+  { key: "KOTLIN", name: "Kotlin", category: "Programming Languages", aliases: ["Kotlin"] },
+  { key: "SOLIDITY", name: "Solidity", category: "Programming Languages", aliases: ["Solidity"] },
   { key: "TYPESCRIPT", name: "TypeScript", category: "Programming Languages", aliases: ["TypeScript", "Typescript"] },
   { key: "GO", name: "Go", category: "Programming Languages", aliases: ["Go", "Golang"], caseSensitive: true },
   { key: "CPP", name: "C++", category: "Programming Languages", aliases: ["C++"] },
@@ -182,6 +193,28 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "CROSS_FUNCTIONAL", name: "Cross-Functional Collaboration", category: "Leadership & Delivery", aliases: ["cross-functional collaboration", "cross functional collaboration", "collaborate with product", "partner with product"] },
   { key: "REQUIREMENTS_GATHERING", name: "Requirements Gathering", category: "Leadership & Delivery", aliases: ["requirements gathering", "gather requirements", "translate business requirements"] },
   { key: "TECHNICAL_DOCUMENTATION", name: "Technical Documentation", category: "Leadership & Delivery", aliases: ["technical documentation", "document technical decisions", "documentation"] },
+
+  // Additive multi-stack skills (original definitions above are unchanged).
+  { key: "PANDAS", name: "pandas", category: "Data Engineering", aliases: ["pandas", "Pandas"] },
+  { key: "IOS", name: "iOS", category: "Mobile Development", aliases: ["iOS", "iOS development"] },
+  { key: "ANDROID", name: "Android", category: "Mobile Development", aliases: ["Android", "Android development"] },
+  { key: "REACT_NATIVE", name: "React Native", category: "Mobile Development", aliases: ["React Native"] },
+  { key: "FLUTTER", name: "Flutter", category: "Mobile Development", aliases: ["Flutter"] },
+  { key: "MOBILE_UI", name: "Mobile UI Development", category: "Mobile Development", aliases: ["mobile UI", "mobile user interfaces"] },
+  { key: "PLAYWRIGHT", name: "Playwright", category: "QA & Test Automation", aliases: ["Playwright"] },
+  { key: "SELENIUM", name: "Selenium", category: "QA & Test Automation", aliases: ["Selenium"] },
+  { key: "JUNIT", name: "JUnit", category: "QA & Test Automation", aliases: ["JUnit"] },
+  { key: "TESTNG", name: "TestNG", category: "QA & Test Automation", aliases: ["TestNG"] },
+  { key: "TEST_AUTOMATION", name: "Test Automation", category: "QA & Test Automation", aliases: ["test automation", "automated testing frameworks"] },
+  { key: "TEST_STRATEGY", name: "Test Strategy", category: "QA & Test Automation", aliases: ["test strategy", "testing strategy"] },
+  { key: "RTOS", name: "RTOS", category: "Embedded Systems", aliases: ["RTOS", "real-time operating system"] },
+  { key: "EMBEDDED_LINUX", name: "Embedded Linux", category: "Embedded Systems", aliases: ["Embedded Linux", "embedded Linux"] },
+  { key: "FIRMWARE", name: "Firmware Development", category: "Embedded Systems", aliases: ["firmware", "firmware development"] },
+  { key: "MICROCONTROLLERS", name: "Microcontrollers", category: "Embedded Systems", aliases: ["microcontrollers", "MCU"] },
+  { key: "ETHEREUM", name: "Ethereum", category: "Blockchain", aliases: ["Ethereum"] },
+  { key: "WEB3", name: "Web3", category: "Blockchain", aliases: ["Web3", "web3"] },
+  { key: "HARDHAT", name: "Hardhat", category: "Blockchain", aliases: ["Hardhat"] },
+  { key: "SMART_CONTRACTS", name: "Smart Contracts", category: "Blockchain", aliases: ["smart contracts", "smart contract development"] },
 ];
 
 export interface SkillInferenceRule {

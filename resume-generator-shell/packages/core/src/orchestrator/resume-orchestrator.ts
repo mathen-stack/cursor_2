@@ -2,8 +2,10 @@ import type {
   EngineExecutionTelemetry,
   EngineOutputBase,
   FinalResumeData,
+  JobDescription,
   ResumeGenerationRequest,
   ResumeOrchestrationTelemetry,
+  StackContext,
 } from "@resume/contracts";
 import { assertContextMatch } from "../context/assert-context-match";
 import { createGenerationContext } from "../context/create-generation-context";
@@ -17,6 +19,9 @@ import {
 } from "../readiness/resume-worded-readiness-engine";
 import { ImmutableFinalResumeAssembler } from "../assembly/final-resume-assembler";
 import type { EngineRegistry } from "../registry/engine-registry";
+
+/** Optional additive detector; core stays free of engine catalog dependencies. */
+export type StackContextDetector = (jobDescription: JobDescription) => StackContext;
 
 export class ResumeEngineRejectedError extends Error {
   readonly rejectedEngines: string[];
@@ -87,6 +92,7 @@ export class ResumeOrchestrator {
       new ImmutableFinalResumeAssembler(),
     private readonly readinessEvaluator: ResumeReadinessEvaluator =
       new ResumeWordedReadinessEngine(),
+    private readonly stackDetector?: StackContextDetector,
   ) {}
 
   async generate(request: ResumeGenerationRequest): Promise<FinalResumeData> {
@@ -165,9 +171,11 @@ export class ResumeOrchestrator {
       orchestration,
     });
     const readiness = this.readinessEvaluator.assess(assembled);
+    const stackContext = this.stackDetector?.(safeRequest.jobDescription);
     return deepFreeze({
       ...assembled,
       readiness,
+      ...(stackContext ? { stackContext } : {}),
     });
   }
 }

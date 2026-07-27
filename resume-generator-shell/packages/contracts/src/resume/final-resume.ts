@@ -8,6 +8,7 @@ import {
   type UserProfile,
 } from "../common/profile";
 import type { GenerationContext } from "../common/generation-context";
+import type { StackContext } from "../common/engineering-stack";
 import type { ExperienceEngineOutput } from "../engines/experience";
 import type { SkillsEngineOutput } from "../engines/skills";
 import type { SummaryEngineOutput } from "../engines/summary";
@@ -148,4 +149,9 @@ export interface FinalResumeData {
   orchestration: ResumeOrchestrationTelemetry;
   /** Evaluation-only metadata. It never changes assembled resume content. */
   readiness?: ResumeWordedReadinessReport;
+  /**
+   * Additive multi-stack detection metadata. Omitted by older clients;
+   * never mutates assembled resume section content.
+   */
+  stackContext?: StackContext;
 }

@@ -9,12 +9,81 @@ import type {
   UserProfile,
 } from "@resume/contracts";
 
+/** Original sample JD retained for backward-compatible demo behavior. */
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
 Implement model monitoring, improve inference performance, and automate CI/CD workflows.
 Collaborate with product, data, and platform teams to translate business requirements into technical solutions.
 Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
 Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`;
+
+/** Additive multi-stack sample JDs; original ML sample remains available. */
+const STACK_SAMPLE_JDS: ReadonlyArray<{ id: string; label: string; text: string }> = [
+  { id: "ai-ml", label: "AI/ML (original)", text: SAMPLE_JD },
+  {
+    id: "backend",
+    label: "Backend",
+    text: `Senior Backend Engineer
+Design and implement scalable microservices and REST APIs in production environments.
+Optimize query performance, improve service reliability, and automate CI/CD workflows.
+Collaborate with product and platform teams to translate business requirements into technical solutions.
+Experience with Java, Spring Boot, PostgreSQL, Kafka, Docker, Kubernetes, and AWS is required.`,
+  },
+  {
+    id: "frontend",
+    label: "Frontend",
+    text: `Senior Frontend Engineer
+Build accessible user interfaces and scalable front-end applications with React.js and TypeScript.
+Implement real-time communication features using WebSockets and improve rendering performance.
+Collaborate with product and design partners on delivery priorities and design systems.
+Experience with Next.js, Tailwind CSS, Vitest, Cypress, and CI/CD workflows is required.`,
+  },
+  {
+    id: "mobile",
+    label: "Mobile",
+    text: `Senior Mobile Engineer
+Build and ship high-quality iOS and Android mobile applications with React Native and Kotlin.
+Improve mobile UI performance, offline reliability, and release automation.
+Collaborate with product and design teams on mobile application delivery.
+Experience with Swift, Flutter, mobile UI development, and CI/CD is required.`,
+  },
+  {
+    id: "qa",
+    label: "QA",
+    text: `Senior QA Engineer
+Design test strategy and implement test automation for web and API platforms.
+Build reliable end-to-end suites with Playwright and Selenium, and improve release quality gates.
+Collaborate with engineering and product teams on defect prevention.
+Experience with Cypress, JUnit, CI/CD, and quality assurance practices is required.`,
+  },
+  {
+    id: "devops",
+    label: "DevOps",
+    text: `Senior DevOps Engineer
+Build CI/CD pipelines, infrastructure as code, and observability for production platforms.
+Improve deployment automation, Kubernetes reliability, and incident response.
+Collaborate with platform and application teams on developer experience.
+Experience with Terraform, Docker, Prometheus, Grafana, and AWS is required.`,
+  },
+  {
+    id: "security",
+    label: "Security",
+    text: `Senior Security Engineer
+Lead application security, threat modeling, and vulnerability remediation for production systems.
+Implement identity and access management, OAuth, and encryption controls.
+Collaborate with engineering teams on secure software delivery.
+Experience with cybersecurity practices, SOC 2 readiness, and secure CI/CD is required.`,
+  },
+  {
+    id: "blockchain",
+    label: "Blockchain",
+    text: `Senior Blockchain Engineer
+Design and implement smart contracts and blockchain platforms with Solidity and Ethereum.
+Improve Web3 reliability, audit readiness, and on-chain integration quality.
+Collaborate with product and security partners on decentralized application delivery.
+Experience with Hardhat, Rust, and smart contract development is required.`,
+  },
+];
 
 const inputStyle = {
   width: "100%",
@@ -225,6 +294,18 @@ export default function ResumeGenerator() {
         <div style={{ display: "grid", gap: 16 }}>
           <label>
             <strong>Job description</strong>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+              {STACK_SAMPLE_JDS.map((sample) => (
+                <button
+                  key={sample.id}
+                  type="button"
+                  onClick={() => setJobDescriptionText(sample.text)}
+                  style={{ padding: "6px 10px", borderRadius: 7 }}
+                >
+                  {sample.label}
+                </button>
+              ))}
+            </div>
             <textarea
               style={{ ...inputStyle, minHeight: 210, marginTop: 6, resize: "vertical" }}
               value={jobDescriptionText}
@@ -477,6 +558,27 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
         ))}
       </div>
       {exportError ? <p style={{ color: "#b91c1c" }}>{exportError}</p> : null}
+
+      {resume.stackContext ? (
+        <section
+          style={{
+            marginTop: 20,
+            padding: 18,
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+            background: "#f8fafc",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Detected engineering stack</h3>
+          <p style={{ margin: "4px 0 0" }}>
+            Primary: <strong>{resume.stackContext.primaryStack}</strong>
+            {resume.stackContext.secondaryStacks.length > 0
+              ? ` · Secondary: ${resume.stackContext.secondaryStacks.join(", ")}`
+              : ""}
+            {` · Confidence: ${Math.round(resume.stackContext.confidence * 100)}%`}
+          </p>
+        </section>
+      ) : null}
 
       {resume.readiness ? (
         <section

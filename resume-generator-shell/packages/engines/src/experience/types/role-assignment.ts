@@ -31,7 +31,13 @@ export type RoleFamily =
   | "cloud-engineering"
   | "devops-engineering"
   | "security-engineering"
-  | "solutions-engineering";
+  | "solutions-engineering"
+  // Additive multi-stack families (original families above are unchanged).
+  | "mobile-engineering"
+  | "qa-engineering"
+  | "database-engineering"
+  | "embedded-engineering"
+  | "blockchain-engineering";
 
 export interface TargetRoleEvidence {
   sourceText: string;
