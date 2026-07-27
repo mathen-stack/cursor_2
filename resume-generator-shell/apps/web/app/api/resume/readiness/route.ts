@@ -1,4 +1,8 @@
 import type { FinalResumeData } from "@resume/contracts";
+import {
+  readJsonWithLimit,
+  requestLimitErrorResponse,
+} from "../../../../lib/request-limits";
 import { getResumeReadinessService } from "../../../../lib/resume-readiness-service";
 
 export const runtime = "nodejs";
@@ -9,13 +13,19 @@ interface ReadinessPayload {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const payload = (await request.json()) as ReadinessPayload;
-    if (!payload.resume?.document?.contentFingerprint) {
+    const payload = await readJsonWithLimit<ReadinessPayload>(request);
+    if (
+      !payload.resume?.document?.contentFingerprint ||
+      !payload.resume.context?.generationId ||
+      !payload.resume.context?.profileId ||
+      !payload.resume.context?.jdId ||
+      !payload.resume.context?.jdHash
+    ) {
       return Response.json(
         {
           error: {
             code: "INVALID_READINESS_REQUEST",
-            message: "A complete assembled resume is required.",
+            message: "A complete assembled resume with generation context is required.",
           },
         },
         { status: 400 },
@@ -24,6 +34,8 @@ export async function POST(request: Request): Promise<Response> {
     const report = getResumeReadinessService().assess(payload.resume);
     return Response.json(report, { status: 200 });
   } catch (error) {
+    const limitResponse = requestLimitErrorResponse(error);
+    if (limitResponse) return limitResponse;
     return Response.json(
       {
         error: {

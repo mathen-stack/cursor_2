@@ -1,11 +1,27 @@
 import type { ExperienceGenerationRunRecord } from "@resume/contracts";
-import type { ExperienceGenerationRunStore } from "./experience-generation-run-store";
+import type {
+  ExperienceGenerationRunListOptions,
+  ExperienceGenerationRunStore,
+} from "./experience-generation-run-store";
 import { summarizeExperienceRun } from "./experience-generation-run-store";
 
 function cloneRecord(
   record: ExperienceGenerationRunRecord,
 ): ExperienceGenerationRunRecord {
   return structuredClone(record);
+}
+
+function normalizeListOptions(
+  limitOrOptions?: number | ExperienceGenerationRunListOptions,
+): Required<Pick<ExperienceGenerationRunListOptions, "limit">> &
+  Pick<ExperienceGenerationRunListOptions, "profileId"> {
+  if (typeof limitOrOptions === "number") {
+    return { limit: limitOrOptions };
+  }
+  return {
+    limit: limitOrOptions?.limit ?? 20,
+    ...(limitOrOptions?.profileId ? { profileId: limitOrOptions.profileId } : {}),
+  };
 }
 
 export class InMemoryExperienceGenerationRunStore
@@ -34,10 +50,14 @@ export class InMemoryExperienceGenerationRunStore
     this.records.set(generationId, cloneRecord(record));
   }
 
-  async list(limit = 20) {
+  async list(limitOrOptions?: number | ExperienceGenerationRunListOptions) {
+    const options = normalizeListOptions(limitOrOptions);
     return [...this.records.values()]
+      .filter((record) =>
+        options.profileId ? record.context.profileId === options.profileId : true,
+      )
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, Math.max(0, limit))
+      .slice(0, Math.max(0, options.limit))
       .map((record) => summarizeExperienceRun(record));
   }
 }

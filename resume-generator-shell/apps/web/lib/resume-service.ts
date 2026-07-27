@@ -10,6 +10,7 @@ import {
   createProductionTemplateEngine,
   loadExperienceModelProviderConfig,
 } from "@resume/engines";
+import { getGenerationRunStore } from "./generation-store";
 
 interface ResumeServiceGlobal {
   __resumeGenerationService?: ResumeGenerationService;
@@ -22,8 +23,9 @@ export function getResumeGenerationService(): ResumeGenerationService {
     return globalService.__resumeGenerationService;
   }
 
+  const modelProvider = loadExperienceModelProviderConfig(process.env);
   const experienceBundle = createProductionExperienceEngine({
-    modelProvider: loadExperienceModelProviderConfig(process.env),
+    modelProvider,
   });
   const orchestrator = new ResumeOrchestrator(
     {
@@ -34,7 +36,10 @@ export function getResumeGenerationService(): ResumeGenerationService {
     },
     new ImmutableFinalResumeAssembler(),
   );
-  const service = new ResumeGenerationService(orchestrator);
+  const service = new ResumeGenerationService(orchestrator, {
+    store: getGenerationRunStore(),
+    providerName: experienceBundle.providerName,
+  });
   globalService.__resumeGenerationService = service;
   return service;
 }

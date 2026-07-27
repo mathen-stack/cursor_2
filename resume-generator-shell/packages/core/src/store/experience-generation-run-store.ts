@@ -3,11 +3,18 @@ import type {
   ExperienceGenerationRunSummary,
 } from "@resume/contracts";
 
+export interface ExperienceGenerationRunListOptions {
+  limit?: number;
+  profileId?: string;
+}
+
 export interface ExperienceGenerationRunStore {
   create(record: ExperienceGenerationRunRecord): Promise<void>;
   get(generationId: string): Promise<ExperienceGenerationRunRecord | null>;
   save(record: ExperienceGenerationRunRecord): Promise<void>;
-  list(limit?: number): Promise<ExperienceGenerationRunSummary[]>;
+  list(
+    limitOrOptions?: number | ExperienceGenerationRunListOptions,
+  ): Promise<ExperienceGenerationRunSummary[]>;
 }
 
 export function summarizeExperienceRun(

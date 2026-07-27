@@ -3,6 +3,10 @@ import type {
   ExternalResumeTestInput,
   FinalResumeData,
 } from "@resume/contracts";
+import {
+  readJsonWithLimit,
+  requestLimitErrorResponse,
+} from "../../../../lib/request-limits";
 import { getResumeReadinessService } from "../../../../lib/resume-readiness-service";
 
 export const runtime = "nodejs";
@@ -18,8 +22,15 @@ interface CalibrationPayload {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const payload = (await request.json()) as CalibrationPayload;
-    if (!payload.resume?.document?.contentFingerprint || payload.overallScore === undefined) {
+    const payload = await readJsonWithLimit<CalibrationPayload>(request);
+    if (
+      !payload.resume?.document?.contentFingerprint ||
+      !payload.resume.context?.generationId ||
+      !payload.resume.context?.profileId ||
+      !payload.resume.context?.jdId ||
+      !payload.resume.context?.jdHash ||
+      payload.overallScore === undefined
+    ) {
       return Response.json(
         {
           error: {
@@ -66,6 +77,8 @@ export async function POST(request: Request): Promise<Response> {
     const record = await service.recordExternalTest(input);
     return Response.json(record, { status: 201 });
   } catch (error) {
+    const limitResponse = requestLimitErrorResponse(error);
+    if (limitResponse) return limitResponse;
     return Response.json(
       {
         error: {

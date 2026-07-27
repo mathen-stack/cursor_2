@@ -143,8 +143,19 @@ export class ExperienceGenerationService {
     return this.options.store.get(generationId);
   }
 
-  async listRuns(limit = 20): Promise<ExperienceGenerationListResult> {
-    const runs = await this.options.store.list(limit);
+  async listRuns(
+    limitOrOptions: number | { limit?: number; profileId?: string } = 20,
+  ): Promise<ExperienceGenerationListResult> {
+    const options =
+      typeof limitOrOptions === "number"
+        ? { limit: limitOrOptions }
+        : {
+            limit: limitOrOptions.limit ?? 20,
+            ...(limitOrOptions.profileId
+              ? { profileId: limitOrOptions.profileId }
+              : {}),
+          };
+    const runs = await this.options.store.list(options);
     return { runs, total: runs.length };
   }
 }

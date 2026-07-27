@@ -9,6 +9,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   const limit = Number.isInteger(requestedLimit)
     ? Math.min(100, Math.max(1, requestedLimit))
     : 20;
-  const result = await getExperienceGenerationService().listRuns(limit);
+  const profileId = url.searchParams.get("profileId")?.trim() || undefined;
+  const result = await getExperienceGenerationService().listRuns({
+    limit,
+    ...(profileId ? { profileId } : {}),
+  });
   return NextResponse.json(result);
 }

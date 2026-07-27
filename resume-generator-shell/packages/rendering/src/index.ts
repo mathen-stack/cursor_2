@@ -6,4 +6,5 @@ export * from "./text-renderer";
 export * from "./docx/docx-renderer";
 export * from "./pdf/pdf-renderer";
 export * from "./pdf/libreoffice-pdf-renderer";
+export * from "./pdf/libreoffice-env";
 export * from "./resume-export-service";

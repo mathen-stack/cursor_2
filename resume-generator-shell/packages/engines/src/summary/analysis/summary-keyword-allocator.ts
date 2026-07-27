@@ -113,6 +113,22 @@ function candidatePriority(category: SummaryKeywordCategory, occurrences: number
   return Math.min(100, (categoryWeight[category] ?? 0) + Math.min(occurrences, 3) * 3 + (startIndex < 250 ? 4 : 0));
 }
 
+/** Pin role-family core stack terms so summaries retain JD-critical frameworks. */
+function coreStackBoost(roleFamily: string, normalizedKey: string): number {
+  const coreByFamily: Record<string, readonly string[]> = {
+    "frontend-engineering": ["REACT", "NEXT_JS", "TYPESCRIPT"],
+    "full-stack-engineering": ["REACT", "NEXT_JS", "TYPESCRIPT", "NODE_JS"],
+    "backend-engineering": ["NODE_JS", "TYPESCRIPT", "PYTHON", "JAVA"],
+    "machine-learning": ["PYTHON", "PYTORCH", "TENSORFLOW", "MLFLOW", "KUBERNETES", "DOCKER"],
+    "data-engineering": ["PYTHON", "SPARK", "AIRFLOW", "SQL", "KUBERNETES"],
+  };
+  const core = coreByFamily[roleFamily];
+  if (!core) return 0;
+  const index = core.indexOf(normalizedKey);
+  if (index < 0) return 0;
+  return 20 - index * 2;
+}
+
 function toKeyword(candidate: Candidate, index: number): SummaryKeyword {
   return {
     keywordId: `SUM-KW-${String(index + 1).padStart(3, "0")}`,
@@ -234,6 +250,16 @@ export class SummaryKeywordAllocator {
     const domains = ranked.filter((candidate) => candidate.category === "domain").slice(0, 2);
     const technicalRaw = ranked
       .filter((candidate) => candidate.category === "technical")
+      .map((candidate) => ({
+        ...candidate,
+        priority:
+          candidate.priority +
+          coreStackBoost(input.targetRole.family, candidate.normalizedKey),
+      }))
+      .sort((left, right) => {
+        if (right.priority !== left.priority) return right.priority - left.priority;
+        return left.startIndex - right.startIndex;
+      })
       .slice(0, this.maximumTechnicalKeywords + 3);
     const technical = technicalRaw
       .filter(

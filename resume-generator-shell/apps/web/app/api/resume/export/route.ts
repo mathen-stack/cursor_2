@@ -1,4 +1,8 @@
 import type { FinalResumeData, ResumeExportFormat } from "@resume/contracts";
+import {
+  readJsonWithLimit,
+  requestLimitErrorResponse,
+} from "../../../../lib/request-limits";
 import { getResumeRenderer } from "../../../../lib/resume-rendering-service";
 
 export const runtime = "nodejs";
@@ -18,16 +22,24 @@ function isExportPayload(value: unknown): value is Required<ExportPayload> {
       payload.format &&
       FORMATS.has(payload.format) &&
       payload.resume.context?.generationId &&
+      payload.resume.context?.profileId &&
+      payload.resume.context?.jdId &&
+      payload.resume.context?.jdHash &&
       payload.resume.document?.contentFingerprint,
   );
 }
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const payload: unknown = await request.json();
+    const payload = await readJsonWithLimit<unknown>(request);
     if (!isExportPayload(payload)) {
       return Response.json(
-        { error: { code: "INVALID_EXPORT_REQUEST", message: "A generated resume and valid export format are required." } },
+        {
+          error: {
+            code: "INVALID_EXPORT_REQUEST",
+            message: "A generated resume and valid export format are required.",
+          },
+        },
         { status: 400 },
       );
     }
@@ -46,6 +58,8 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch (error) {
+    const limitResponse = requestLimitErrorResponse(error);
+    if (limitResponse) return limitResponse;
     return Response.json(
       {
         error: {

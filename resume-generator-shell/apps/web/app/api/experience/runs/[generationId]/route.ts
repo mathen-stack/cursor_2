@@ -8,15 +8,27 @@ interface RouteContext {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ): Promise<NextResponse> {
   const { generationId } = await context.params;
+  const profileId = new URL(request.url).searchParams.get("profileId")?.trim();
   const run = await getExperienceGenerationService().getRun(generationId);
   if (!run) {
     return NextResponse.json(
       { error: { code: "NOT_FOUND", message: "Generation run not found." } },
       { status: 404 },
+    );
+  }
+  if (profileId && run.context.profileId !== profileId) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "PROFILE_MISMATCH",
+          message: "Generation run does not belong to the requested profile.",
+        },
+      },
+      { status: 403 },
     );
   }
   return NextResponse.json(run);

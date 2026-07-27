@@ -7,6 +7,7 @@ import type { FinalResumeData } from "@resume/contracts";
 import { createCanonicalResume } from "../canonical/canonical-resume";
 import { AtsDocxRenderer } from "../docx/docx-renderer";
 import type { ResumeFormatRenderer, ResumeRenderResult } from "../types";
+import { createLibreOfficeEnv } from "./libreoffice-env";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +43,7 @@ export class LibreOfficePdfRenderer implements ResumeFormatRenderer {
         {
           timeout: this.timeoutMs,
           windowsHide: true,
-          env: { ...process.env, HOME: directory },
+          env: createLibreOfficeEnv(directory),
         },
       );
       const bytes = new Uint8Array(await readFile(pdfPath));

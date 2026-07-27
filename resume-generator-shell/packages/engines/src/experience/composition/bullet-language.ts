@@ -212,11 +212,19 @@ export function buildActionClause(input: {
     themeScope.split(/\s+/).length <= 6
       ? themeScope
       : "";
-  const compactTask = substantiveKeyword(input.story.task)
+  const compactTaskRaw = substantiveKeyword(input.story.task)
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 6)
     .join(" ");
+  // STAR ownership boilerplate is not a usable action object.
+  const compactTask =
+    compactTaskRaw &&
+    !/\b(?:effort to|responsibility to|owned the|took responsibility)\b/i.test(
+      compactTaskRaw,
+    )
+      ? compactTaskRaw
+      : "";
   // Never fall back to bare achievement-dimension labels such as
   // "cross functional alignment" or "reliability observability" — those clone
   // across roles whenever the same dimension is reused.
@@ -225,6 +233,18 @@ export function buildActionClause(input: {
     compactTheme ||
     compactTask ||
     "production delivery outcomes";
+  const cleanFallback = (() => {
+    const toolScope = joinNatural(
+      input.keywordPackage.supportingKeywords
+        .map(stripFirstPersonPronouns)
+        .filter(Boolean)
+        .slice(0, 2),
+    );
+    if (toolScope) return toolScope;
+    if (compactFocus) return compactFocus;
+    if (compactTheme) return compactTheme;
+    return "production delivery outcomes";
+  })();
   const directScope =
     joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
       ? joinedDirectScope
@@ -275,20 +295,36 @@ export function buildActionClause(input: {
   if (
     /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
     /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
-    /^production frontend delivery outcomes$/i.test(normalizedDirectScope)
+    /^production(?:\s+\w+)?\s+delivery outcomes$/i.test(normalizedDirectScope)
   ) {
     const toolScope = joinNatural(explicitTools.slice(0, 2));
     const methodScope = joinNatural(inferredMethods.slice(0, 2));
     const methodLooksLikeProcessOnly =
       /^(?:solution design|design reviews|technical documentation|delivery planning|architecture workshops)\b/i.test(
         methodScope,
-      ) || / and /i.test(methodScope) && !/[A-Z]/.test(methodScope);
+      ) || (/ and /i.test(methodScope) && !/[A-Z]/.test(methodScope));
+    // Keep this fallback domain-neutral. A React/TypeScript hardcode leaks
+    // frontend stack into unrelated concurrent generations (e.g. ML resumes).
+    // Never reintroduce STAR task boilerplate via shortFallback.
     normalizedDirectScope =
       toolScope ||
       (!methodLooksLikeProcessOnly ? methodScope : "") ||
       compactFocus ||
       compactTheme ||
-      "scalable React.js and TypeScript interfaces";
+      cleanFallback;
+  }
+  if (/^experience with\b/i.test(normalizedDirectScope)) {
+    const withoutPrefix = normalizedDirectScope.replace(/^experience with\s+/i, "").trim();
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    normalizedDirectScope =
+      withoutPrefix ||
+      toolScope ||
+      compactFocus ||
+      compactTheme ||
+      cleanFallback;
+  }
+  if (/\b(?:the effort to|took responsibility to)\b/i.test(normalizedDirectScope)) {
+    normalizedDirectScope = cleanFallback;
   }
   const activeSupportClause = (() => {
     const lowerScope = normalizedDirectScope.toLocaleLowerCase();

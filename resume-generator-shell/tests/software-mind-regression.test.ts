@@ -107,6 +107,10 @@ describe("Software Mind Senior Frontend Engineer regression fixture", () => {
     expect(summaryWords).toBeGreaterThanOrEqual(50);
     expect(summaryWords).toBeLessThanOrEqual(80);
     expect(resume.summary.summary).toMatch(/Senior Frontend Engineer/i);
+    expect(resume.summary.summary).toMatch(/4\+\s*years/i);
+    expect(resume.summary.summary).toMatch(/React\.js/i);
+    expect(resume.summary.summary).toMatch(/Next\.js/i);
+    expect(resume.summary.summary).toMatch(/TypeScript/i);
     expect(resume.summary.summary).not.toMatch(/\b(?:I|me|my|we|our)\b/i);
 
     expect(resume.readiness?.contentMutated).toBe(false);
@@ -123,6 +127,8 @@ describe("Software Mind Senior Frontend Engineer regression fixture", () => {
         expect(bullet.finalBullet).not.toMatch(/\bFacilitated closely\b/i);
         expect(bullet.finalBullet).not.toMatch(/\bwhile (?:made|cut)\b/i);
         expect(bullet.finalBullet).not.toMatch(/\bproduction frontend delivery outcomes\b/i);
+        expect(bullet.finalBullet).not.toMatch(/\bthe effort to\b/i);
+        expect(bullet.finalBullet).not.toMatch(/\btook responsibility to\b/i);
         expect(bullet.finalBullet).not.toMatch(
           /\bthrough\s+([a-z][a-z0-9+./\s-]{3,40})\s+through\s+\1\b/i,
         );
