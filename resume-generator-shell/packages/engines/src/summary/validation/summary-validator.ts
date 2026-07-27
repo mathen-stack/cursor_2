@@ -6,6 +6,7 @@ import type {
   SummaryTargetRole,
   SummaryValidationIssue,
 } from "@resume/contracts";
+import { countSummaryAchievementMetrics } from "../generation/summary-metric-selector";
 
 function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -157,6 +158,17 @@ export class SummaryValidator {
       addIssue(issues, "ATS_LANGUAGE", "error", "Summary contains formatting or symbols that may reduce ATS readability.");
     }
 
+    const achievementMetricCount = countSummaryAchievementMetrics(input.summary);
+    const quantifiedMetricsApproved = achievementMetricCount >= 2;
+    if (!quantifiedMetricsApproved) {
+      addIssue(
+        issues,
+        "SUMMARY_METRICS",
+        "error",
+        `Summary contains ${achievementMetricCount} achievement metric(s); expected at least 2 unique hard numbers.`,
+      );
+    }
+
     for (const keyword of input.usedKeywords) {
       for (const evidence of keyword.evidence) {
         if (input.jobDescription.rawText.slice(evidence.startIndex, evidence.endIndex) !== evidence.sourceText) {
@@ -182,6 +194,7 @@ export class SummaryValidator {
       noKeywordStuffing,
       sentenceStructureApproved,
       atsLanguageApproved,
+      quantifiedMetricsApproved,
       issues.every((issue) => issue.issueCode !== "KEYWORD_EVIDENCE"),
     ];
     const resumeWordedReadinessScore = Math.round(
@@ -203,6 +216,7 @@ export class SummaryValidator {
       noKeywordStuffing,
       sentenceStructureApproved,
       atsLanguageApproved,
+      quantifiedMetricsApproved,
       resumeWordedReadinessScore,
       issues,
       overallStatus,

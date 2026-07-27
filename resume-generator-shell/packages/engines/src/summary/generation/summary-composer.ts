@@ -5,6 +5,10 @@ import type {
   SummaryTargetRole,
 } from "@resume/contracts";
 import type { SummaryCompositionOutput } from "../types/analysis";
+import {
+  formatSummaryMetricSentence,
+  selectSummaryMetrics,
+} from "./summary-metric-selector";
 
 const ROLE_FAMILY_FOCUS: Readonly<Record<string, string>> = {
   "generative-ai": "generative AI applications",
@@ -95,6 +99,27 @@ function ensureMinimumWords(summary: string, targetRole: SummaryTargetRole): str
   return `${summary} ${addition}`;
 }
 
+function composeBody(input: {
+  targetRole: SummaryTargetRole;
+  experienceYears: SummaryExperienceYears;
+  domains: readonly SummaryKeyword[];
+  technical: readonly SummaryKeyword[];
+  outcomes: readonly SummaryKeyword[];
+  people: readonly SummaryKeyword[];
+  includePeopleSentence: boolean;
+  metricSentence: string;
+}): string {
+  const parts = [
+    sentenceOne(input.targetRole, input.experienceYears, input.domains),
+    sentenceTwo(input.technical, input.outcomes),
+    input.metricSentence,
+  ];
+  if (input.includePeopleSentence) {
+    parts.push(sentenceThree(input.people, input.targetRole));
+  }
+  return parts.join(" ");
+}
+
 export class SummaryComposer {
   readonly name = "summary-composer";
 
@@ -126,29 +151,93 @@ export class SummaryComposer {
         }
         return !LEADERSHIP_SENTENCE.toLowerCase().includes(keyword.text.toLowerCase());
       })
-      .slice(0, 6);
+      .slice(0, 5);
     // Drop outcome phrases that are already covered by a longer technical phrase
     // (e.g. "availability" inside "High Availability") so composition does not
     // look stuffed while preserving the stronger JD-grounded wording.
-    let selectedOutcomes = outcomes.filter(
-      (outcome) =>
-        !selectedTechnical.some((keyword) =>
-          keyword.text.toLocaleLowerCase().includes(outcome.text.toLocaleLowerCase()),
-        ),
-    );
-    let summary = [
-      sentenceOne(input.targetRole, input.experienceYears, domains),
-      sentenceTwo(selectedTechnical, selectedOutcomes),
-      sentenceThree(people, input.targetRole),
-    ].join(" ");
+    let selectedOutcomes = outcomes
+      .filter(
+        (outcome) =>
+          !selectedTechnical.some((keyword) =>
+            keyword.text.toLocaleLowerCase().includes(outcome.text.toLocaleLowerCase()),
+          ),
+      )
+      .slice(0, 2);
 
-    while (words(summary) > 80 && selectedTechnical.length > 3) {
+    const metrics = selectSummaryMetrics({
+      seed: `${input.context.jdHash}:${input.context.profileId}:${input.targetRole.title}`,
+      count: 2,
+    });
+    const metricSentence = formatSummaryMetricSentence(metrics);
+
+    // Prefer 3 sentences when metrics are present so length stays Resume-Worded
+    // friendly (≤100, our gate ≤80) while still covering role/years/tech/metrics.
+    let includePeopleSentence = false;
+    let summary = composeBody({
+      targetRole: input.targetRole,
+      experienceYears: input.experienceYears,
+      domains,
+      technical: selectedTechnical,
+      outcomes: selectedOutcomes,
+      people,
+      includePeopleSentence,
+      metricSentence,
+    });
+
+    // Add the people/leadership sentence only when there is room.
+    const withPeople = composeBody({
+      targetRole: input.targetRole,
+      experienceYears: input.experienceYears,
+      domains,
+      technical: selectedTechnical,
+      outcomes: selectedOutcomes,
+      people,
+      includePeopleSentence: true,
+      metricSentence,
+    });
+    if (words(withPeople) <= 80) {
+      includePeopleSentence = true;
+      summary = withPeople;
+    }
+
+    while (words(summary) > 80 && selectedTechnical.length > 2) {
       selectedTechnical = selectedTechnical.slice(0, -1);
-      summary = [
-        sentenceOne(input.targetRole, input.experienceYears, domains),
-        sentenceTwo(selectedTechnical, selectedOutcomes),
-        sentenceThree(people, input.targetRole),
-      ].join(" ");
+      summary = composeBody({
+        targetRole: input.targetRole,
+        experienceYears: input.experienceYears,
+        domains,
+        technical: selectedTechnical,
+        outcomes: selectedOutcomes,
+        people,
+        includePeopleSentence,
+        metricSentence,
+      });
+    }
+    while (words(summary) > 80 && selectedOutcomes.length > 0) {
+      selectedOutcomes = selectedOutcomes.slice(0, -1);
+      summary = composeBody({
+        targetRole: input.targetRole,
+        experienceYears: input.experienceYears,
+        domains,
+        technical: selectedTechnical,
+        outcomes: selectedOutcomes,
+        people,
+        includePeopleSentence,
+        metricSentence,
+      });
+    }
+    if (words(summary) > 80 && includePeopleSentence) {
+      includePeopleSentence = false;
+      summary = composeBody({
+        targetRole: input.targetRole,
+        experienceYears: input.experienceYears,
+        domains,
+        technical: selectedTechnical,
+        outcomes: selectedOutcomes,
+        people,
+        includePeopleSentence,
+        metricSentence,
+      });
     }
 
     summary = ensureMinimumWords(summary, input.targetRole);
@@ -160,25 +249,35 @@ export class SummaryComposer {
       [...domains, ...selectedTechnical, ...selectedOutcomes, ...people].filter(
         (keyword) => summary.toLowerCase().includes(keyword.text.toLowerCase()),
       );
-    while (projected().length > maxUsedKeywords && selectedTechnical.length > 3) {
+    while (projected().length > maxUsedKeywords && selectedTechnical.length > 2) {
       selectedTechnical = selectedTechnical.slice(0, -1);
       summary = ensureMinimumWords(
-        [
-          sentenceOne(input.targetRole, input.experienceYears, domains),
-          sentenceTwo(selectedTechnical, selectedOutcomes),
-          sentenceThree(people, input.targetRole),
-        ].join(" "),
+        composeBody({
+          targetRole: input.targetRole,
+          experienceYears: input.experienceYears,
+          domains,
+          technical: selectedTechnical,
+          outcomes: selectedOutcomes,
+          people,
+          includePeopleSentence,
+          metricSentence,
+        }),
         input.targetRole,
       );
     }
-    while (projected().length > maxUsedKeywords && selectedOutcomes.length > 1) {
+    while (projected().length > maxUsedKeywords && selectedOutcomes.length > 0) {
       selectedOutcomes = selectedOutcomes.slice(0, -1);
       summary = ensureMinimumWords(
-        [
-          sentenceOne(input.targetRole, input.experienceYears, domains),
-          sentenceTwo(selectedTechnical, selectedOutcomes),
-          sentenceThree(people, input.targetRole),
-        ].join(" "),
+        composeBody({
+          targetRole: input.targetRole,
+          experienceYears: input.experienceYears,
+          domains,
+          technical: selectedTechnical,
+          outcomes: selectedOutcomes,
+          people,
+          includePeopleSentence,
+          metricSentence,
+        }),
         input.targetRole,
       );
     }

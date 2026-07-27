@@ -99,6 +99,38 @@ describe("production Summary Engine", () => {
     expect(output.keywords.some((keyword) => keyword.text === "Kubernetes")).toBe(false);
   });
 
+  it("includes at least two achievement metrics unique to the summary", async () => {
+    const output = await createProductionSummaryEngine({
+      experienceYears: { referenceDate: new Date("2026-07-01T00:00:00Z") },
+    }).execute(input(ML_JD, "METRICS"));
+
+    expect(output.status).toBe("approved");
+    expect(output.validation.quantifiedMetricsApproved).toBe(true);
+    const metrics = [
+      ...output.summary.matchAll(/\b\d+(?:\.\d+)?\s?%/g),
+      ...output.summary.matchAll(/\b\d+(?:\.\d+)?x\b/gi),
+    ];
+    expect(metrics.length).toBeGreaterThanOrEqual(2);
+    expect(output.summary).toMatch(/measurable impact/i);
+  });
+
+  it("keeps summary metric measures out of the STAR taxonomy clone set", async () => {
+    const output = await createProductionSummaryEngine({
+      experienceYears: { referenceDate: new Date("2026-07-01T00:00:00Z") },
+    }).execute(input(ML_JD, "UNIQUE-METRICS"));
+
+    const experienceCloneMeasures = [
+      "feature adoption",
+      "throughput",
+      "latency",
+      "deployment cycle time",
+      "team delivery velocity",
+    ];
+    for (const measure of experienceCloneMeasures) {
+      expect(output.summary.toLowerCase()).not.toContain(measure);
+    }
+  });
+
   it("avoids personal pronouns, clichés, weak language, and keyword stuffing", async () => {
     const output = await createProductionSummaryEngine({
       experienceYears: { referenceDate: new Date("2026-07-01T00:00:00Z") },

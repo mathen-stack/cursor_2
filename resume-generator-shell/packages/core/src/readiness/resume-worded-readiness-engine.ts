@@ -255,7 +255,18 @@ export class ResumeWordedReadinessEngine implements ResumeReadinessEvaluator {
         : 90,
     ]);
 
-    const quantifiedScore = quantifiedBulletRatio * 100;
+    const summaryAchievementMetricCount = [
+      ...data.summary.summary.matchAll(/\b\d+(?:\.\d+)?\s?%/g),
+      ...data.summary.summary.matchAll(/\b\d+(?:\.\d+)?x\b/gi),
+    ].length;
+    const quantifiedScore = average([
+      quantifiedBulletRatio * 100,
+      summaryAchievementMetricCount >= 2
+        ? 100
+        : summaryAchievementMetricCount === 1
+          ? 55
+          : 30,
+    ]);
     const weakOpenings = bullets.filter((bullet) =>
       WEAK_OPENING_PATTERN.test(bullet.finalBullet),
     );
@@ -324,6 +335,7 @@ export class ResumeWordedReadinessEngine implements ResumeReadinessEvaluator {
       ]),
       makeCategory("quantified-achievements", quantifiedScore, [
         `${quantifiedBullets} of ${totalBullets} bullets contain measurable evidence.`,
+        `Professional Summary includes ${summaryAchievementMetricCount} achievement metric(s).`,
       ]),
       makeCategory("action-verbs", actionVerbScore, [
         `${uniqueActionVerbCount} unique action-verb allocations are used across roles, with ${round(uniqueActionVerbRatio * 100)}% within-role uniqueness.`,
@@ -417,6 +429,55 @@ export class ResumeWordedReadinessEngine implements ResumeReadinessEvaluator {
           `Professional Summary contains ${data.summary.wordCount} words instead of 50–80.`,
           "Regenerate only the Summary Engine output within its existing JD allocation.",
           [],
+        ),
+      );
+    }
+
+    const summaryAchievementMetrics = [
+      ...data.summary.summary.matchAll(/\b\d+(?:\.\d+)?\s?%/g),
+      ...data.summary.summary.matchAll(/\b\d+(?:\.\d+)?x\b/gi),
+    ];
+    if (summaryAchievementMetrics.length < 2) {
+      issues.push(
+        buildIssue(
+          "SUMMARY_METRICS_INSUFFICIENT",
+          "error",
+          "quantified-achievements",
+          "summary",
+          `Professional Summary contains ${summaryAchievementMetrics.length} hard number(s); Resume Worded expects at least 2.`,
+          "Regenerate the Summary with two summary-only quantified impact claims.",
+          [],
+        ),
+      );
+    }
+
+    const experienceText = data.experience.experiences
+      .flatMap((experience) => experience.bullets.map((bullet) => bullet.finalBullet))
+      .join("\n")
+      .toLocaleLowerCase();
+    const repeatedSummaryMeasures = [
+      "release predictability",
+      "production change success rate",
+      "engineering delivery cadence",
+      "roadmap completion rate",
+      "platform operability score",
+      "incident recovery confidence",
+    ].filter(
+      (measure) =>
+        data.summary.summary.toLocaleLowerCase().includes(measure) &&
+        experienceText.includes(measure),
+    );
+    if (repeatedSummaryMeasures.length > 0) {
+      issues.push(
+        buildIssue(
+          "SUMMARY_METRIC_REPEATED_IN_EXPERIENCE",
+          "warning",
+          "repetition-control",
+          "summary",
+          `Summary metrics also appear in Experience: ${repeatedSummaryMeasures.join(", ")}.`,
+          "Keep summary metrics in the summary-only measure pool so they stay unique to the Professional Summary.",
+          [],
+          false,
         ),
       );
     }

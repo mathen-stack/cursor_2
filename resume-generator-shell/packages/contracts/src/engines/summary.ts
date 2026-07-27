@@ -100,6 +100,7 @@ export interface SummaryEngineOutput extends EngineOutputBase {
     noKeywordStuffing: boolean;
     sentenceStructureApproved: boolean;
     atsLanguageApproved: boolean;
+    quantifiedMetricsApproved: boolean;
     resumeWordedReadinessScore: number;
     issues: SummaryValidationIssue[];
     overallStatus: "approved" | "rejected";
