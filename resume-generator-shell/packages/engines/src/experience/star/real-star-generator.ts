@@ -108,6 +108,7 @@ export class RealStarGenerator implements StarGenerator {
           `${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`,
         );
         usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
+        usedMetricPatterns.add(`value:${metric.unit}:${metric.value}`);
       }
       const result = this.resultEngine.generate({
         ...common,

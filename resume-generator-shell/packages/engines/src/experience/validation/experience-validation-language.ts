@@ -53,7 +53,13 @@ export function sentenceSkeleton(value: string): string {
 }
 
 export function metricFingerprint(value: string): string {
-  const match = value.match(/\b\d+(?:\.\d+)?\s?(%|x|ms|hours?|days?)(?=\s|[,.]|$)/i);
+  // Identical hard numbers (% / x) are visible clones even when measures differ
+  // ("delivering a 38% reduction in latency" vs "... in release failures").
+  const amountMatch = value.match(/\b(\d+(?:\.\d+)?)\s?(%|x)(?=\s|[,.]|$)/i);
+  if (amountMatch) {
+    return `value:${amountMatch[2]!.toLowerCase()}:${amountMatch[1]}`;
+  }
+  const match = value.match(/\b\d+(?:\.\d+)?\s?(ms|hours?|days?)(?=\s|[,.]|$)/i);
   const unit = match?.[1]?.toLowerCase() ?? "missing";
   const measureMatch = value.match(
     /\b(?:increasing|reducing|maintaining|improved|improving|increased|reduced|accelerating|shortening)\s+([^,]+?)\s+by\s+\d+/i,

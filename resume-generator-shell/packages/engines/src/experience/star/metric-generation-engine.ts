@@ -40,6 +40,10 @@ function measureKey(measure: string): string {
   return `measure:${measure.trim().toLocaleLowerCase()}`;
 }
 
+function valueKey(unit: string, value: number): string {
+  return `value:${unit}:${value}`;
+}
+
 function isMeasureAvailable(
   measure: string,
   usedMetricPatternKeys: ReadonlySet<string>,
@@ -62,6 +66,52 @@ function isMeasureAvailable(
     }
   }
   return true;
+}
+
+function isValueAvailable(
+  unit: string,
+  value: number,
+  usedMetricPatternKeys: ReadonlySet<string>,
+): boolean {
+  return !usedMetricPatternKeys.has(valueKey(unit, value));
+}
+
+function pickUniqueValue(input: {
+  seed: string;
+  minimum: number;
+  maximum: number;
+  decimals: number;
+  unit: string;
+  usedMetricPatternKeys: ReadonlySet<string>;
+}): number {
+  const factor = 10 ** input.decimals;
+  const step = 1 / factor;
+  let value = deterministicNumber(
+    input.seed,
+    input.minimum,
+    input.maximum,
+    input.decimals,
+  );
+  if (isValueAvailable(input.unit, value, input.usedMetricPatternKeys)) {
+    return value;
+  }
+  // Walk the allowed range so "38%" cannot be reused across bullets.
+  const start = Math.round(value * factor);
+  const min = Math.round(input.minimum * factor);
+  const max = Math.round(input.maximum * factor);
+  for (let offset = 1; offset <= max - min + 1; offset += 1) {
+    for (const direction of [1, -1]) {
+      const candidateRaw = start + direction * offset;
+      if (candidateRaw < min || candidateRaw > max) continue;
+      const candidate = candidateRaw / factor;
+      if (isValueAvailable(input.unit, candidate, input.usedMetricPatternKeys)) {
+        return candidate;
+      }
+    }
+  }
+  // Last resort: nudge outside the colliding value while staying in range.
+  void step;
+  return Math.min(input.maximum, Math.max(input.minimum, value + step));
 }
 
 export class MetricGenerationEngine {
@@ -161,12 +211,14 @@ export class MetricGenerationEngine {
         : selectedProfile.unit === "x"
           ? 1
           : 0;
-    let value = deterministicNumber(
-      `${input.jobDescription.contentHash}:${input.assignment.experienceId}:${input.plan.bulletId}:${measure}`,
-      selectedProfile.minimum,
-      selectedProfile.maximum,
+    let value = pickUniqueValue({
+      seed: `${input.jobDescription.contentHash}:${input.assignment.experienceId}:${input.plan.bulletId}:${measure}`,
+      minimum: selectedProfile.minimum,
+      maximum: selectedProfile.maximum,
       decimals,
-    );
+      unit: selectedProfile.unit,
+      usedMetricPatternKeys: input.usedMetricPatternKeys,
+    });
     if (selectedProfile.metricType === "availability") {
       value = Math.round(value * 100) / 100;
     }

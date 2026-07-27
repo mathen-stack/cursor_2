@@ -122,5 +122,18 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
       expect(bullet).not.toMatch(/\bthroughput\b.*\bthroughput\b/i);
       expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
     }
+
+    const percentAmounts = bullets
+      .flatMap((bullet) => [...bullet.matchAll(/\b(\d+(?:\.\d+)?)%/g)].map((match) => match[1]))
+      .filter((value): value is string => Boolean(value));
+    expect(new Set(percentAmounts).size).toBe(percentAmounts.length);
+
+    const deliveringStems = bullets.filter((bullet) =>
+      /delivering a \d+(?:\.\d+)?% reduction/i.test(bullet),
+    );
+    const deliveringValues = deliveringStems.map(
+      (bullet) => bullet.match(/delivering a (\d+(?:\.\d+)?%) reduction/i)?.[1],
+    );
+    expect(new Set(deliveringValues).size).toBe(deliveringValues.length);
   });
 });

@@ -75,13 +75,26 @@ function outcomePhrase(
   return joinNatural(uncovered);
 }
 
-/** Trailing formula fingerprint used to stop "cycle time while advancing" clones. */
+/** Trailing formula fingerprint used to stop cloned metric endings. */
 export function endingSkeleton(bulletText: string): string {
-  const tail = bulletText
+  const lower = bulletText
     .toLocaleLowerCase()
-    .replace(/[.!?]+$/g, "")
-    .split(/,\s+/)
-    .slice(-1)[0] ?? bulletText;
+    .replace(/[.!?]+$/g, "");
+  // Same percentage in the same "delivering a X% reduction/increase" stem is a
+  // visible clone even when the measure nouns differ.
+  const delivering = lower.match(
+    /\bdelivering\s+(?:a\s+)?(\d+(?:\.\d+)?\s?%)\s+(reduction|increase)\b/,
+  );
+  if (delivering) {
+    return `delivering:${delivering[1]}:${delivering[2]}`;
+  }
+  const byMetric = lower.match(
+    /\b(?:increasing|reducing|maintaining|improving|accelerating|shortening)\s+.+?\s+by\s+(\d+(?:\.\d+)?(?:%|x))\b/,
+  );
+  if (byMetric) {
+    return `by-metric:${byMetric[1]}`;
+  }
+  const tail = lower.split(/,\s+/).slice(-1)[0] ?? lower;
   return tail
     .replace(/\b\d+(?:\.\d+)?\s?(?:%|x)\b/gi, "<metric>")
     .replace(/\b(?:a|an|the|in|by|and|while|to|for|of)\b/g, " ")
