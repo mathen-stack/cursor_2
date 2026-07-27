@@ -144,7 +144,7 @@ export class SkillsValidator {
         invalidCategoryIds.push(skill.skillId);
       }
     }
-    if (invalidCategoryIds.length > 0 || input.categories.length > 8) {
+    if (invalidCategoryIds.length > 0 || input.categories.length > SKILL_CATEGORY_ORDER.length) {
       issues.push(
         issue(
           "INVALID_SKILL_CATEGORIES",
@@ -188,7 +188,8 @@ export class SkillsValidator {
       explicitSkillsCovered: missingRequired.length === 0,
       noDuplicateSkills: duplicateIds.length === 0,
       categoryStructureApproved:
-        invalidCategoryIds.length === 0 && input.categories.length <= 8,
+        invalidCategoryIds.length === 0 &&
+        input.categories.length <= SKILL_CATEGORY_ORDER.length,
       inferredSkillsGrounded: ungroundedInferred.length === 0,
       skillDensityApproved: densityApproved,
       totalSkillCount: skillCount,

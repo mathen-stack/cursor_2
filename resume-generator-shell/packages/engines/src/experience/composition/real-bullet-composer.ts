@@ -5,7 +5,11 @@ import type {
   BulletSentencePattern,
   ExperienceBullet,
 } from "../types/composed-bullet";
-import { buildActionClause, stripFirstPersonPronouns, substantiveKeyword } from "./bullet-language";
+import {
+  buildActionClause,
+  stripFirstPersonPronouns,
+  substantiveKeyword,
+} from "./bullet-language";
 import { validateBulletComposition } from "./bullet-composition-validator";
 import { SentencePatternEngine } from "./sentence-pattern-engine";
 import {
@@ -43,6 +47,14 @@ export class RealBulletComposer implements BulletComposer {
     const patternsByBullet = new Map<string, BulletSentencePattern>();
     const drafts: ExperienceBullet[] = [];
     const usedDirectScopeKeys = new Set<string>();
+
+    // Preserve uniqueness against bullets kept during selective regeneration.
+    for (const reserved of input.reservedBullets ?? []) {
+      for (const keyword of reserved.directKeywords) {
+        const key = canonicalKeywordKey(substantiveKeyword(keyword));
+        if (key) usedDirectScopeKeys.add(key);
+      }
+    }
 
     const orderedPlans = [...input.plans].sort(
       (left, right) =>
@@ -118,6 +130,7 @@ export class RealBulletComposer implements BulletComposer {
         patternOffset: input.regenerationAttempt ?? 0,
       });
       patternsByBullet.set(plan.bulletId, composed.sentencePattern);
+
       drafts.push({
         bulletId: plan.bulletId,
         requirementId: plan.requirementId,

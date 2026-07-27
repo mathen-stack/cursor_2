@@ -23,10 +23,36 @@ export class ResumeEngineRejectedError extends Error {
 
   constructor(outputs: EngineOutputBase[]) {
     const rejected = outputs.filter((output) => output.status !== "approved");
+    const details = rejected
+      .map((output) => {
+        const validation = (
+          output as EngineOutputBase & {
+            validation?: {
+              issues?: Array<{ message?: string; issueCode?: string }>;
+              failedBulletIds?: string[];
+              diagnostics?: Array<{ bulletId: string; errors: string[] }>;
+            };
+          }
+        ).validation;
+        const issueMessages =
+          validation?.issues
+            ?.map((issue) => issue.message)
+            .filter((message): message is string => Boolean(message))
+            .slice(0, 5) ?? [];
+        const diagnosticMessages =
+          validation?.diagnostics
+            ?.filter((item) => item.errors.length > 0)
+            .map((item) => `${item.bulletId}: ${item.errors.join(" ")}`)
+            .slice(0, 5) ?? [];
+        const detailParts = [...issueMessages, ...diagnosticMessages];
+        if (detailParts.length === 0) {
+          return output.engineName;
+        }
+        return `${output.engineName} (${detailParts.join("; ")})`;
+      })
+      .join(", ");
     super(
-      `Resume generation stopped because these engines were not approved: ${rejected
-        .map((output) => output.engineName)
-        .join(", ")}.`,
+      `Resume generation stopped because these engines were not approved: ${details}.`,
     );
     this.name = "ResumeEngineRejectedError";
     this.rejectedEngines = rejected.map((output) => output.engineName);

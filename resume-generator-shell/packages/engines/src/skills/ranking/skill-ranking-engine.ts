@@ -27,6 +27,13 @@ function candidateWeight(candidate: SkillCandidate): number {
   );
 }
 
+function isRequiredExplicit(candidate: SkillCandidate): boolean {
+  return (
+    candidate.source === "explicit" &&
+    (candidate.priority === "critical" || candidate.priority === "high")
+  );
+}
+
 export class SkillRankingEngine {
   readonly name = "skill-ranking-engine";
   private readonly maximumCategories: number;
@@ -58,23 +65,45 @@ export class SkillRankingEngine {
       );
     }
 
-    const allowedCategories = new Set(
-      [...categoryScores.entries()]
-        .sort((left, right) => {
-          const scoreDifference = right[1] - left[1];
-          if (scoreDifference !== 0) return scoreDifference;
-          return (
-            SKILL_CATEGORY_ORDER.indexOf(left[0] as (typeof SKILL_CATEGORY_ORDER)[number]) -
-            SKILL_CATEGORY_ORDER.indexOf(right[0] as (typeof SKILL_CATEGORY_ORDER)[number])
-          );
-        })
-        .slice(0, this.maximumCategories)
-        .map(([category]) => category),
+    const requiredCategories = [
+      ...new Set(
+        [...bestByKey.values()]
+          .filter(isRequiredExplicit)
+          .map((candidate) => candidate.category),
+      ),
+    ].sort(
+      (left, right) =>
+        SKILL_CATEGORY_ORDER.indexOf(left as (typeof SKILL_CATEGORY_ORDER)[number]) -
+        SKILL_CATEGORY_ORDER.indexOf(right as (typeof SKILL_CATEGORY_ORDER)[number]),
     );
+
+    const scoredCategories = [...categoryScores.entries()]
+      .sort((left, right) => {
+        const scoreDifference = right[1] - left[1];
+        if (scoreDifference !== 0) return scoreDifference;
+        return (
+          SKILL_CATEGORY_ORDER.indexOf(left[0] as (typeof SKILL_CATEGORY_ORDER)[number]) -
+          SKILL_CATEGORY_ORDER.indexOf(right[0] as (typeof SKILL_CATEGORY_ORDER)[number])
+        );
+      })
+      .map(([category]) => category);
+
+    const allowedCategories = new Set<string>(requiredCategories);
+    const categoryBudget = Math.max(
+      this.maximumCategories,
+      requiredCategories.length,
+    );
+    for (const category of scoredCategories) {
+      if (allowedCategories.size >= categoryBudget) {
+        break;
+      }
+      allowedCategories.add(category);
+    }
 
     const categoryCounts = new Map<string, number>();
     const selectedCandidates: SkillCandidate[] = [];
     const omitted: string[] = [];
+    const selectedKeys = new Set<string>();
 
     const ordered = [...bestByKey.values()].sort((left, right) => {
       const weightDifference = candidateWeight(right) - candidateWeight(left);
@@ -87,18 +116,65 @@ export class SkillRankingEngine {
         : left.name.localeCompare(right.name);
     });
 
-    for (const candidate of ordered) {
+    const requiredExplicit = ordered.filter(isRequiredExplicit);
+    const optional = ordered.filter((candidate) => !isRequiredExplicit(candidate));
+
+    const trySelect = (candidate: SkillCandidate, forceRequired: boolean): boolean => {
+      if (selectedKeys.has(candidate.key)) {
+        return false;
+      }
+      if (!allowedCategories.has(candidate.category)) {
+        return false;
+      }
       const count = categoryCounts.get(candidate.category) ?? 0;
       if (
-        selectedCandidates.length >= input.maximumSkills ||
-        !allowedCategories.has(candidate.category) ||
-        count >= this.maximumSkillsPerCategory
+        !forceRequired &&
+        (selectedCandidates.length >= input.maximumSkills ||
+          count >= this.maximumSkillsPerCategory)
       ) {
-        omitted.push(candidate.name);
-        continue;
+        return false;
       }
+      if (forceRequired && selectedCandidates.length >= input.maximumSkills) {
+        // Make room by dropping the lowest-weight optional skill.
+        const dropIndex = [...selectedCandidates]
+          .map((item, index) => ({ item, index }))
+          .filter(({ item }) => !isRequiredExplicit(item))
+          .sort(
+            (left, right) =>
+              candidateWeight(left.item) - candidateWeight(right.item),
+          )[0]?.index;
+        if (dropIndex === undefined) {
+          return false;
+        }
+        const dropped = selectedCandidates.splice(dropIndex, 1)[0];
+        if (dropped) {
+          selectedKeys.delete(dropped.key);
+          categoryCounts.set(
+            dropped.category,
+            Math.max(0, (categoryCounts.get(dropped.category) ?? 1) - 1),
+          );
+          omitted.push(dropped.name);
+        }
+      }
+
       selectedCandidates.push(candidate);
-      categoryCounts.set(candidate.category, count + 1);
+      selectedKeys.add(candidate.key);
+      categoryCounts.set(
+        candidate.category,
+        (categoryCounts.get(candidate.category) ?? 0) + 1,
+      );
+      return true;
+    };
+
+    for (const candidate of requiredExplicit) {
+      if (!trySelect(candidate, true)) {
+        omitted.push(candidate.name);
+      }
+    }
+    for (const candidate of optional) {
+      if (!trySelect(candidate, false)) {
+        omitted.push(candidate.name);
+      }
     }
 
     selectedCandidates.sort((left, right) => {

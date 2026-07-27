@@ -304,16 +304,19 @@ export class RealExperienceValidator implements ExperienceValidator {
 
       const directCoverage =
         bullet.directKeywords.length === 0 ||
-        (bullet.directKeywords.length > 0 &&
-          bullet.directKeywords.every((keyword: string) =>
-            directKeywordRepresented(bullet.finalBullet, keyword),
-          ));
-      const supportingCoverage = bullet.supportingKeywords.length > 0 && bullet.supportingKeywords.every(
-        (keyword: string) => bullet.finalBullet.toLowerCase().includes(keyword.toLowerCase()),
-      );
-      const outcomeCoverage = bullet.outcomeKeywords.length > 0 && bullet.outcomeKeywords.every(
-        (keyword: string) => bullet.finalBullet.toLowerCase().includes(keyword.toLowerCase()),
-      );
+        bullet.directKeywords.every((keyword: string) =>
+          directKeywordRepresented(bullet.finalBullet, keyword),
+        );
+      const supportingCoverage =
+        bullet.supportingKeywords.length === 0 ||
+        bullet.supportingKeywords.every((keyword: string) =>
+          directKeywordRepresented(bullet.finalBullet, keyword),
+        );
+      const outcomeCoverage =
+        bullet.outcomeKeywords.length === 0 ||
+        bullet.outcomeKeywords.every((keyword: string) =>
+          directKeywordRepresented(bullet.finalBullet, keyword),
+        );
       const domainCoherent = directCoverage && supportingCoverage && outcomeCoverage;
       if (!domainCoherent) {
         errors.push("Bullet loses one or more allocated JD, supporting, or outcome concepts.");
