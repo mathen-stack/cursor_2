@@ -373,6 +373,7 @@ export function buildActionClause(input: {
   story: StarStory;
   usedScopeKeys?: ReadonlySet<string>;
 }): string {
+  void input.story;
   const usedScopeKeys = input.usedScopeKeys ?? new Set<string>();
   const directScopes = removeContainedPhrases(
     input.keywordPackage.directKeywords
