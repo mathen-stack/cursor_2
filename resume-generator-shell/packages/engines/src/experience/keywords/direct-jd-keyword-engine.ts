@@ -87,7 +87,13 @@ function finalizeKeywordPhrase(value: string): string | null {
       finalized,
     ) ||
     /\b(?:verbal and written\s+)?communication skills\b/i.test(finalized) ||
-    /^(?:soft skills|interpersonal skills|people skills)\b/i.test(finalized)
+    /^(?:soft skills|interpersonal skills|people skills)\b/i.test(finalized) ||
+    /\b(?:dynamic|proactive|synergistic|go[- ]getter|hard[- ]working|team player|results[- ]driven|proven track record|seasoned|passionate|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker)\b/i.test(
+      finalized,
+    ) ||
+    /\b(?:passion and creativity|grit\s*&\s*guts|talented people|limitless opportunities|employment with enjoyment)\b/i.test(
+      finalized,
+    )
   ) {
     return null;
   }

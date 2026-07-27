@@ -57,6 +57,8 @@ export class RealStarGenerator implements StarGenerator {
           `${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`,
         );
         usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
+        // Lock hard values too so regeneration cannot reuse 37%/99.92% etc.
+        usedMetricPatterns.add(`value:${metric.unit}:${metric.value}`);
       }
       if (existing.businessImpact) {
         usedBusinessImpactKeys.add(

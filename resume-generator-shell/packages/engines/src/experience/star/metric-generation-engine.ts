@@ -109,9 +109,31 @@ function pickUniqueValue(input: {
       }
     }
   }
-  // Last resort: nudge outside the colliding value while staying in range.
+  // Range exhausted (common for tight availability bands like 99.90-99.99).
+  // Expand outward while keeping values resume-plausible; never return a duplicate.
+  for (let offset = 1; offset <= 500; offset += 1) {
+    for (const direction of [1, -1]) {
+      const candidate = (start + direction * offset) / factor;
+      if (candidate <= 0) continue;
+      if (input.unit === "%" && candidate >= 100) continue;
+      if (isValueAvailable(input.unit, candidate, input.usedMetricPatternKeys)) {
+        return candidate;
+      }
+    }
+  }
+  // Deterministic last-resort unique stamp from the seed.
   void step;
-  return Math.min(input.maximum, Math.max(input.minimum, value + step));
+  let fallback = Math.max(step, Number((value + step).toFixed(input.decimals)));
+  while (
+    !isValueAvailable(input.unit, fallback, input.usedMetricPatternKeys) ||
+    (input.unit === "%" && fallback >= 100)
+  ) {
+    fallback = Number((fallback + step).toFixed(input.decimals));
+    if (fallback > 1_000_000) {
+      break;
+    }
+  }
+  return fallback;
 }
 
 export class MetricGenerationEngine {

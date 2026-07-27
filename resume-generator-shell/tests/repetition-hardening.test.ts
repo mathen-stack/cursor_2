@@ -57,6 +57,11 @@ describe("repetition hardening", () => {
         "Facilitated communication skills across engineering partners, reducing handoff delays by 22%",
       ),
     ).toMatch(/stakeholder communication/i);
+    expect(
+      normalizeBulletSentence(
+        "Led motivated cross-functional delivery with dynamic batching, reducing latency by 18%",
+      ),
+    ).not.toMatch(/\b(?:motivated|dynamic)\b/i);
   });
 
   it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {

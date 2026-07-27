@@ -10,7 +10,7 @@ const STAR_OWNERSHIP_BOILERPLATE =
 
 /** Job-post marketing / meta copy that must never become a bullet action object. */
 export const JD_MARKETING_PROSE =
-  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'ll| will)\b|competitive salary|benefits package|join our team|about the (?:role|company|job))\b/i;
+  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'ll| will)\b|competitive salary|benefits package|join our team|about the (?:role|company|job)|passion and creativity|grit\s*&\s*guts|talented people|limitless opportunities|employment with enjoyment|crave more|make an impact for companies)\b/i;
 
 /** Finite-verb clauses that read as full JD sentences, not noun scopes. */
 const SCOPE_FINITE_VERB =
@@ -198,6 +198,22 @@ export function normalizeBulletSentence(value: string): string {
       )
       .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
       .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
+      // Scrub Resume Worded clichés leaked from JD marketing copy before validation.
+      .replace(/\bresults[- ]driven\b/gi, "outcome-focused")
+      .replace(/\bproven track record\b/gi, "demonstrated delivery history")
+      .replace(/\bgo[- ]getter\b/gi, "delivery-focused contributor")
+      .replace(/\bhard[- ]working\b/gi, "execution-focused")
+      .replace(/\bteam player\b/gi, "collaborative partner")
+      .replace(/\bself[- ]starter\b/gi, "independent contributor")
+      .replace(/\bdetail[- ]oriented\b/gi, "precision-focused")
+      .replace(/\binnovative thinker\b/gi, "solution designer")
+      .replace(/\bstrategic thinker\b/gi, "technical strategist")
+      .replace(/\bseasoned(?:\s+professional)?\b/gi, "experienced")
+      .replace(/\bpassionate(?:\s+about)?\b/gi, "focused on")
+      .replace(/\bmotivated\b/gi, "driven")
+      .replace(/\bsynergistic\b/gi, "coordinated")
+      .replace(/\bproactive\b/gi, "continuous")
+      .replace(/\bdynamic\b/gi, "adaptive")
       .replace(/\s+,/g, ",")
       .replace(/,\s*,+/g, ", ")
       .replace(/\s+/g, " ")
