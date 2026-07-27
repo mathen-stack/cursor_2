@@ -76,16 +76,16 @@ const UNIQUE_SCOPE_POOL: Readonly<
     "outcome-focused ship priorities",
   ],
   "cross-functional-alignment": [
-    "requirement tradeoff clarity",
-    "shared delivery success criteria",
-    "cross-team planning agreements",
-    "interface ownership decisions",
+    "stakeholder requirements alignment",
+    "cross-functional product planning",
+    "business stakeholder agreements",
+    "product team delivery alignment",
   ],
   "technical-leadership": [
-    "engineering decision clarity",
-    "design review standards",
-    "workstream execution ownership",
-    "technical roadmap priorities",
+    "technical strategy direction",
+    "architecture roadmap leadership",
+    "engineering design standards",
+    "technical leadership priorities",
   ],
   "mentoring-knowledge-sharing": [
     "engineering coaching loops",
@@ -314,51 +314,102 @@ export function registerVisibleScopeKeys(
   }
 }
 
-function pickUniqueDimensionScope(
+/** Matches sentence-quality COMMUNICATION_SIGNAL. */
+const COMMUNICATION_SCOPE_SIGNAL =
+  /stakeholder|cross-functional|product|business|alignment|requirements|team/i;
+/** Matches sentence-quality LEADERSHIP_SIGNAL. */
+const LEADERSHIP_SCOPE_SIGNAL =
+  /strategy|direction|leadership|architecture|roadmap|design decision|standard/i;
+
+function pickUniqueScopeFromPool(
+  pool: readonly string[],
   plan: BulletPlanItem,
   usedScopeKeys: ReadonlySet<string>,
+  requiredSignal?: RegExp,
 ): string {
-  const pool = UNIQUE_SCOPE_POOL[plan.achievementDimension] ?? [
-    "targeted delivery outcomes",
-  ];
   const offset = Math.max(0, plan.sequence - 1);
+  const matchesSignal = (candidate: string): boolean =>
+    !requiredSignal || requiredSignal.test(candidate);
   for (let index = 0; index < pool.length; index += 1) {
     const candidate = pool[(index + offset) % pool.length];
-    if (candidate && isUnusedVisibleScope(candidate, usedScopeKeys)) {
+    if (
+      candidate &&
+      matchesSignal(candidate) &&
+      isUnusedVisibleScope(candidate, usedScopeKeys)
+    ) {
       return candidate;
     }
   }
   for (const candidate of pool) {
-    if (isUnusedVisibleScope(candidate, usedScopeKeys)) {
+    if (
+      matchesSignal(candidate) &&
+      isUnusedVisibleScope(candidate, usedScopeKeys)
+    ) {
       return candidate;
     }
   }
-  return `${pool[offset % pool.length] ?? "targeted delivery outcomes"} ${plan.sequence}`;
+  const base = pool[offset % pool.length] ?? "targeted delivery outcomes";
+  return `${base} ${plan.sequence}`;
+}
+
+function pickUniqueDimensionScope(
+  plan: BulletPlanItem,
+  usedScopeKeys: ReadonlySet<string>,
+  requiredSignal?: RegExp,
+): string {
+  const pool = UNIQUE_SCOPE_POOL[plan.achievementDimension] ?? [
+    "targeted delivery outcomes",
+  ];
+  return pickUniqueScopeFromPool(pool, plan, usedScopeKeys, requiredSignal);
 }
 
 function selectShortFallbackScope(input: {
   plan: BulletPlanItem;
   usedScopeKeys: ReadonlySet<string>;
 }): string {
+  // Communication / leadership plans must keep validator signal words even when
+  // direct JD scopes are exhausted — never fall through to unrelated focus text.
+  if (input.plan.communicationFocused) {
+    return pickUniqueDimensionScope(
+      {
+        ...input.plan,
+        achievementDimension: "cross-functional-alignment",
+      },
+      input.usedScopeKeys,
+      COMMUNICATION_SCOPE_SIGNAL,
+    );
+  }
+  if (input.plan.leadershipFocused) {
+    return pickUniqueDimensionScope(
+      {
+        ...input.plan,
+        achievementDimension: "technical-leadership",
+      },
+      input.usedScopeKeys,
+      LEADERSHIP_SCOPE_SIGNAL,
+    );
+  }
+
   const themeScope = cleanScope(
     stripFirstPersonPronouns(input.plan.achievementTheme || ""),
   );
   const focusScope = cleanScope(
     stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
   );
+  // Keep focus/theme fallbacks short so full JD requirement sentences cannot be
+  // pasted as the action object across many bullets.
   const compactFocus =
     focusScope.split(/\s+/).filter(Boolean).length >= 2 &&
-    focusScope.split(/\s+/).length <= 8 &&
-    !/,| and | through /i.test(focusScope)
+    focusScope.split(/\s+/).length <= 4 &&
+    !/,| and | through | in production\b/i.test(focusScope)
       ? focusScope
       : "";
   const compactTheme =
     themeScope.split(/\s+/).filter(Boolean).length >= 2 &&
-    themeScope.split(/\s+/).length <= 6
+    themeScope.split(/\s+/).length <= 4 &&
+    !/,| and | through | in production\b/i.test(themeScope)
       ? themeScope
       : "";
-  // Never fall back to STAR task boilerplate ("stakeholder alignment and
-  // delivery coordination required") or bare dimension labels — those clone.
   for (const candidate of [compactFocus, compactTheme]) {
     if (candidate && isUnusedVisibleScope(candidate, input.usedScopeKeys)) {
       return candidate;
@@ -428,11 +479,10 @@ export function buildActionClause(input: {
       /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration)$/i.test(
         normalizedDirectScope,
       );
+    // Keep the same signal vocabulary the sentence-quality validator requires.
     const communicationScope =
       !looksLikeGenericAlignment &&
-      /stakeholder|collaborat|product|business|requirements|team|agreement|tradeoff|criteria|ownership/i.test(
-        normalizedDirectScope,
-      )
+      COMMUNICATION_SCOPE_SIGNAL.test(normalizedDirectScope)
         ? normalizedDirectScope
         : pickUniqueDimensionScope(
             {
@@ -440,14 +490,13 @@ export function buildActionClause(input: {
               achievementDimension: "cross-functional-alignment",
             },
             usedScopeKeys,
+            COMMUNICATION_SCOPE_SIGNAL,
           );
     return stripTerminal(`${verb} ${communicationScope}${supportClause}`);
   }
 
   if (input.plan.leadershipFocused) {
-    const leadershipScope = /strategy|direction|leadership|architecture decision|roadmap|clarity|ownership|review/i.test(
-      normalizedDirectScope,
-    )
+    const leadershipScope = LEADERSHIP_SCOPE_SIGNAL.test(normalizedDirectScope)
       ? normalizedDirectScope
       : pickUniqueDimensionScope(
           {
@@ -455,6 +504,7 @@ export function buildActionClause(input: {
             achievementDimension: "technical-leadership",
           },
           usedScopeKeys,
+          LEADERSHIP_SCOPE_SIGNAL,
         );
     return stripTerminal(`${verb} ${leadershipScope}${supportClause}`);
   }

@@ -68,9 +68,7 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
     // keyword inventory is exhausted.
     expect(
       bullets.filter((bullet) =>
-        /scalable machine learning models in production environments/i.test(
-          bullet,
-        ),
+        /scalable machine learning models in production/i.test(bullet),
       ).length,
     ).toBeLessThanOrEqual(1);
     expect(
@@ -78,6 +76,17 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
         /stakeholder alignment and delivery coordination required/i.test(bullet),
       ),
     ).toHaveLength(0);
+    // Composition must keep communication coverage (no soft-reject / throw).
+    expect(result.status).toBe("approved");
+    expect(
+      result.experiences.every((experience) =>
+        experience.bullets.some((bullet) =>
+          /stakeholder|cross-functional|product|business|alignment|requirements|team/i.test(
+            bullet.finalBullet,
+          ),
+        ),
+      ),
+    ).toBe(true);
 
     const businessClosings = bullets
       .map((bullet) => {
