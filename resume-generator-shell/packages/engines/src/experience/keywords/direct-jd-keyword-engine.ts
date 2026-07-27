@@ -329,9 +329,27 @@ export class DirectJDKeywordEngine {
           },
           [...DIRECT_JD_PHRASE_PATTERNS, ...EXPLICIT_TOOL_PATTERNS],
           40,
-        ).filter((candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey)),
+        ),
       );
-      candidates.push(...jdFallbacks.slice(0, 3));
+      const unusedJdFallbacks = jdFallbacks.filter(
+        (candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey),
+      );
+      // Prefer unused phrases. If the document-wide inventory is exhausted
+      // (common for EXP-*-B-006+ on dense plans), allow controlled reuse of
+      // already-claimed JD phrases instead of failing the entire generation.
+      candidates.push(
+        ...(unusedJdFallbacks.length > 0 ? unusedJdFallbacks : jdFallbacks).slice(
+          0,
+          3,
+        ),
+      );
+    }
+
+    if (candidates.length === 0) {
+      const lastResort = fallbackCandidate(primary);
+      if (lastResort) {
+        candidates.push(lastResort);
+      }
     }
 
     if (candidates.length === 0) {

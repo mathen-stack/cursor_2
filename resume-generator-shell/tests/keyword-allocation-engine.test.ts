@@ -10,6 +10,7 @@ import {
   RealRequirementExtractor,
   RealRoleAssignmentEngine,
   RuleBasedRequirementModel,
+  DirectJDKeywordEngine,
   canonicalKeywordKey,
   createMilestone5ExperienceEngine,
 } from "@resume/engines";
@@ -277,6 +278,75 @@ describe("direct keyword phrase integrity", () => {
         expect(/\s(?:in|to|and|with|of|for|the|a)$/i.test(keyword.trim())).toBe(false);
         expect(keyword.includes("polished user in")).toBe(false);
       }
+    }
+  });
+
+  it("allows controlled reuse when document-wide unique JD phrases are exhausted", async () => {
+    const jobDescription = createJobDescription(
+      "Senior Frontend Engineer. Develop front-end applications using React.js and Next.js. Implement user interfaces with Tailwind CSS. Collaborate with cross-functional engineering teams. Experience with TypeScript and WebSockets is required.",
+    );
+    const context = createGenerationContext("PROFILE-REUSE", jobDescription);
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const extracted = await extractor.execute({ context, jobDescription });
+    const primary = extracted.requirements[0];
+    expect(primary).toBeTruthy();
+
+    const requirementsById = new Map(
+      extracted.requirements.map((requirement) => [
+        requirement.requirementId,
+        requirement,
+      ]),
+    );
+    const plan = {
+      bulletId: "EXP-001-B-006",
+      experienceId: "EXP-001",
+      requirementId: primary!.requirementId,
+      supportingRequirementIds: [],
+      sequence: 6,
+      achievementTheme: "component engineering",
+      achievementDimension: "production-delivery" as const,
+      roleFocusArea: "frontend delivery",
+      communicationFocused: false,
+      leadershipFocused: false,
+      targetSeniority: "senior" as const,
+      chronologyRank: 1,
+    };
+
+    // First pass discovers every grounded candidate, then we lock those keys to
+    // simulate inventory exhaustion on a later bullet (EXP-001-B-006).
+    const probe = new DirectJDKeywordEngine().select({
+      jobDescription,
+      plan,
+      requirementsById,
+      usedCanonicalKeys: new Set<string>(),
+      maximumKeywords: 8,
+    });
+    const usedCanonicalKeys = new Set(
+      probe.keywords.map((keyword) => canonicalKeywordKey(keyword)).filter(Boolean),
+    );
+    // Also lock JD-wide curated phrases so the unused-fallback path is empty.
+    for (const requirement of extracted.requirements) {
+      usedCanonicalKeys.add(canonicalKeywordKey(requirement.normalizedText));
+    }
+
+    const selection = new DirectJDKeywordEngine().select({
+      jobDescription,
+      plan,
+      requirementsById,
+      usedCanonicalKeys,
+      maximumKeywords: 2,
+    });
+
+    expect(selection.keywords.length).toBeGreaterThan(0);
+    expect(selection.controlledReuse.length).toBeGreaterThan(0);
+    for (const evidence of selection.evidence) {
+      expect(
+        jobDescription.rawText
+          .slice(evidence.startIndex, evidence.endIndex)
+          .toLocaleLowerCase(),
+      ).toBe(evidence.keyword.toLocaleLowerCase());
     }
   });
 });
