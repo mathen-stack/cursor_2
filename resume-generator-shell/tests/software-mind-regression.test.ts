@@ -127,6 +127,9 @@ describe("Software Mind Senior Frontend Engineer regression fixture", () => {
           /\bthrough\s+([a-z][a-z0-9+./\s-]{3,40})\s+through\s+\1\b/i,
         );
         expect(bullet.finalBullet).not.toMatch(
+          /\bDeployed solution design and design reviews\b/i,
+        );
+        expect(bullet.finalBullet).not.toMatch(
           /\b(solution design and design reviews|cross-functional planning and product partnership|canary releases and CI\/CD|stakeholder updates and risk communication)\b.*\bthrough\s+\1\b/i,
         );
         expect(bullet.finalBullet).not.toMatch(/\bAligned stakeholder alignment\b/i);

@@ -277,11 +277,15 @@ export function buildActionClause(input: {
     /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
     /^production frontend delivery outcomes$/i.test(normalizedDirectScope)
   ) {
-    const toolScope = joinNatural(
-      [...explicitTools, ...inferredMethods].slice(0, 2),
-    );
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    const methodScope = joinNatural(inferredMethods.slice(0, 2));
+    const methodLooksLikeProcessOnly =
+      /^(?:solution design|design reviews|technical documentation|delivery planning|architecture workshops)\b/i.test(
+        methodScope,
+      ) || / and /i.test(methodScope) && !/[A-Z]/.test(methodScope);
     normalizedDirectScope =
       toolScope ||
+      (!methodLooksLikeProcessOnly ? methodScope : "") ||
       compactFocus ||
       compactTheme ||
       "scalable React.js and TypeScript interfaces";
