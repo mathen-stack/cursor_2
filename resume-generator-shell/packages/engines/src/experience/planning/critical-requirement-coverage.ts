@@ -80,13 +80,14 @@ export function ensureCriticalRequirementCoverage(input: {
     supportingRequirementIds: [...plan.supportingRequirementIds],
     coverageRequirementIds: [...(plan.coverageRequirementIds ?? [])],
   }));
+  type MutablePlan = (typeof plans)[number];
 
   for (const requirement of uncoveredCriticals) {
     const preferredExperienceId = allocationExperienceByRequirement.get(
       requirement.requirementId,
     );
     const rankedPlans = plans
-      .map((plan) => {
+      .map((plan): { plan: MutablePlan; score: number } | null => {
         const assignment = assignmentByExperience.get(plan.experienceId);
         if (!assignment) {
           return null;
@@ -103,12 +104,7 @@ export function ensureCriticalRequirementCoverage(input: {
         };
       })
       .filter(
-        (
-          item,
-        ): item is {
-          plan: BulletPlanItem;
-          score: number;
-        } => item !== null,
+        (item): item is { plan: MutablePlan; score: number } => item !== null,
       )
       .sort((left, right) => {
         if (left.score !== right.score) {

@@ -32,7 +32,8 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     const artifact = await getResumeRenderer().export(payload.resume, payload.format);
-    return new Response(artifact.bytes, {
+    const body = Buffer.from(artifact.bytes);
+    return new Response(body, {
       status: 200,
       headers: {
         "Content-Type": artifact.mimeType,
