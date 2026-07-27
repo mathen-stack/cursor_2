@@ -19,6 +19,21 @@ import {
 } from "./sentence-quality-validator";
 import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 
+function uniqueSubstantiveKeywords(keywords: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const selected: string[] = [];
+  for (const keyword of keywords) {
+    const substantive = substantiveKeyword(stripFirstPersonPronouns(keyword));
+    const key = canonicalKeywordKey(substantive);
+    if (!substantive || !key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    selected.push(substantive);
+  }
+  return selected;
+}
+
 export interface RealBulletComposerOptions extends SentenceQualityValidatorOptions {
   sentencePatternEngine?: SentencePatternEngine;
   sentenceQualityValidator?: SentenceQualityValidator;
@@ -84,16 +99,13 @@ export class RealBulletComposer implements BulletComposer {
 
       // Keep only unused direct JD phrases in the visible bullet so the same
       // noun phrase (e.g. "data pipelines") is not cloned across experiences.
-      // Claim the substantive form composition embeds after weak-filler removal
-      // and leading-action stripping, so validation cannot require adverbs that
-      // normalizeBulletSentence deliberately deletes.
-      const visibleDirectKeywords = keywordPackage.directKeywords
-        .map((keyword) => stripFirstPersonPronouns(keyword).replace(/[,:;]+$/g, "").trim())
-        .map((keyword) => substantiveKeyword(keyword) || keyword)
-        .filter((keyword) => {
-          const key = canonicalKeywordKey(keyword);
+// Claim the substantive form that composition actually inserts into text.
+      const visibleDirectKeywords = uniqueSubstantiveKeywords(
+        keywordPackage.directKeywords.filter((keyword) => {
+          const key = canonicalKeywordKey(substantiveKeyword(keyword));
           return Boolean(key) && !usedDirectScopeKeys.has(key);
-        });
+        }),
+      );
       const compositionPackage = {
         ...keywordPackage,
         directKeywords: visibleDirectKeywords,
@@ -106,15 +118,13 @@ export class RealBulletComposer implements BulletComposer {
         directKeywordEvidence: keywordPackage.directKeywordEvidence.filter((evidence) =>
           visibleDirectKeywords.some(
             (keyword) =>
-              stripFirstPersonPronouns(keyword).toLocaleLowerCase() ===
-                stripFirstPersonPronouns(evidence.keyword).toLocaleLowerCase() ||
               canonicalKeywordKey(substantiveKeyword(keyword)) ===
-                canonicalKeywordKey(substantiveKeyword(evidence.keyword)),
+              canonicalKeywordKey(substantiveKeyword(evidence.keyword)),
           ),
         ),
       };
 
-      const actionClause = buildActionClause({
+      let actionClause = buildActionClause({
         plan,
         keywordPackage: compositionPackage,
         story,
@@ -124,7 +134,7 @@ export class RealBulletComposer implements BulletComposer {
         if (key) usedDirectScopeKeys.add(key);
       }
 
-      const composed = this.sentencePatternEngine.compose({
+      let composed = this.sentencePatternEngine.compose({
         actionClause,
         plan,
         keywordPackage: compositionPackage,
@@ -133,14 +143,37 @@ export class RealBulletComposer implements BulletComposer {
         maximumWords: this.sentenceQualityValidator.maximumWords,
         patternOffset: input.regenerationAttempt ?? 0,
       });
-      patternsByBullet.set(plan.bulletId, composed.sentencePattern);
 
-      // Claim only directs that survived composition/sanitization. Scope cleanup
-      // may replace soft-skill or truncated fragments with ATS-safe wording, and
-      // validation must not require the discarded fragment to remain verbatim.
-      const claimedDirectKeywords = visibleDirectKeywords.filter((keyword) =>
+      const missingDirects = visibleDirectKeywords.filter(
+        (keyword) => !directKeywordRepresented(composed.finalBullet, keyword),
+      );
+      if (missingDirects.length > 0) {
+        actionClause = `${actionClause.replace(/[.!?]+$/g, "")} covering ${missingDirects.join(" and ")}`;
+        composed = this.sentencePatternEngine.compose({
+          actionClause,
+          plan,
+          keywordPackage: compositionPackage,
+          story,
+          minimumWords: this.sentenceQualityValidator.minimumWords,
+          maximumWords: this.sentenceQualityValidator.maximumWords,
+          patternOffset: (input.regenerationAttempt ?? 0) + 1,
+        });
+      }
+
+      // Only claim directs that survived composition/compression so sentence
+      // validation cannot reject the bullet for truncated JD phrases.
+      const representedDirectKeywords = visibleDirectKeywords.filter((keyword) =>
         directKeywordRepresented(composed.finalBullet, keyword),
       );
+      const representedSupportingKeywords = compositionPackage.supportingKeywords.filter(
+        (keyword) => directKeywordRepresented(composed.finalBullet, keyword),
+      );
+      const representedOutcomeKeywords = compositionPackage.outcomeKeywords.filter(
+        (keyword) => directKeywordRepresented(composed.finalBullet, keyword),
+      );
+
+      patternsByBullet.set(plan.bulletId, composed.sentencePattern);
+
 
       drafts.push({
         bulletId: plan.bulletId,
@@ -150,9 +183,9 @@ export class RealBulletComposer implements BulletComposer {
         action: story.action,
         result: story.result,
         actionVerb: keywordPackage.actionVerb,
-        directKeywords: claimedDirectKeywords,
-        supportingKeywords: [...compositionPackage.supportingKeywords],
-        outcomeKeywords: [...compositionPackage.outcomeKeywords],
+directKeywords: representedDirectKeywords,
+        supportingKeywords: representedSupportingKeywords,
+        outcomeKeywords: representedOutcomeKeywords,
         finalBullet: composed.finalBullet,
         strengthScore: 0,
         distinctivenessScore: 0,
