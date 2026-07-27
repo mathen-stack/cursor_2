@@ -101,10 +101,34 @@ export class SummaryValidator {
 
     const duplicateKeyword = input.usedKeywords.some((keyword) => {
       const escaped = keyword.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const matches = input.summary.match(new RegExp(escaped, "gi"));
-      return (matches?.length ?? 0) > 1;
+      const matches = [...input.summary.matchAll(new RegExp(`\\b${escaped}\\b`, "gi"))];
+      const longerKeywords = input.usedKeywords
+        .map((item) => item.text)
+        .filter(
+          (text) =>
+            text.length > keyword.text.length &&
+            text.toLocaleLowerCase().includes(keyword.text.toLocaleLowerCase()),
+        );
+      const standalone = matches.filter((match) => {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        return !longerKeywords.some((longer) => {
+          const longerEscaped = longer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return [...input.summary.matchAll(new RegExp(`\\b${longerEscaped}\\b`, "gi"))].some(
+            (longerMatch) => {
+              const longerStart = longerMatch.index ?? 0;
+              const longerEnd = longerStart + longerMatch[0].length;
+              return start >= longerStart && end <= longerEnd;
+            },
+          );
+        });
+      });
+      return standalone.length > 1;
     });
-    const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 12;
+    // Allocator may select up to 2 domain + 7 technical + 3 outcome + 2 people
+    // keywords; composition uses at most 6 technical, so 14 is the intentional
+    // ceiling. Keep rejecting true repeats and runaway overload above that.
+    const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 14;
     if (!noKeywordStuffing) {
       addIssue(issues, "KEYWORD_STUFFING", "error", "Summary repeats or overloads JD keywords.");
     }

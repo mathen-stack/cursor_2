@@ -168,7 +168,18 @@ export class SummaryKeywordAllocator {
       });
     }
 
+    // Leadership & Delivery skills are represented by PEOPLE_PHRASES so they do
+    // not consume technical slots or collide with collaboration/leadership keys.
+    // Outcome-overlapping skill keys (e.g. SCALABILITY/RELIABILITY) stay with
+    // OUTCOME_PHRASES so summary wording remains outcome-focused.
+    const outcomeKeys = new Set(OUTCOME_PHRASES.map((definition) => definition.key));
     for (const definition of SKILL_DEFINITIONS) {
+      if (definition.category === "Leadership & Delivery") {
+        continue;
+      }
+      if (outcomeKeys.has(definition.key)) {
+        continue;
+      }
       const evidence = findAlias(text, definition.aliases, definition.caseSensitive ?? false);
       if (!evidence) continue;
       const occurrences = occurrenceCount(text, definition.aliases, definition.caseSensitive ?? false);
