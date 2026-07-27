@@ -11,6 +11,7 @@ import { SituationGenerationEngine } from "./situation-generation-engine";
 import { StarCoherenceValidator } from "./star-coherence-validator";
 import { validateStarGeneration } from "./star-generation-validator";
 import { TaskGenerationEngine } from "./task-generation-engine";
+import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 
 export interface RealStarGeneratorOptions {
   situationEngine?: SituationGenerationEngine;
@@ -46,6 +47,7 @@ export class RealStarGenerator implements StarGenerator {
     const requirementsById = new Map(input.requirements.map((item) => [item.requirementId, item]));
     const packagesByBullet = new Map(input.keywordPackages.map((item) => [item.bulletId, item]));
     const usedMetricPatterns = new Set<string>();
+    const usedBusinessImpactKeys = new Set<string>();
     for (const existing of [
       ...(input.reservedStories ?? []),
       ...(input.previousStories ?? []),
@@ -55,6 +57,11 @@ export class RealStarGenerator implements StarGenerator {
           `${metric.metricType}:${metric.direction}:${metric.unit}:${metric.measure.toLowerCase()}`,
         );
         usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
+      }
+      if (existing.businessImpact) {
+        usedBusinessImpactKeys.add(
+          canonicalKeywordKey(existing.businessImpact.replace(/[.:;!?]+/g, " ")),
+        );
       }
     }
     void input.regenerationAttempt;
@@ -102,7 +109,12 @@ export class RealStarGenerator implements StarGenerator {
         );
         usedMetricPatterns.add(`measure:${metric.measure.toLowerCase()}`);
       }
-      const result = this.resultEngine.generate({ ...common, metrics });
+      const result = this.resultEngine.generate({
+        ...common,
+        metrics,
+        usedBusinessImpactKeys,
+      });
+      usedBusinessImpactKeys.add(result.businessImpactKey);
       const draft = {
         bulletId: plan.bulletId,
         experienceId: plan.experienceId,

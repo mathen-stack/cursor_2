@@ -140,19 +140,29 @@ export function buildActionClause(input: {
   const themeScope = cleanScope(
     stripFirstPersonPronouns(input.plan.achievementTheme || ""),
   );
-  const dimensionScope = input.plan.achievementDimension.replace(/-/g, " ");
   const focusScope = cleanScope(
     stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
   );
-  const shortFallback =
+  const compactFocus =
+    focusScope.split(/\s+/).filter(Boolean).length > 0 &&
+    focusScope.split(/\s+/).length <= 8 &&
+    !/,| and | through /i.test(focusScope)
+      ? focusScope
+      : "";
+  const compactTheme =
     themeScope.split(/\s+/).filter(Boolean).length > 0 &&
     themeScope.split(/\s+/).length <= 6
       ? themeScope
-      : focusScope.split(/\s+/).filter(Boolean).length > 0 &&
-          focusScope.split(/\s+/).length <= 6 &&
-          !/,| and | through /i.test(focusScope)
-        ? focusScope
-        : dimensionScope;
+      : "";
+  // Never fall back to bare achievement-dimension labels such as
+  // "cross functional alignment" or "reliability observability" — those clone
+  // across roles whenever the same dimension is reused.
+  const shortFallback =
+    compactFocus ||
+    compactTheme ||
+    substantiveKeyword(input.story.task) ||
+    substantiveKeyword(input.story.action) ||
+    "production delivery outcomes";
   const directScope =
     joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
       ? joinedDirectScope
@@ -188,11 +198,17 @@ export function buildActionClause(input: {
       : directScope;
 
   if (input.plan.communicationFocused) {
-    const communicationScope = /stakeholder|cross-functional|collaborat|alignment|team/i.test(
-      normalizedDirectScope,
-    )
-      ? normalizedDirectScope
-      : `cross-functional delivery for ${normalizedDirectScope}`;
+    const looksLikeGenericAlignment =
+      /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration)$/i.test(
+        normalizedDirectScope,
+      );
+    const communicationScope =
+      !looksLikeGenericAlignment &&
+      /stakeholder|collaborat|product|business|requirements|team/i.test(
+        normalizedDirectScope,
+      )
+        ? normalizedDirectScope
+        : `stakeholder alignment for ${compactFocus || normalizedDirectScope}`;
     return stripTerminal(`${verb} ${communicationScope}${supportClause}`);
   }
 
