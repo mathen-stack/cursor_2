@@ -154,18 +154,26 @@ export function buildActionClause(input: {
     themeScope.split(/\s+/).length <= 6
       ? themeScope
       : "";
+  const compactTask = substantiveKeyword(input.story.task)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(" ");
   // Never fall back to bare achievement-dimension labels such as
   // "cross functional alignment" or "reliability observability" — those clone
   // across roles whenever the same dimension is reused.
   const shortFallback =
     compactFocus ||
     compactTheme ||
-    substantiveKeyword(input.story.task) ||
-    substantiveKeyword(input.story.action) ||
+    compactTask ||
     "production delivery outcomes";
   const directScope =
     joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
       ? joinedDirectScope
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 14)
+          .join(" ")
       : shortFallback;
   const supportValues = removeContainedPhrases(
     input.keywordPackage.supportingKeywords

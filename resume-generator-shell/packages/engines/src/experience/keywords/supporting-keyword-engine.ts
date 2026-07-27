@@ -7,6 +7,7 @@ import {
   EXPLICIT_TOOL_PATTERNS,
   SUPPORTING_BY_CATEGORY,
   SUPPORTING_BY_DIMENSION,
+  SUPPORTING_FALLBACK_POOL,
 } from "./keyword-taxonomy";
 import { canonicalKeywordKey, containsCaseInsensitive } from "./keyword-normalizer";
 
@@ -189,8 +190,13 @@ export class SupportingKeywordEngine {
     const category = SUPPORTING_BY_CATEGORY[input.requirement.category].map(
       (keyword) => inferredCandidate(keyword, "category"),
     );
+    const fallback = SUPPORTING_FALLBACK_POOL.map((keyword) => ({
+      ...inferredCandidate(keyword, "dimension"),
+      score: 20,
+      rationale: "Fallback supporting method used after primary inventories were exhausted under document-wide uniqueness locks.",
+    }));
 
-    const all = dedupe([...explicit, ...dimension, ...category]).filter(
+    const all = dedupe([...explicit, ...dimension, ...category, ...fallback]).filter(
       (candidate) =>
         !input.directCanonicalKeys.has(candidate.canonicalKey) &&
         !input.directKeywords.some((directKeyword) =>
@@ -212,7 +218,9 @@ export class SupportingKeywordEngine {
       selected.push(candidate);
     }
 
-    if (selected.length < maximumKeywords) {
+    // Prefer completing the bullet with one unique supporting method over failing
+    // generation when the document-wide inventory is nearly exhausted.
+    if (selected.length === 0) {
       throw new Error(
         `Supporting keyword inventory is insufficient to allocate ${maximumKeywords} distinct keywords for ${input.plan.bulletId}.`,
       );

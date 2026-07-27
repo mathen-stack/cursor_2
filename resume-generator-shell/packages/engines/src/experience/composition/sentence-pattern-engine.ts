@@ -13,6 +13,7 @@ import {
   metricAsNoun,
   normalizeBulletSentence,
   stripFirstPersonPronouns,
+  substantiveKeyword,
   uncoveredOutcomeKeywords,
   wordCount,
 } from "./bullet-language";
@@ -106,13 +107,102 @@ function buildWithPattern(input: {
   }
 }
 
-function compressToMaximumWords(text: string, maximumWords: number): string {
+function requiredPhrases(keywordPackage: KeywordPackage): string[] {
+  const shortDirects = keywordPackage.directKeywords
+    .map((keyword) => substantiveKeyword(stripFirstPersonPronouns(keyword)))
+    .filter((keyword) => {
+      const count = keyword.split(/\s+/).filter(Boolean).length;
+      return count > 0 && count <= 8;
+    });
+  return [
+    ...shortDirects,
+    ...keywordPackage.supportingKeywords.map(stripFirstPersonPronouns),
+    ...keywordPackage.outcomeKeywords.map(stripFirstPersonPronouns),
+  ].filter(Boolean);
+}
+
+function containsPhrase(text: string, phrase: string): boolean {
+  return text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase());
+}
+
+function shortenActionClause(actionClause: string, maximumWords: number): string {
+  const tokens = stripFirstPersonPronouns(actionClause).split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return tokens.join(" ");
+  }
+  return tokens.slice(0, maximumWords).join(" ");
+}
+
+function compressToMaximumWords(
+  text: string,
+  maximumWords: number,
+  preserve: readonly string[],
+): string {
   const cleaned = stripFirstPersonPronouns(text.replace(/[.!?]+$/g, "").trim());
   const tokens = cleaned.split(/\s+/).filter(Boolean);
   if (tokens.length <= maximumWords) {
     return normalizeBulletSentence(cleaned);
   }
-  return normalizeBulletSentence(tokens.slice(0, maximumWords).join(" "));
+
+  // Keep the trailing metric/result clause intact when possible.
+  const segments = cleaned.split(/,\s+/);
+  if (segments.length >= 2) {
+    const tail = segments.slice(-2).join(", ");
+    const headBudget = Math.max(8, maximumWords - wordCount(tail) - 1);
+    const head = shortenActionClause(segments.slice(0, -2).join(", ") || segments[0] || "", headBudget);
+    const rebuilt = normalizeBulletSentence([head, ...segments.slice(-2)].filter(Boolean).join(", "));
+    if (
+      wordCount(rebuilt) <= maximumWords &&
+      preserve.every((phrase) => !phrase || containsPhrase(rebuilt, phrase))
+    ) {
+      return rebuilt;
+    }
+  }
+
+  let compressed = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhrase(compressed, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    const keep = Math.max(6, maximumWords - phraseTokens.length - 1);
+    compressed = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  return normalizeBulletSentence(compressed);
+}
+
+function buildCandidates(input: {
+  actionClause: string;
+  plan: BulletPlanItem;
+  keywordPackage: KeywordPackage;
+  story: StarStory;
+  patternOffset?: number;
+}): Array<{ finalBullet: string; sentencePattern: BulletSentencePattern }> {
+  const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
+  const candidatePatterns: BulletSentencePattern[] = [
+    preferredPattern,
+    ...GENERAL_PATTERNS,
+    "action-metric-business-impact",
+  ];
+  const uniquePatterns = [...new Set(candidatePatterns)];
+  return uniquePatterns.flatMap((pattern) => {
+    const withImpact = buildWithPattern({
+      ...input,
+      pattern,
+      includeBusinessImpact: true,
+    });
+    const withoutImpact = buildWithPattern({
+      ...input,
+      pattern,
+      includeBusinessImpact: false,
+    });
+    return [
+      { finalBullet: withImpact, sentencePattern: pattern },
+      { finalBullet: withoutImpact, sentencePattern: pattern },
+    ];
+  });
 }
 
 export class SentencePatternEngine {
@@ -127,53 +217,36 @@ export class SentencePatternEngine {
   }): { finalBullet: string; sentencePattern: BulletSentencePattern } {
     const minimumWords = input.minimumWords ?? 16;
     const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
-    const candidatePatterns: BulletSentencePattern[] = [
-      preferredPattern,
-      ...GENERAL_PATTERNS,
-      "action-metric-business-impact",
+    const preserve = requiredPhrases(input.keywordPackage);
+    const actionBudgets = [
+      wordCount(input.actionClause),
+      Math.max(10, input.maximumWords - 16),
+      Math.max(8, input.maximumWords - 20),
     ];
-    const uniquePatterns = [...new Set(candidatePatterns)];
 
-    const candidates = uniquePatterns.flatMap((pattern) => {
-      const withImpact = buildWithPattern({
+    const candidates = actionBudgets.flatMap((budget) => {
+      const actionClause = shortenActionClause(input.actionClause, budget);
+      return buildCandidates({
         ...input,
-        pattern,
-        includeBusinessImpact: true,
+        actionClause,
       });
-      const withoutImpact = buildWithPattern({
-        ...input,
-        pattern,
-        includeBusinessImpact: false,
-      });
-      return [
-        { finalBullet: withImpact, sentencePattern: pattern },
-        { finalBullet: withoutImpact, sentencePattern: pattern },
-      ];
     });
 
-    const inRange = candidates.filter((candidate) => {
+    const valid = candidates.filter((candidate) => {
       const count = wordCount(candidate.finalBullet);
-      return count >= minimumWords && count <= input.maximumWords;
-    });
-    if (inRange.length > 0) {
       return (
-        inRange.find((candidate) => candidate.sentencePattern === preferredPattern) ??
-        inRange[0]!
+        count >= minimumWords &&
+        count <= input.maximumWords &&
+        preserve.every((phrase) => !phrase || containsPhrase(candidate.finalBullet, phrase))
+      );
+    });
+    if (valid.length > 0) {
+      return (
+        valid.find((candidate) => candidate.sentencePattern === preferredPattern) ??
+        valid[0]!
       );
     }
 
-    const underMaximum = candidates
-      .filter((candidate) => wordCount(candidate.finalBullet) <= input.maximumWords)
-      .sort(
-        (left, right) =>
-          wordCount(right.finalBullet) - wordCount(left.finalBullet),
-      );
-    if (underMaximum[0] && wordCount(underMaximum[0].finalBullet) >= minimumWords) {
-      return underMaximum[0];
-    }
-
-    // Prefer the shortest complete candidate, then compress into the scan-friendly
-    // word limit rather than shipping an overlong bullet that fails validation.
     const shortest = [...candidates].sort(
       (left, right) =>
         wordCount(left.finalBullet) - wordCount(right.finalBullet),
@@ -182,6 +255,7 @@ export class SentencePatternEngine {
       const compressed = compressToMaximumWords(
         shortest.finalBullet,
         input.maximumWords,
+        preserve,
       );
       if (wordCount(compressed) >= minimumWords) {
         return {
@@ -194,12 +268,12 @@ export class SentencePatternEngine {
     const base =
       candidates.find((candidate) => candidate.sentencePattern === preferredPattern)
         ?.finalBullet ?? candidates[0]?.finalBullet ?? "";
-    const expanded = compressToMaximumWords(
-      `${base.replace(/[.!?]+$/g, "")}, enabling stronger delivery outcomes for product and engineering stakeholders`,
-      input.maximumWords,
-    );
     return {
-      finalBullet: expanded,
+      finalBullet: compressToMaximumWords(
+        `${base.replace(/[.!?]+$/g, "")}, enabling stronger delivery outcomes for product and engineering stakeholders`,
+        input.maximumWords,
+        preserve,
+      ),
       sentencePattern: preferredPattern,
     };
   }
