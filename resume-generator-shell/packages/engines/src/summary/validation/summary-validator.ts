@@ -90,7 +90,7 @@ export class SummaryValidator {
       addIssue(issues, "PERSONAL_PRONOUNS", "error", "Summary contains first-person pronouns.");
     }
 
-    const noCliches = !/\b(?:results[- ]driven|dynamic(?:\s+professional)?|go[- ]getter|hard[- ]working|team player|proven track record|seasoned(?:\s+professional)?|passionate(?:\s+about)?|proactive|synergistic|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker)\b/i.test(input.summary);
+    const noCliches = !/\b(?:results[- ]driven|dynamic(?:\s+professional)?|go[- ]getter|hard[- ]working|team player|proven track record|seasoned(?:\s+professional)?|passionate(?:\s+about)?|proactive|synergistic|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker|(?:verbal and written\s+)?communication skills|soft skills|interpersonal skills|people skills)\b/i.test(input.summary);
     if (!noCliches) {
       addIssue(issues, "SUMMARY_CLICHE", "error", "Summary contains generic resume clichés.");
     }

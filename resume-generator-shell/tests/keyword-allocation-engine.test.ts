@@ -165,6 +165,66 @@ describe("Real global keyword allocation", () => {
     expect(output.validation?.leadershipPackagesRelevant).toBe(true);
   });
 
+  it("never allocates Resume Worded soft-skill buzzphrases as direct keywords", async () => {
+    const jobDescription = createJobDescription(
+      `Senior Frontend Engineer
+Build scalable front-end applications with React.js and TypeScript.
+Collaborate with product and engineering stakeholders on delivery priorities.
+Strong verbal and written communication skills in English, with the ability to clearly explain technical concepts.`,
+    );
+    const context = createGenerationContext("PROFILE-SOFT-SKILL", jobDescription);
+    const careerHistory = [
+      {
+        experienceId: "EXP-CURRENT",
+        companyName: "Example Frontend",
+        startDate: "2022-01",
+        endDate: "Present",
+      },
+      {
+        experienceId: "EXP-PAST",
+        companyName: "Example Software",
+        startDate: "2018-01",
+        endDate: "2021-12",
+      },
+    ];
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const extracted = await extractor.execute({ context, jobDescription });
+    const roleEngine = new RealRoleAssignmentEngine({ referenceDate: REFERENCE_DATE });
+    const roles = await roleEngine.execute({
+      context,
+      jobDescription,
+      careerHistory,
+      requirements: extracted.requirements,
+    });
+    const plans = await new RealBulletPlanner().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      minimumBulletsPerRole: 5,
+    });
+    const output = await new RealKeywordAllocator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      plans: plans.plans,
+    });
+
+    for (const keywordPackage of output.packages) {
+      for (const keyword of [
+        ...keywordPackage.directKeywords,
+        ...keywordPackage.supportingKeywords,
+        ...keywordPackage.outcomeKeywords,
+      ]) {
+        expect(keyword).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
+        expect(keyword).not.toMatch(/\b(?:soft skills|interpersonal skills|people skills)\b/i);
+      }
+    }
+  });
+
   it("does not mutate requirements, plans, assignments, or the JD", async () => {
     const { input } = await createRealAllocation();
     const snapshot = structuredClone(input);

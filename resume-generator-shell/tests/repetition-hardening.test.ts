@@ -46,6 +46,19 @@ describe("repetition hardening", () => {
     expect(isJdMarketingOrMetaScope("machine learning models")).toBe(false);
   });
 
+  it("rewrites soft-skill buzzphrases out of generated bullet text", () => {
+    expect(
+      normalizeBulletSentence(
+        "Led strong verbal and written communication skills with product stakeholders, increasing delivery alignment by 18%",
+      ),
+    ).not.toMatch(/\bcommunication skills\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Facilitated communication skills across engineering partners, reducing handoff delays by 22%",
+      ),
+    ).toMatch(/stakeholder communication/i);
+  });
+
   it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {
     const jobDescription = createJobDescription(
       `Senior Machine Learning Engineer
@@ -123,6 +136,7 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
       expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
       expect(bullet).not.toMatch(/\bdynamic\b/i);
       expect(bullet).not.toMatch(/\bproactive\b/i);
+      expect(bullet).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
     }
 
     const percentAmounts = bullets

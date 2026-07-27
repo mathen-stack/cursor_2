@@ -191,6 +191,13 @@ export function normalizeBulletSentence(value: string): string {
   const normalized = stripFirstPersonPronouns(
     value
       .replace(WEAK_FILLER, "")
+      // Resume Worded flags bare soft-skill buzzphrases; swap for concrete signal.
+      .replace(
+        /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
+        "stakeholder communication",
+      )
+      .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
+      .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
       .replace(/\s+,/g, ",")
       .replace(/,\s*,+/g, ", ")
       .replace(/\s+/g, " ")

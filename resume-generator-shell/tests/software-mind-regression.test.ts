@@ -112,6 +112,8 @@ describe("Software Mind Senior Frontend Engineer regression fixture", () => {
     expect(resume.summary.summary).toMatch(/Next\.js/i);
     expect(resume.summary.summary).toMatch(/TypeScript/i);
     expect(resume.summary.summary).not.toMatch(/\b(?:I|me|my|we|our)\b/i);
+    expect(resume.summary.summary).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
+    expect(resume.summary.summary).not.toMatch(/\b(?:dynamic|proactive)\b/i);
 
     expect(resume.readiness?.contentMutated).toBe(false);
     expect(resume.readiness?.readyForExternalTest).toBe(true);
@@ -143,6 +145,9 @@ describe("Software Mind Senior Frontend Engineer regression fixture", () => {
         expect(bullet.finalBullet).not.toMatch(/\breduction in system interoperability\b/i);
         expect(bullet.finalBullet).not.toMatch(/\bmake an impact for companies\b/i);
         expect(bullet.finalBullet).not.toMatch(/\bperformance and enhance\b/i);
+        expect(bullet.finalBullet).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
+        expect(bullet.finalBullet).not.toMatch(/\b(?:soft skills|interpersonal skills|people skills)\b/i);
+        expect(bullet.finalBullet).not.toMatch(/\b(?:dynamic|proactive)\b/i);
       }
     }
 

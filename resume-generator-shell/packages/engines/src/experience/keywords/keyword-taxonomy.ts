@@ -50,7 +50,9 @@ export const DIRECT_JD_PHRASE_PATTERNS: readonly PhrasePattern[] = [
   { label: "real-time communication", pattern: /\breal[- ]time communication\b/gi },
   { label: "player protection", pattern: /\bplayer protection\b/gi },
   { label: "responsible gaming", pattern: /\bresponsible gaming\b/gi },
-  { label: "communication skills", pattern: /\b(?:verbal and written )?communication skills\b/gi },
+  // Do not allocate the Resume Worded buzzphrase "communication skills".
+  // Soft-skill JD lines are rewritten to concrete collaboration scopes at
+  // composition time; keep coverage via "stakeholder communication" below.
   { label: "cross-functional engineering teams", pattern: /\bcross[- ]functional engineering teams?\b/gi },
   { label: "front-end experiences", pattern: /\bfront[- ]end experiences?\b/gi },
   { label: "front-end applications", pattern: /\bfront[- ]end applications?\b/gi },

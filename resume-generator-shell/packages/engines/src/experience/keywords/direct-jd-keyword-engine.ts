@@ -81,11 +81,13 @@ function finalizeKeywordPhrase(value: string): string | null {
   const finalized = chosen.join(" ");
   // Reject adjective-only or soft-skill fragments that produce ungrammatical
   // bullets such as "builds reliable" or "Led strong verbal ... skills".
+  // Also reject Resume Worded buzzphrases like bare "communication skills".
   if (
     /^(?:strong|excellent|good|proven)\s+(?:verbal|written|communication|soft)\b/i.test(
       finalized,
     ) ||
-    /^verbal and written communication skills\b/i.test(finalized)
+    /\b(?:verbal and written\s+)?communication skills\b/i.test(finalized) ||
+    /^(?:soft skills|interpersonal skills|people skills)\b/i.test(finalized)
   ) {
     return null;
   }

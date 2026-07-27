@@ -10,7 +10,7 @@ const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_OPENING = /^(?:Responsible for|Worked on|Helped with|Assisted with|Participated in|Involved in)\b/i;
 const FILLER = /\b(?:successfully|effectively|various|multiple different|numerous various|very|really)\b/i;
 const VAGUE_BUZZWORDS =
-  /\b(?:dynamic|proactive|synergistic|go[- ]getter|hard[- ]working|team player|results[- ]driven|proven track record|seasoned|passionate|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker)\b/i;
+  /\b(?:dynamic|proactive|synergistic|go[- ]getter|hard[- ]working|team player|results[- ]driven|proven track record|seasoned|passionate|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker|(?:verbal and written\s+)?communication skills|soft skills|interpersonal skills|people skills)\b/i;
 const PASSIVE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|designed|deployed|managed|created|optimized|led|completed)\b/i;
 const METRIC = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)(?=\s|[,.]|$)/i;
 const BUSINESS_IMPACT = /\b(?:customer|user|revenue|cost|delivery|adoption|risk|quality|reliability|availability|productivity|efficiency|time-to-market|stakeholder|business|operations?)\b/i;

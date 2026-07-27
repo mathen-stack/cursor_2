@@ -130,9 +130,19 @@ export class RealBulletComposer implements BulletComposer {
 
       // Keep only unused direct JD phrases in the visible bullet so the same
       // noun phrase (e.g. "data pipelines") is not cloned across experiences.
-// Claim the substantive form that composition actually inserts into text.
+      // Claim the substantive form that composition actually inserts into text.
+      // Drop soft-skill buzzphrases so they cannot be forced back via
+      // "covering …" when the action scope was rewritten to concrete work.
       const visibleDirectKeywords = uniqueSubstantiveKeywords(
         keywordPackage.directKeywords.filter((keyword) => {
+          if (
+            /\b(?:(?:strong|excellent|good|proven)\s+)?(?:verbal and written\s+)?communication skills\b/i.test(
+              keyword,
+            ) ||
+            /\b(?:soft skills|interpersonal skills|people skills)\b/i.test(keyword)
+          ) {
+            return false;
+          }
           const key = canonicalKeywordKey(substantiveKeyword(keyword));
           return Boolean(key) && !usedDirectScopeKeys.has(key);
         }),
@@ -140,6 +150,14 @@ export class RealBulletComposer implements BulletComposer {
       const rewrittenSupporting = keywordPackage.supportingKeywords
         .map((keyword) => stripFirstPersonPronouns(keyword))
         .map((keyword) => {
+          if (
+            /\b(?:(?:strong|excellent|good|proven)\s+)?(?:verbal and written\s+)?communication skills\b/i.test(
+              keyword,
+            ) ||
+            /\b(?:soft skills|interpersonal skills|people skills)\b/i.test(keyword)
+          ) {
+            return "stakeholder communication";
+          }
           if (
             /^(?:coordinat|automat)/i.test(keywordPackage.actionVerb) &&
             /\bcoordination\b/i.test(keyword)
