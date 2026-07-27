@@ -17,7 +17,9 @@ import {
   clampScore,
   hasBusinessImpact,
   hasCommunicationSignal,
+  hasIntraBulletVerbEcho,
   hasMetric,
+  hasRepeatedContentNoun,
   hasSeniorSignal,
   jaccard,
   metricFingerprint,
@@ -226,7 +228,9 @@ export class RealExperienceValidator implements ExperienceValidator {
 
     const metricRepetitionGroups = duplicatesBy(
       bulletContexts,
-      (item) => `${item.experienceId}:${metricFingerprint(item.bullet.finalBullet)}`,
+      // Document-wide: the same measure label (e.g. feature adoption) must not
+      // reappear across roles with only the percentage changed.
+      (item) => metricFingerprint(item.bullet.finalBullet),
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
     const achievementRepetitionGroups = pairGroups(
@@ -275,7 +279,7 @@ export class RealExperienceValidator implements ExperienceValidator {
     applyDuplicateGroups(semanticRepetitionGroups, "semantic-repetition", "Two bullets communicate substantially the same achievement.");
     applyDuplicateGroups(structuralRepetitionGroups, "structural-repetition", "Two bullets use an overly similar sentence structure.", "warning");
     applyDuplicateGroups(achievementRepetitionGroups, "achievement-repetition", "Two bullets are grounded in the same underlying achievement.");
-    applyDuplicateGroups(metricRepetitionGroups, "metric-repetition", "A metric pattern is repeated within the same role.");
+    applyDuplicateGroups(metricRepetitionGroups, "metric-repetition", "A metric measure pattern is repeated across the resume.");
 
     const bulletDiagnostics: ExperienceBulletDiagnostic[] = [];
     for (const context of bulletContexts) {
@@ -327,6 +331,16 @@ export class RealExperienceValidator implements ExperienceValidator {
       if (languageErrors.length > 0) {
         errors.push(...languageErrors);
         addFailure(bullet.bulletId, languageErrors.some((item) => /weak|filler/i.test(item)) ? "weak-language" : "ats-language");
+      }
+
+      if (
+        hasIntraBulletVerbEcho(bullet.finalBullet) ||
+        hasRepeatedContentNoun(bullet.finalBullet)
+      ) {
+        errors.push(
+          "Bullet repeats the same action stem or content noun inside one sentence.",
+        );
+        addFailure(bullet.bulletId, "intra-bullet-repetition");
       }
 
       const quantified = hasMetric(bullet.finalBullet);

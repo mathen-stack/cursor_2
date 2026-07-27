@@ -111,7 +111,55 @@ export function normalizeBulletSentence(value: string): string {
   if (!normalized) {
     return "";
   }
-  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}.`;
+  const withoutEcho = stripIntraBulletRepetition(normalized);
+  return `${withoutEcho.charAt(0).toUpperCase()}${withoutEcho.slice(1)}.`;
+}
+
+/** Morphological stem used to catch Coordinated/coordination style echoes. */
+export function actionVerbStem(verb: string): string {
+  return verb
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/(?:iated|ated|ized|ised|yed|ied|ed|ing|es|s)$/i, "")
+    .replace(/i$/i, "y");
+}
+
+/**
+ * Removes only clear verb/object tautologies and duplicated measure nouns.
+ * Avoid broad stem deletion so allocated supporting methods remain representable.
+ */
+export function stripIntraBulletRepetition(sentence: string): string {
+  let text = sentence.replace(/[.!?]+$/g, "").trim();
+
+  // Coordinated/Aligned/Automated ... delivery coordination → keep a collaboration signal.
+  text = text.replace(
+    /\b(Coordinat\w*|Align\w*|Automat\w*)\b([^]*?)\b(?:stakeholder\s+)?(?:alignment and\s+)?delivery\s+coordination\b/i,
+    "$1$2 cross-functional delivery priorities",
+  );
+  text = text.replace(
+    /\b(Coordinat\w*)\b([^]*?)\bdependency\s+coordination\b/gi,
+    "$1$2 dependency planning",
+  );
+  text = text.replace(
+    /\b(Coordinat\w*)\b([^]*?)\bcoordination\b/gi,
+    "$1$2 collaboration",
+  );
+  text = text.replace(
+    /\b(Align\w*)\b([^]*?)\balignment\b/gi,
+    "$1$2 priorities",
+  );
+
+  // "increasing throughput by 2.6x and improving request throughput"
+  text = text.replace(
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+([^,]+?)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/gi,
+    "$1 $2 by $3",
+  );
+  text = text.replace(
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+(\w+)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+\w+\s+\2\b/gi,
+    "$1 $2 by $3",
+  );
+
+  return text.replace(/\s+/g, " ").replace(/\s+,/g, ",").replace(/,\s*,+/g, ", ").trim();
 }
 
 export function substantiveKeyword(keyword: string): string {
@@ -326,12 +374,36 @@ export function buildActionClause(input: {
   if (/\b(?:the effort to|took responsibility to)\b/i.test(normalizedDirectScope)) {
     normalizedDirectScope = cleanFallback;
   }
+  // Avoid "Coordinated/Aligned/Automated ... delivery coordination" tautologies.
+  if (/^(?:coordinat|align|automat)/i.test(verb)) {
+    normalizedDirectScope = normalizedDirectScope
+      .replace(
+        /\bstakeholder alignment and delivery coordination\b/gi,
+        "cross-functional delivery priorities",
+      )
+      .replace(/\bdelivery coordination\b/gi, "delivery priorities")
+      .replace(/\bcoordination\b/gi, "collaboration");
+  }
+  if (/^align/i.test(verb)) {
+    normalizedDirectScope = normalizedDirectScope
+      .replace(/\bstakeholder alignment\b/gi, "cross-functional priorities")
+      .replace(/\balignment\b/gi, "priorities");
+  }
+  const filteredMethods = inferredMethods.map((keyword) => {
+    if (/^(?:coordinat|automat)/i.test(verb) && /\bcoordination\b/i.test(keyword)) {
+      return keyword.replace(/\bcoordination\b/gi, "planning");
+    }
+    if (/^align/i.test(verb) && /\balignment\b/i.test(keyword)) {
+      return keyword.replace(/\balignment\b/gi, "planning");
+    }
+    return keyword;
+  });
   const activeSupportClause = (() => {
     const lowerScope = normalizedDirectScope.toLocaleLowerCase();
     const remainingTools = explicitTools.filter(
       (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
     );
-    const remainingMethods = inferredMethods.filter(
+    const remainingMethods = filteredMethods.filter(
       (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
     );
     return [
@@ -355,7 +427,10 @@ export function buildActionClause(input: {
 
   if (input.plan.communicationFocused) {
     const looksLikeGenericAlignment =
-      /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration)$/i.test(
+      /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration|cross-functional delivery priorities|delivery priorities)\b/i.test(
+        normalizedDirectScope,
+      ) ||
+      /\bstakeholder alignment and delivery (?:coordination|priorities)\b/i.test(
         normalizedDirectScope,
       );
     const looksLikeSoftSkillProse =
@@ -414,11 +489,38 @@ export function metricAsNoun(metric: StarMetric): string {
   return `a ${metric.value}${metric.unit} ${noun} in ${metric.measure}`;
 }
 
+function isNearDuplicateMeasurePhrase(keyword: string, measure: string): boolean {
+  const keywordLower = keyword.toLocaleLowerCase().trim();
+  const measureLower = measure.toLocaleLowerCase().trim();
+  if (!keywordLower || !measureLower) {
+    return false;
+  }
+  if (keywordLower === measureLower) {
+    return true;
+  }
+  // "request throughput" restates measure "throughput"; keep "deployment speed"
+  // when the measure is the related but distinct "deployment cycle time".
+  if (measureLower.includes(keywordLower) || keywordLower.includes(measureLower)) {
+    return true;
+  }
+  const keywordTokens = keywordLower
+    .split(/[^a-z0-9+#.]+/)
+    .filter((token) => token.length > 2);
+  const measureTokens = new Set(
+    measureLower.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2),
+  );
+  if (keywordTokens.length < 2 || measureTokens.size === 0) {
+    return false;
+  }
+  return keywordTokens.every((token) => measureTokens.has(token));
+}
+
 export function uncoveredOutcomeKeywords(input: {
   actionClause: string;
   metrics: readonly StarMetric[];
   keywordPackage: KeywordPackage;
 }): string[] {
+  const measures = input.metrics.map((metric) => metric.measure);
   const coveredText = stripFirstPersonPronouns(
     `${input.actionClause} ${input.metrics
       .map((metric) => `${metric.displayText} ${metric.measure}`)
@@ -426,9 +528,15 @@ export function uncoveredOutcomeKeywords(input: {
   ).toLocaleLowerCase();
   return uniquePhrases(
     input.keywordPackage.outcomeKeywords.map(stripFirstPersonPronouns),
-  ).filter(
-    (keyword) => keyword && !coveredText.includes(keyword.toLocaleLowerCase()),
-  );
+  ).filter((keyword) => {
+    if (!keyword) return false;
+    const lower = keyword.toLocaleLowerCase();
+    if (coveredText.includes(lower)) return false;
+    if (measures.some((measure) => isNearDuplicateMeasurePhrase(keyword, measure))) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function compactBusinessImpact(story: StarStory, maximumWords = 9): string {

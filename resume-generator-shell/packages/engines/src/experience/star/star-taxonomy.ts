@@ -215,6 +215,8 @@ export const STAR_DIMENSION_PROFILES: Readonly<
     metricProfiles: [
       { metricType: "percentage", direction: "increase", unit: "%", minimum: 16, maximum: 31, label: "feature adoption" },
       { metricType: "delivery", direction: "decrease", unit: "%", minimum: 20, maximum: 36, label: "time to value" },
+      { metricType: "percentage", direction: "increase", unit: "%", minimum: 18, maximum: 34, label: "customer satisfaction" },
+      { metricType: "percentage", direction: "increase", unit: "%", minimum: 15, maximum: 29, label: "product uptake" },
     ],
   },
   "cross-functional-alignment": {
@@ -234,6 +236,8 @@ export const STAR_DIMENSION_PROFILES: Readonly<
     metricProfiles: [
       { metricType: "delivery", direction: "decrease", unit: "%", minimum: 22, maximum: 39, label: "delivery cycle time" },
       { metricType: "percentage", direction: "decrease", unit: "%", minimum: 24, maximum: 43, label: "requirements rework" },
+      { metricType: "percentage", direction: "decrease", unit: "%", minimum: 18, maximum: 33, label: "decision turnaround time" },
+      { metricType: "percentage", direction: "increase", unit: "%", minimum: 17, maximum: 31, label: "cross-team execution" },
     ],
   },
   "technical-leadership": {

@@ -34,6 +34,27 @@ function uniqueSubstantiveKeywords(keywords: readonly string[]): string[] {
   return selected;
 }
 
+function registerVisibleMultiWordScopes(
+  text: string,
+  usedKeys: Set<string>,
+): void {
+  const cleaned = stripFirstPersonPronouns(text)
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+(?:using|through)\s+.+$/i, "")
+    .trim();
+  const key = canonicalKeywordKey(substantiveKeyword(cleaned));
+  if (key && key.split("|").length >= 2) {
+    usedKeys.add(key);
+  }
+  // Also lock significant 3+ word windows to stop near-clone scopes.
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  for (let index = 0; index < words.length - 2; index += 1) {
+    const window = words.slice(index, index + 3).join(" ");
+    const windowKey = canonicalKeywordKey(substantiveKeyword(window));
+    if (windowKey) usedKeys.add(windowKey);
+  }
+}
+
 export interface RealBulletComposerOptions extends SentenceQualityValidatorOptions {
   sentencePatternEngine?: SentencePatternEngine;
   sentenceQualityValidator?: SentenceQualityValidator;
@@ -106,15 +127,41 @@ export class RealBulletComposer implements BulletComposer {
           return Boolean(key) && !usedDirectScopeKeys.has(key);
         }),
       );
+      const rewrittenSupporting = keywordPackage.supportingKeywords
+        .map((keyword) => stripFirstPersonPronouns(keyword))
+        .map((keyword) => {
+          if (
+            /^(?:coordinat|automat)/i.test(keywordPackage.actionVerb) &&
+            /\bcoordination\b/i.test(keyword)
+          ) {
+            return keyword.replace(/\bcoordination\b/gi, "planning");
+          }
+          if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
+            return keyword.replace(/\balignment\b/gi, "planning");
+          }
+          return keyword;
+        })
+        .filter(Boolean);
       const compositionPackage = {
         ...keywordPackage,
         directKeywords: visibleDirectKeywords,
-        supportingKeywords: keywordPackage.supportingKeywords
-          .map((keyword) => stripFirstPersonPronouns(keyword))
-          .filter(Boolean),
+        supportingKeywords: rewrittenSupporting,
         outcomeKeywords: keywordPackage.outcomeKeywords
           .map((keyword) => stripFirstPersonPronouns(keyword))
           .filter(Boolean),
+        supportingKeywordDetails: keywordPackage.supportingKeywordDetails.map((detail) => {
+          let keyword = stripFirstPersonPronouns(detail.keyword);
+          if (
+            /^(?:coordinat|automat)/i.test(keywordPackage.actionVerb) &&
+            /\bcoordination\b/i.test(keyword)
+          ) {
+            keyword = keyword.replace(/\bcoordination\b/gi, "planning");
+          }
+          if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
+            keyword = keyword.replace(/\balignment\b/gi, "planning");
+          }
+          return { ...detail, keyword };
+        }),
         directKeywordEvidence: keywordPackage.directKeywordEvidence.filter((evidence) =>
           visibleDirectKeywords.some(
             (keyword) =>
@@ -133,6 +180,15 @@ export class RealBulletComposer implements BulletComposer {
         const key = canonicalKeywordKey(substantiveKeyword(keyword));
         if (key) usedDirectScopeKeys.add(key);
       }
+      // Lock the visible action-object phrase so later bullets cannot clone the
+      // same multi-word scope (e.g. "stakeholder alignment and delivery ...").
+      const actionObject = actionClause
+        .replace(new RegExp(`^${keywordPackage.actionVerb}\\s+`, "i"), "")
+        .replace(/\s+(?:using|through)\s+.+$/i, "")
+        .trim();
+      const actionObjectKey = canonicalKeywordKey(substantiveKeyword(actionObject));
+      if (actionObjectKey) usedDirectScopeKeys.add(actionObjectKey);
+      registerVisibleMultiWordScopes(actionClause, usedDirectScopeKeys);
 
       let composed = this.sentencePatternEngine.compose({
         actionClause,
@@ -168,8 +224,13 @@ export class RealBulletComposer implements BulletComposer {
       const representedSupportingKeywords = compositionPackage.supportingKeywords.filter(
         (keyword) => directKeywordRepresented(composed.finalBullet, keyword),
       );
+      // Outcomes must appear verbatim — concept matching can false-positive on
+      // shared stems (e.g. "engineering velocity" vs "team delivery velocity").
       const representedOutcomeKeywords = compositionPackage.outcomeKeywords.filter(
-        (keyword) => directKeywordRepresented(composed.finalBullet, keyword),
+        (keyword) =>
+          composed.finalBullet
+            .toLocaleLowerCase()
+            .includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
       );
 
       patternsByBullet.set(plan.bulletId, composed.sentencePattern);

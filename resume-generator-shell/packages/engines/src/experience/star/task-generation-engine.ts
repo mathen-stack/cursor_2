@@ -20,7 +20,7 @@ export class TaskGenerationEngine {
     const ownership = input.plan.leadershipFocused
       ? "Owned the technical direction and cross-team execution required to"
       : input.plan.communicationFocused
-        ? "Owned stakeholder alignment and delivery coordination required to"
+        ? "Owned cross-functional collaboration and delivery planning required to"
         : input.assignment.seniority === "entry" || input.assignment.seniority === "junior"
           ? "Took responsibility to"
           : "Owned the effort to";

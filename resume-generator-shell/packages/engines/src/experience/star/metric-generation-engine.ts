@@ -20,7 +20,7 @@ function directionForMeasure(
   fallback: StarMetric["direction"],
 ): StarMetric["direction"] {
   if (
-    /\b(error|defect|cost|latency|time|risk|failure|toil|effort|onboarding)\b/i.test(
+    /\b(error|defect|cost|latency|time|risk|failure|toil|effort|onboarding|rework)\b/i.test(
       measure,
     )
   ) {
@@ -34,6 +34,34 @@ function directionForMeasure(
     return "increase";
   }
   return fallback === "maintain" ? "maintain" : fallback;
+}
+
+function measureKey(measure: string): string {
+  return `measure:${measure.trim().toLocaleLowerCase()}`;
+}
+
+function isMeasureAvailable(
+  measure: string,
+  usedMetricPatternKeys: ReadonlySet<string>,
+): boolean {
+  const key = measureKey(measure);
+  if (!measure.trim() || usedMetricPatternKeys.has(key)) {
+    return false;
+  }
+  // Also block near-duplicates such as "throughput" vs "request throughput".
+  const needle = measure.trim().toLocaleLowerCase();
+  for (const used of usedMetricPatternKeys) {
+    if (!used.startsWith("measure:")) continue;
+    const existing = used.slice("measure:".length);
+    if (
+      existing === needle ||
+      existing.includes(needle) ||
+      needle.includes(existing)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export class MetricGenerationEngine {
@@ -51,38 +79,50 @@ export class MetricGenerationEngine {
     const outcome =
       input.keywordPackage.outcomeKeywords[0] ??
       profile.metricProfiles[0]?.label ??
-      "performance";
+      "delivery outcomes";
 
     const selectedProfile =
-      profile.metricProfiles.find((candidate) => {
-        const key = `${candidate.metricType}:${candidate.direction}:${candidate.unit}:${candidate.label.toLowerCase()}`;
-        return (
-          !input.usedMetricPatternKeys.has(key) &&
-          !input.usedMetricPatternKeys.has(`measure:${candidate.label.toLowerCase()}`) &&
-          !input.usedMetricPatternKeys.has(`measure:${outcome.toLowerCase()}`)
-        );
-      }) ??
-      profile.metricProfiles.find((candidate) => {
-        return !input.usedMetricPatternKeys.has(`measure:${outcome.toLowerCase()}`);
-      }) ??
+      profile.metricProfiles.find((candidate) =>
+        isMeasureAvailable(candidate.label, input.usedMetricPatternKeys),
+      ) ??
+      profile.metricProfiles.find((candidate) =>
+        isMeasureAvailable(outcome, input.usedMetricPatternKeys),
+      ) ??
       profile.metricProfiles[0];
 
     if (!selectedProfile) {
       throw new Error(`No metric profile is available for ${input.plan.bulletId}.`);
     }
 
-    // Prefer the stock profile label when it is still unique; otherwise use the
-    // already-unique outcome so metric wording does not clone across bullets.
     const stockMeasure = selectedProfile.label;
-    const measure = input.usedMetricPatternKeys.has(`measure:${stockMeasure.toLowerCase()}`)
-      ? outcome
-      : stockMeasure;
+    let measure = stockMeasure;
+    if (!isMeasureAvailable(stockMeasure, input.usedMetricPatternKeys)) {
+      const fallbacks = [
+        outcome,
+        ...profile.metricProfiles.map((candidate) => candidate.label),
+        ...Object.values(STAR_DIMENSION_PROFILES).flatMap((entry) =>
+          entry.metricProfiles.map((candidate) => candidate.label),
+        ),
+        `${input.plan.achievementTheme} outcomes`,
+        `${input.plan.roleFocusArea || "delivery"} results`,
+      ];
+      measure =
+        fallbacks.find((candidate) =>
+          isMeasureAvailable(candidate, input.usedMetricPatternKeys),
+        ) ?? `${input.plan.bulletId.toLowerCase()} delivery outcome`;
+    }
+
     const direction =
       measure === stockMeasure
         ? selectedProfile.direction
         : directionForMeasure(measure, selectedProfile.direction);
 
-    const decimals = selectedProfile.metricType === "availability" ? 2 : selectedProfile.unit === "x" ? 1 : 0;
+    const decimals =
+      selectedProfile.metricType === "availability"
+        ? 2
+        : selectedProfile.unit === "x"
+          ? 1
+          : 0;
     let value = deterministicNumber(
       `${input.jobDescription.contentHash}:${input.assignment.experienceId}:${input.plan.bulletId}:${measure}`,
       selectedProfile.minimum,

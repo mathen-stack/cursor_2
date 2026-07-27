@@ -55,11 +55,35 @@ export function sentenceSkeleton(value: string): string {
 export function metricFingerprint(value: string): string {
   const match = value.match(/\b\d+(?:\.\d+)?\s?(%|x|ms|hours?|days?)(?=\s|[,.]|$)/i);
   const unit = match?.[1]?.toLowerCase() ?? "missing";
+  const measureMatch = value.match(
+    /\b(?:increasing|reducing|maintaining|improved|improving|increased|reduced|accelerating|shortening)\s+([^,]+?)\s+by\s+\d+/i,
+  );
+  const measure = normalizeText(measureMatch?.[1] ?? "");
+  if (measure) {
+    return `${unit}:measure:${measure}`;
+  }
   const context = value
     .replace(/\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)\b/gi, "")
     .split(/[,;]/)
     .slice(-1)[0] ?? value;
   return `${unit}:${normalizeText(context)}`;
+}
+
+export function hasIntraBulletVerbEcho(value: string): boolean {
+  return (
+    /\bCoordinat\w*\b[^.]*\bcoordination\b/i.test(value) ||
+    /\bAlign\w*\b[^.]*\balignment\b/i.test(value) ||
+    /\bAutomat\w*\b[^.]*\bautomation\b/i.test(value)
+  );
+}
+
+export function hasRepeatedContentNoun(value: string): boolean {
+  // Only flag measure restated in the trailing outcome clause, e.g.
+  // "increasing throughput by 2.6x and improving request throughput".
+  // Sharing a noun between the action scope and the metric is allowed.
+  return /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+((?:[a-z][a-z0-9+./-]*\s+){0,3}[a-z][a-z0-9+./-]*)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
+    value,
+  );
 }
 
 export function hasMetric(value: string): boolean {
