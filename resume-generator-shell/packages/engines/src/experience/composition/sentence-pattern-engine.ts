@@ -25,12 +25,41 @@ const GENERAL_PATTERNS: readonly BulletSentencePattern[] = [
   "action-delivered-impact",
 ];
 
+const WHILE_CONNECTORS = [
+  "while advancing",
+  "while strengthening",
+  "while supporting",
+] as const;
+
+const DELIVERED_CONNECTORS = [
+  "that improved",
+  "and strengthening",
+  "while reinforcing",
+] as const;
+
 function patternForPlan(plan: BulletPlanItem, patternOffset = 0): BulletSentencePattern {
   if (plan.communicationFocused || plan.leadershipFocused) {
     return "action-metric-business-impact";
   }
   return GENERAL_PATTERNS[(Math.max(1, plan.sequence) - 1 + Math.max(0, patternOffset)) % GENERAL_PATTERNS.length]
     ?? "action-metric-outcome";
+}
+
+function pickVariant(
+  options: readonly string[],
+  seed: string,
+  used: ReadonlySet<string> | undefined,
+): string {
+  const start =
+    Math.abs([...seed].reduce((hash, char) => hash + char.charCodeAt(0), 0)) %
+    options.length;
+  for (let offset = 0; offset < options.length; offset += 1) {
+    const candidate = options[(start + offset) % options.length]!;
+    if (!used?.has(candidate)) {
+      return candidate;
+    }
+  }
+  return options[start]!;
 }
 
 function outcomePhrase(
@@ -46,6 +75,20 @@ function outcomePhrase(
   return joinNatural(uncovered);
 }
 
+/** Trailing formula fingerprint used to stop "cycle time while advancing" clones. */
+export function endingSkeleton(bulletText: string): string {
+  const tail = bulletText
+    .toLocaleLowerCase()
+    .replace(/[.!?]+$/g, "")
+    .split(/,\s+/)
+    .slice(-1)[0] ?? bulletText;
+  return tail
+    .replace(/\b\d+(?:\.\d+)?\s?(?:%|x)\b/gi, "<metric>")
+    .replace(/\b(?:a|an|the|in|by|and|while|to|for|of)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildWithPattern(input: {
   actionClause: string;
   plan: BulletPlanItem;
@@ -53,7 +96,8 @@ function buildWithPattern(input: {
   story: StarStory;
   pattern: BulletSentencePattern;
   includeBusinessImpact: boolean;
-}): string {
+  usedConnectors?: ReadonlySet<string>;
+}): { text: string; connectors: string[] } {
   const metric = input.story.metrics[0];
   if (!metric) {
     throw new Error(`Bullet ${input.plan.bulletId} has no measurable STAR result.`);
@@ -64,46 +108,79 @@ function buildWithPattern(input: {
   const businessObject = compactBusinessImpact(input.story);
   const businessGerund = businessImpactAsGerund(input.story);
   const businessInfinitive = businessImpactAsInfinitive(input.story);
+  const connectors: string[] = [];
 
   switch (input.pattern) {
     case "action-outcome-metric":
-      return normalizeBulletSentence(
-        outcomes
-          ? `${input.actionClause} to strengthen ${outcomes}, ${metricGerund}`
-          : `${input.actionClause} to ${businessInfinitive}, ${metricGerund}`,
+      return {
+        text: normalizeBulletSentence(
+          outcomes
+            ? `${input.actionClause} to strengthen ${outcomes}, ${metricGerund}`
+            : `${input.actionClause} to ${businessInfinitive}, ${metricGerund}`,
+        ),
+        connectors,
+      };
+    case "action-metric-while-outcome": {
+      const connector = pickVariant(
+        WHILE_CONNECTORS,
+        `${input.plan.bulletId}:while`,
+        input.usedConnectors,
       );
-    case "action-metric-while-outcome":
-      return normalizeBulletSentence(
-        outcomes
-          ? `${input.actionClause}, ${metricGerund} while advancing ${outcomes}`
-          : `${input.actionClause}, ${metricGerund} while ${businessGerund}`,
+      connectors.push(connector);
+      return {
+        text: normalizeBulletSentence(
+          outcomes
+            ? `${input.actionClause}, ${metricGerund} ${connector} ${outcomes}`
+            : `${input.actionClause}, ${metricGerund} while ${businessGerund}`,
+        ),
+        connectors,
+      };
+    }
+    case "action-delivered-impact": {
+      const connector = pickVariant(
+        DELIVERED_CONNECTORS,
+        `${input.plan.bulletId}:delivered`,
+        input.usedConnectors,
       );
-    case "action-delivered-impact":
-      return normalizeBulletSentence(
-        outcomes
-          ? `${input.actionClause}, delivering ${metricNoun} while advancing ${outcomes}`
-          : `${input.actionClause}, delivering ${metricNoun} while ${businessGerund}`,
-      );
+      connectors.push(connector);
+      return {
+        text: normalizeBulletSentence(
+          outcomes
+            ? `${input.actionClause}, delivering ${metricNoun} ${connector} ${outcomes}`
+            : `${input.actionClause}, delivering ${metricNoun} while ${businessGerund}`,
+        ),
+        connectors,
+      };
+    }
     case "action-metric-business-impact": {
       // Avoid cloning the same outcome in both "improving X" and "enabling better X".
       if (outcomes) {
-        return normalizeBulletSentence(
-          `${input.actionClause}, ${metricGerund} and improving ${outcomes}`,
-        );
+        return {
+          text: normalizeBulletSentence(
+            `${input.actionClause}, ${metricGerund} and improving ${outcomes}`,
+          ),
+          connectors,
+        };
       }
       const impact =
         businessObject || input.plan.achievementTheme || "delivery outcomes";
-      return normalizeBulletSentence(
-        `${input.actionClause}, ${metricGerund}, enabling ${impact}`,
-      );
+      return {
+        text: normalizeBulletSentence(
+          `${input.actionClause}, ${metricGerund}, enabling ${impact}`,
+        ),
+        connectors,
+      };
     }
     case "action-metric-outcome":
     default:
-      return normalizeBulletSentence(
-        outcomes
-          ? `${input.actionClause}, ${metricGerund} and improving ${outcomes}`
-          : `${input.actionClause}, ${metricGerund} and ${businessGerund}`,
-      );
+      return {
+        text: normalizeBulletSentence(
+          outcomes
+            ? `${input.actionClause}, ${metricGerund} and improving ${outcomes}`
+            : `${input.actionClause}, ${metricGerund} and ${businessGerund}`,
+        ),
+        connectors,
+      };
   }
 }
 
@@ -195,7 +272,9 @@ function buildCandidates(input: {
   keywordPackage: KeywordPackage;
   story: StarStory;
   patternOffset?: number;
-}): Array<{ finalBullet: string; sentencePattern: BulletSentencePattern }> {
+  usedConnectors?: ReadonlySet<string>;
+  usedEndingSkeletons?: ReadonlySet<string>;
+}): Array<{ finalBullet: string; sentencePattern: BulletSentencePattern; connectors: string[] }> {
   const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
   const candidatePatterns: BulletSentencePattern[] = [
     preferredPattern,
@@ -215,8 +294,8 @@ function buildCandidates(input: {
       includeBusinessImpact: false,
     });
     return [
-      { finalBullet: withImpact, sentencePattern: pattern },
-      { finalBullet: withoutImpact, sentencePattern: pattern },
+      { finalBullet: withImpact.text, sentencePattern: pattern, connectors: withImpact.connectors },
+      { finalBullet: withoutImpact.text, sentencePattern: pattern, connectors: withoutImpact.connectors },
     ];
   });
 }
@@ -230,7 +309,9 @@ export class SentencePatternEngine {
     maximumWords: number;
     minimumWords?: number;
     patternOffset?: number;
-  }): { finalBullet: string; sentencePattern: BulletSentencePattern } {
+    usedConnectors?: ReadonlySet<string>;
+    usedEndingSkeletons?: ReadonlySet<string>;
+  }): { finalBullet: string; sentencePattern: BulletSentencePattern; connectors: string[] } {
     const minimumWords = input.minimumWords ?? 16;
     const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
     const preserve = requiredPhrases(input.keywordPackage);
@@ -254,16 +335,38 @@ export class SentencePatternEngine {
 
     const valid = candidates.filter((candidate) => {
       const count = wordCount(candidate.finalBullet);
+      const skeleton = endingSkeleton(candidate.finalBullet);
+      const endingFree =
+        !input.usedEndingSkeletons ||
+        input.usedEndingSkeletons.size === 0 ||
+        !input.usedEndingSkeletons.has(skeleton);
+      return (
+        count >= minimumWords &&
+        count <= input.maximumWords &&
+        endingFree &&
+        preserve.every((phrase) => !phrase || containsPhrase(candidate.finalBullet, phrase))
+      );
+    });
+    if (valid.length > 0) {
+      const preferred =
+        valid.find((candidate) => candidate.sentencePattern === preferredPattern) ??
+        valid[0]!;
+      return preferred;
+    }
+
+    // Fall back without ending uniqueness if every candidate collides.
+    const lengthValid = candidates.filter((candidate) => {
+      const count = wordCount(candidate.finalBullet);
       return (
         count >= minimumWords &&
         count <= input.maximumWords &&
         preserve.every((phrase) => !phrase || containsPhrase(candidate.finalBullet, phrase))
       );
     });
-    if (valid.length > 0) {
+    if (lengthValid.length > 0) {
       return (
-        valid.find((candidate) => candidate.sentencePattern === preferredPattern) ??
-        valid[0]!
+        lengthValid.find((candidate) => candidate.sentencePattern === preferredPattern) ??
+        lengthValid[0]!
       );
     }
 
@@ -281,6 +384,7 @@ export class SentencePatternEngine {
         return {
           finalBullet: compressed,
           sentencePattern: shortest.sentencePattern,
+          connectors: shortest.connectors,
         };
       }
     }
@@ -295,6 +399,7 @@ export class SentencePatternEngine {
         preserve,
       ),
       sentencePattern: preferredPattern,
+      connectors: [],
     };
   }
 }

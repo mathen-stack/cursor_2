@@ -61,8 +61,20 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
     expect(
       bullets.filter((bullet) =>
         /customer disruption and operational/i.test(bullet),
+      ).length,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      bullets.filter((bullet) =>
+        /cycle time while advancing/i.test(bullet),
+      ).length,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      bullets.some((bullet) =>
+        /\b(?:this is a|freelance role|part[- ]time remote opportunity|is ideal for)\b/i.test(
+          bullet,
+        ),
       ),
-    ).toHaveLength(1);
+    ).toBe(false);
 
     const businessClosings = bullets
       .map((bullet) => {

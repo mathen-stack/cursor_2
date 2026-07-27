@@ -8,11 +8,15 @@ import type {
 import {
   buildActionClause,
   directKeywordRepresented,
+  isJdMarketingOrMetaScope,
   stripFirstPersonPronouns,
   substantiveKeyword,
 } from "./bullet-language";
 import { validateBulletComposition } from "./bullet-composition-validator";
-import { SentencePatternEngine } from "./sentence-pattern-engine";
+import {
+  endingSkeleton,
+  SentencePatternEngine,
+} from "./sentence-pattern-engine";
 import {
   SentenceQualityValidator,
   type SentenceQualityValidatorOptions,
@@ -24,8 +28,11 @@ function uniqueSubstantiveKeywords(keywords: readonly string[]): string[] {
   const selected: string[] = [];
   for (const keyword of keywords) {
     const substantive = substantiveKeyword(stripFirstPersonPronouns(keyword));
+    if (!substantive || isJdMarketingOrMetaScope(substantive)) {
+      continue;
+    }
     const key = canonicalKeywordKey(substantive);
-    if (!substantive || !key || seen.has(key)) {
+    if (!key || seen.has(key)) {
       continue;
     }
     seen.add(key);
@@ -84,6 +91,8 @@ export class RealBulletComposer implements BulletComposer {
     const patternsByBullet = new Map<string, BulletSentencePattern>();
     const drafts: ExperienceBullet[] = [];
     const usedDirectScopeKeys = new Set<string>();
+    const usedConnectors = new Set<string>();
+    const usedEndingSkeletons = new Set<string>();
 
     // Preserve uniqueness against bullets kept during selective regeneration.
     for (const reserved of input.reservedBullets ?? []) {
@@ -91,6 +100,7 @@ export class RealBulletComposer implements BulletComposer {
         const key = canonicalKeywordKey(substantiveKeyword(keyword));
         if (key) usedDirectScopeKeys.add(key);
       }
+      usedEndingSkeletons.add(endingSkeleton(reserved.finalBullet));
     }
 
     const orderedPlans = [...input.plans].sort(
@@ -199,6 +209,8 @@ export class RealBulletComposer implements BulletComposer {
         minimumWords: this.sentenceQualityValidator.minimumWords,
         maximumWords: this.sentenceQualityValidator.maximumWords,
         patternOffset: input.regenerationAttempt ?? 0,
+        usedConnectors,
+        usedEndingSkeletons,
       });
 
       const missingDirects = visibleDirectKeywords.filter(
@@ -214,8 +226,15 @@ export class RealBulletComposer implements BulletComposer {
           minimumWords: this.sentenceQualityValidator.minimumWords,
           maximumWords: this.sentenceQualityValidator.maximumWords,
           patternOffset: (input.regenerationAttempt ?? 0) + 1,
+          usedConnectors,
+          usedEndingSkeletons,
         });
       }
+
+      for (const connector of composed.connectors) {
+        usedConnectors.add(connector);
+      }
+      usedEndingSkeletons.add(endingSkeleton(composed.finalBullet));
 
       // Only claim directs that survived composition/compression so sentence
       // validation cannot reject the bullet for truncated JD phrases.

@@ -100,6 +100,21 @@ function finalizeKeywordPhrase(value: string): string | null {
   if (/^(?:closely|effectively|successfully|clearly)\b/i.test(finalized)) {
     return null;
   }
+  // Reject hiring/marketing copy that produces nonsense bullet objects like
+  // "this is a freelance role for a tandem".
+  if (
+    /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|is ideal for|looking for|join our team|about the (?:role|company|job)|competitive salary)\b/i.test(
+      finalized,
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\b(?:connects|enables|helps|allows|provides|offers)\b/i.test(finalized) &&
+    finalized.split(/\s+/).length >= 5
+  ) {
+    return null;
+  }
   return finalized;
 }
 

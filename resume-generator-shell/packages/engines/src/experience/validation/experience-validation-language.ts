@@ -78,10 +78,16 @@ export function hasIntraBulletVerbEcho(value: string): boolean {
 }
 
 export function hasRepeatedContentNoun(value: string): boolean {
-  // Only flag measure restated in the trailing outcome clause, e.g.
-  // "increasing throughput by 2.6x and improving request throughput".
-  // Sharing a noun between the action scope and the metric is allowed.
-  return /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+((?:[a-z][a-z0-9+./-]*\s+){0,3}[a-z][a-z0-9+./-]*)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
+  // Measure restated in the trailing outcome clause, including shared primary
+  // nouns with different modifiers ("team delivery velocity" / "engineering velocity").
+  if (
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+((?:[a-z][a-z0-9+./-]*\s+){0,3}[a-z][a-z0-9+./-]*)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  return /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+(?:[a-z][a-z0-9+./-]*\s+){0,3}(velocity|throughput|adoption|latency|reliability)\b[^.]*\b(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
     value,
   );
 }

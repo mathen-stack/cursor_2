@@ -8,6 +8,28 @@ import { joinNatural, lowerFirst } from "../star/star-utils";
 const STAR_OWNERSHIP_BOILERPLATE =
   /\b(?:effort to|responsibility to|owned the|took responsibility|delivery planning required|collaboration and delivery planning|collaborative delivery planning|cross-functional collaboration and delivery planning|cross-team product partnership|stakeholder communication loops|requirements discovery with partners|technical direction and cross-team execution)\b/i;
 
+/** Job-post marketing / meta copy that must never become a bullet action object. */
+export const JD_MARKETING_PROSE =
+  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'ll| will)\b|competitive salary|benefits package|join our team|about the (?:role|company|job))\b/i;
+
+/** Finite-verb clauses that read as full JD sentences, not noun scopes. */
+const SCOPE_FINITE_VERB =
+  /\b(?:connects|enables|helps|allows|provides|offers|supports|delivers|brings|makes|keeps|lets|ensures)\b/i;
+
+export function isJdMarketingOrMetaScope(value: string): boolean {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) return false;
+  if (JD_MARKETING_PROSE.test(cleaned)) return true;
+  if (SCOPE_FINITE_VERB.test(cleaned) && cleaned.split(/\s+/).length >= 5) {
+    return true;
+  }
+  // Truncated hiring copy often ends mid-phrase on "for technical/product/..."
+  if (/\b(?:ideal for|role for a|opportunity for)\b/i.test(cleaned)) {
+    return true;
+  }
+  return false;
+}
+
 const COMMUNICATION_SCOPE_VARIANTS = [
   "cross-functional collaboration with product and engineering stakeholders",
   "product and engineering partnership on delivery priorities",
@@ -317,16 +339,24 @@ export function buildActionClause(input: {
   const focusScope = cleanScope(
     stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
   );
-  const compactFocus =
+  const compactFocusRaw =
     focusScope.split(/\s+/).filter(Boolean).length > 0 &&
     focusScope.split(/\s+/).length <= 8 &&
     !/,| and | through /i.test(focusScope)
       ? focusScope
       : "";
-  const compactTheme =
+  const compactFocus =
+    compactFocusRaw && !isJdMarketingOrMetaScope(compactFocusRaw)
+      ? compactFocusRaw
+      : "";
+  const compactThemeRaw =
     themeScope.split(/\s+/).filter(Boolean).length > 0 &&
     themeScope.split(/\s+/).length <= 6
       ? themeScope
+      : "";
+  const compactTheme =
+    compactThemeRaw && !isJdMarketingOrMetaScope(compactThemeRaw)
+      ? compactThemeRaw
       : "";
   const compactTaskRaw = substantiveKeyword(input.story.task)
     .split(/\s+/)
@@ -337,7 +367,9 @@ export function buildActionClause(input: {
     .trim();
   // STAR ownership boilerplate is not a usable action object.
   const compactTask =
-    compactTaskRaw && !STAR_OWNERSHIP_BOILERPLATE.test(compactTaskRaw)
+    compactTaskRaw &&
+    !STAR_OWNERSHIP_BOILERPLATE.test(compactTaskRaw) &&
+    !isJdMarketingOrMetaScope(compactTaskRaw)
       ? compactTaskRaw
       : "";
   // Never fall back to bare achievement-dimension labels such as
@@ -361,7 +393,8 @@ export function buildActionClause(input: {
     return "production delivery outcomes";
   })();
   const directScope =
-    joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2
+    joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2 &&
+    !isJdMarketingOrMetaScope(joinedDirectScope)
       ? joinedDirectScope
           .split(/\s+/)
           .filter(Boolean)
@@ -411,7 +444,8 @@ export function buildActionClause(input: {
     /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
     /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
     /^production(?:\s+\w+)?\s+delivery outcomes$/i.test(normalizedDirectScope) ||
-    STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope)
+    STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope) ||
+    isJdMarketingOrMetaScope(normalizedDirectScope)
   ) {
     const toolScope = joinNatural(explicitTools.slice(0, 2));
     const methodScope = joinNatural(inferredMethods.slice(0, 2));
@@ -618,10 +652,26 @@ function isNearDuplicateMeasurePhrase(keyword: string, measure: string): boolean
   const measureTokens = new Set(
     measureLower.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2),
   );
-  if (keywordTokens.length < 2 || measureTokens.size === 0) {
+  if (keywordTokens.length === 0 || measureTokens.size === 0) {
     return false;
   }
-  return keywordTokens.every((token) => measureTokens.has(token));
+  if (keywordTokens.every((token) => measureTokens.has(token)) && keywordTokens.length >= 2) {
+    return true;
+  }
+  // Shared primary nouns like "velocity" / "throughput" still read as restatement
+  // ("team delivery velocity" + "engineering velocity").
+  const primaryNouns = [
+    "velocity",
+    "throughput",
+    "adoption",
+    "latency",
+    "reliability",
+    "availability",
+    "predictability",
+  ];
+  return primaryNouns.some(
+    (noun) => keywordTokens.includes(noun) && measureTokens.has(noun),
+  );
 }
 
 export function uncoveredOutcomeKeywords(input: {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
   createProductionExperienceEngine,
+  isJdMarketingOrMetaScope,
   normalizeBulletSentence,
   stripIntraBulletRepetition,
 } from "@resume/engines";
@@ -26,6 +27,23 @@ describe("repetition hardening", () => {
         "Accelerated backend services, increasing throughput by 2.6x and improving request throughput",
       ),
     ).not.toMatch(/throughput.*throughput/i);
+  });
+
+  it("rejects JD marketing fragments as action scopes", () => {
+    expect(
+      isJdMarketingOrMetaScope("this is a freelance role for a tandem"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope(
+        "this part-time remote opportunity is ideal for technical",
+      ),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope(
+        "the mindrift platform connects specialists with AI projects",
+      ),
+    ).toBe(true);
+    expect(isJdMarketingOrMetaScope("machine learning models")).toBe(false);
   });
 
   it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {

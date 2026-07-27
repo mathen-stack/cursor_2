@@ -96,20 +96,58 @@ export class MetricGenerationEngine {
 
     const stockMeasure = selectedProfile.label;
     let measure = stockMeasure;
-    if (!isMeasureAvailable(stockMeasure, input.usedMetricPatternKeys)) {
+    const outcomeConflicts = (candidate: string): boolean => {
+      const outcomeLower = outcome.toLocaleLowerCase();
+      const candidateLower = candidate.toLocaleLowerCase();
+      if (
+        outcomeLower === candidateLower ||
+        outcomeLower.includes(candidateLower) ||
+        candidateLower.includes(outcomeLower)
+      ) {
+        return true;
+      }
+      const primaryNouns = [
+        "velocity",
+        "throughput",
+        "adoption",
+        "latency",
+        "reliability",
+        "availability",
+        "predictability",
+      ];
+      const outcomeTokens = new Set(
+        outcomeLower.split(/[^a-z0-9]+/).filter((token) => token.length > 2),
+      );
+      const candidateTokens = candidateLower
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length > 2);
+      return primaryNouns.some(
+        (noun) => outcomeTokens.has(noun) && candidateTokens.includes(noun),
+      );
+    };
+    if (
+      !isMeasureAvailable(stockMeasure, input.usedMetricPatternKeys) ||
+      outcomeConflicts(stockMeasure)
+    ) {
       const fallbacks = [
-        outcome,
         ...profile.metricProfiles.map((candidate) => candidate.label),
         ...Object.values(STAR_DIMENSION_PROFILES).flatMap((entry) =>
           entry.metricProfiles.map((candidate) => candidate.label),
         ),
         `${input.plan.achievementTheme} outcomes`,
         `${input.plan.roleFocusArea || "delivery"} results`,
+        outcome,
       ];
       measure =
+        fallbacks.find(
+          (candidate) =>
+            isMeasureAvailable(candidate, input.usedMetricPatternKeys) &&
+            !outcomeConflicts(candidate),
+        ) ??
         fallbacks.find((candidate) =>
           isMeasureAvailable(candidate, input.usedMetricPatternKeys),
-        ) ?? `${input.plan.bulletId.toLowerCase()} delivery outcome`;
+        ) ??
+        `${input.plan.bulletId.toLowerCase()} delivery outcome`;
     }
 
     const direction =

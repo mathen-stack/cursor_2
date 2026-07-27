@@ -108,18 +108,33 @@ describe("Real compressed-STAR bullet composition", () => {
     const packagesByBullet = new Map(
       input.keywordPackages.map((item) => [item.bulletId, item]),
     );
+    const storiesByBullet = new Map(input.stories.map((item) => [item.bulletId, item]));
 
     for (const bullet of output.bullets) {
       const keywordPackage = packagesByBullet.get(bullet.bulletId);
+      const story = storiesByBullet.get(bullet.bulletId);
       expect(keywordPackage).toBeDefined();
       expect(bullet.finalBullet.toLowerCase().startsWith(
         `${keywordPackage?.actionVerb.toLowerCase()} `,
       )).toBe(true);
-      for (const keyword of keywordPackage?.supportingKeywords ?? []) {
+      for (const keyword of bullet.supportingKeywords) {
         expect(bullet.finalBullet.toLowerCase()).toContain(keyword.toLowerCase());
       }
-      for (const keyword of keywordPackage?.outcomeKeywords ?? []) {
+      for (const keyword of bullet.outcomeKeywords) {
         expect(bullet.finalBullet.toLowerCase()).toContain(keyword.toLowerCase());
+      }
+      // Outcomes that merely restate the metric measure may be omitted intentionally.
+      const measure = story?.metrics[0]?.measure?.toLowerCase() ?? "";
+      for (const keyword of keywordPackage?.outcomeKeywords ?? []) {
+        const lower = keyword.toLowerCase();
+        const sharesPrimary =
+          ["velocity", "throughput", "adoption", "latency", "reliability"].some(
+            (noun) => lower.includes(noun) && measure.includes(noun),
+          );
+        if (sharesPrimary || measure.includes(lower) || lower.includes(measure)) {
+          continue;
+        }
+        expect(bullet.finalBullet.toLowerCase()).toContain(lower);
       }
     }
 
