@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+
+  --color-ink: #14241c;
+  --color-forest: #1a3a2a;
+  --color-forest-soft: #2a5340;
+  --color-moss: #3d6b52;
+  --color-sage: #c5d4cb;
+  --color-mist: #e8f0ea;
+  --color-paper: #f6f3ec;
+  --color-cream: #fbf8f2;
+  --color-gold: #c4a35a;
+  --color-gold-deep: #9a7a3a;
+  --color-muted: #5c6f64;
+  --color-border: #d5dfd8;
+  --color-danger: #a33b2d;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background:
+      radial-gradient(ellipse 80% 50% at 10% -10%, rgba(61, 107, 82, 0.12), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(196, 163, 90, 0.1), transparent 50%),
+      linear-gradient(180deg, var(--color-cream) 0%, var(--color-paper) 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
