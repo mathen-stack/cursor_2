@@ -65,6 +65,24 @@ export class OutcomeKeywordEngine {
     const candidates = dedupe([
       ...dimensionCandidates,
       ...categoryCandidates,
+      // Fall back across the full outcome inventory so document-wide uniqueness
+      // can still allocate when a dimension's local list is exhausted.
+      ...Object.values(OUTCOMES_BY_DIMENSION)
+        .flat()
+        .map<OutcomeCandidate>((keyword, index) => ({
+          keyword,
+          canonicalKey: canonicalKeywordKey(keyword),
+          rationale: "Fallback outcome retained for document-wide uniqueness.",
+          score: 20 - index * 0.01,
+        })),
+      ...Object.values(CATEGORY_OUTCOME_HINTS)
+        .flat()
+        .map<OutcomeCandidate>((keyword, index) => ({
+          keyword,
+          canonicalKey: canonicalKeywordKey(keyword),
+          rationale: "Category fallback outcome retained for document-wide uniqueness.",
+          score: 15 - index * 0.01,
+        })),
     ]).filter(
       (candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey),
     );

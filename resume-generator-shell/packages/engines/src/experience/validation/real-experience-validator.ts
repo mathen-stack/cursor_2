@@ -61,6 +61,7 @@ function duplicatesBy<T>(
 function pairGroups(
   items: readonly BulletContext[],
   similarity: (left: BulletContext, right: BulletContext) => boolean,
+  options: { sameExperienceOnly?: boolean } = {},
 ): string[][] {
   const groups: string[][] = [];
   const seen = new Set<string>();
@@ -68,7 +69,13 @@ function pairGroups(
     for (let rightIndex = leftIndex + 1; rightIndex < items.length; rightIndex += 1) {
       const left = items[leftIndex];
       const right = items[rightIndex];
-      if (!left || !right || left.experienceId !== right.experienceId) continue;
+      if (!left || !right) continue;
+      if (
+        options.sameExperienceOnly &&
+        left.experienceId !== right.experienceId
+      ) {
+        continue;
+      }
       if (!similarity(left, right)) continue;
       const key = [left.bullet.bulletId, right.bullet.bulletId].sort().join("|");
       if (!seen.has(key)) {
@@ -177,15 +184,17 @@ export class RealExperienceValidator implements ExperienceValidator {
 
     const exactRepetitionGroups = duplicatesBy(
       bulletContexts,
-      (item) => `${item.experienceId}:${normalizeText(item.bullet.finalBullet)}`,
+      (item) => normalizeText(item.bullet.finalBullet),
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
     const morphologicalRepetitionGroups = duplicatesBy(
       bulletContexts,
-      (item) => `${item.experienceId}:${canonicalActionVerbKey(item.bullet.actionVerb)}`,
+      (item) => canonicalActionVerbKey(item.bullet.actionVerb),
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
-    const semanticRepetitionGroups = pairGroups(bulletContexts, (left, right) => {
+    const semanticRepetitionGroups = pairGroups(
+      bulletContexts,
+      (left, right) => {
       const contentSimilarity = jaccard(left.bullet.finalBullet, right.bullet.finalBullet);
       const actionResultSimilarity = jaccard(
         `${left.bullet.action} ${left.bullet.result}`,
@@ -201,13 +210,18 @@ export class RealExperienceValidator implements ExperienceValidator {
         actionResultSimilarity >= this.semanticSimilarityThreshold + 0.05 ||
         (left.achievementDimension === right.achievementDimension && sameOutcome)
       );
-    });
+      },
+      { sameExperienceOnly: true },
+    );
 
-    const structuralRepetitionGroups = pairGroups(bulletContexts, (left, right) =>
+    const structuralRepetitionGroups = pairGroups(
+      bulletContexts,
+      (left, right) =>
       jaccard(
         sentenceSkeleton(left.bullet.finalBullet),
         sentenceSkeleton(right.bullet.finalBullet),
       ) >= this.structuralSimilarityThreshold,
+      { sameExperienceOnly: true },
     );
 
     const metricRepetitionGroups = duplicatesBy(
@@ -215,7 +229,9 @@ export class RealExperienceValidator implements ExperienceValidator {
       (item) => `${item.experienceId}:${metricFingerprint(item.bullet.finalBullet)}`,
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
-    const achievementRepetitionGroups = pairGroups(bulletContexts, (left, right) => {
+    const achievementRepetitionGroups = pairGroups(
+      bulletContexts,
+      (left, right) => {
       const sameRequirement = left.bullet.requirementId === right.bullet.requirementId;
       const sameDimension = left.achievementDimension === right.achievementDimension;
       const storySimilarity = jaccard(
@@ -223,7 +239,9 @@ export class RealExperienceValidator implements ExperienceValidator {
         `${right.bullet.situation} ${right.bullet.task} ${right.bullet.action} ${right.bullet.result}`,
       );
       return (sameRequirement && sameDimension) || storySimilarity >= 0.68;
-    });
+      },
+      { sameExperienceOnly: true },
+    );
 
     const issues: ExperienceValidationIssue[] = [];
     const failedReasons = new Map<string, Set<ExperienceValidationIssueCode>>();

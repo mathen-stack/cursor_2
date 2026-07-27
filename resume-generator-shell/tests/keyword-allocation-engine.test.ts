@@ -102,6 +102,30 @@ describe("Real global keyword allocation", () => {
     }
   });
 
+  it("keeps action verbs, supporting keywords, and outcomes unique across the whole generation", async () => {
+    const { output } = await createRealAllocation();
+
+    expect(new Set(output.packages.map((item) => item.actionVerbCanonicalKey)).size).toBe(
+      output.packages.length,
+    );
+    expect(
+      new Set(
+        output.packages.flatMap((item) =>
+          item.supportingKeywordDetails.map((detail) => detail.canonicalKey),
+        ),
+      ).size,
+    ).toBe(
+      output.packages.flatMap((item) => item.supportingKeywordDetails).length,
+    );
+    expect(
+      new Set(
+        output.packages.flatMap((item) =>
+          item.outcomeKeywordDetails.map((detail) => detail.canonicalKey),
+        ),
+      ).size,
+    ).toBe(output.packages.flatMap((item) => item.outcomeKeywordDetails).length);
+  });
+
   it("does not reuse a current direct or supporting concept as the bullet outcome", async () => {
     const { output } = await createRealAllocation();
 

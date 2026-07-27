@@ -46,25 +46,33 @@ function createRoleState(): RoleAllocationState {
 
 function seedRoleState(
   states: Map<string, RoleAllocationState>,
+  documentState: RoleAllocationState,
   keywordPackage: KeywordPackage,
   includeDirectKeywords: boolean,
 ): void {
   const state = states.get(keywordPackage.experienceId) ?? createRoleState();
   states.set(keywordPackage.experienceId, state);
   state.usedActionVerbKeys.add(keywordPackage.actionVerbCanonicalKey);
+  documentState.usedActionVerbKeys.add(keywordPackage.actionVerbCanonicalKey);
   for (const detail of keywordPackage.supportingKeywordDetails) {
     state.usedSupportingKeys.add(detail.canonicalKey);
     state.usedGlobalKeywordKeys.add(detail.canonicalKey);
+    documentState.usedSupportingKeys.add(detail.canonicalKey);
+    documentState.usedGlobalKeywordKeys.add(detail.canonicalKey);
   }
   for (const detail of keywordPackage.outcomeKeywordDetails) {
     state.usedOutcomeKeys.add(detail.canonicalKey);
     state.usedGlobalKeywordKeys.add(detail.canonicalKey);
+    documentState.usedOutcomeKeys.add(detail.canonicalKey);
+    documentState.usedGlobalKeywordKeys.add(detail.canonicalKey);
   }
   if (includeDirectKeywords) {
     for (const keyword of keywordPackage.directKeywords) {
       const key = canonicalKeywordKey(keyword);
       state.usedDirectKeys.add(key);
       state.usedGlobalKeywordKeys.add(key);
+      documentState.usedDirectKeys.add(key);
+      documentState.usedGlobalKeywordKeys.add(key);
     }
   }
 }
@@ -140,15 +148,18 @@ export class RealKeywordAllocator implements KeywordAllocator {
       ]),
     );
     const states = new Map<string, RoleAllocationState>();
+    // Document-wide locks prevent the same action verb / supporting / outcome
+    // concept from being cloned across every career entry.
+    const documentState = createRoleState();
     const packages: KeywordPackage[] = [];
     const locks: KeywordLockRecord[] = [];
     const controlledDirectKeywordReuse: string[] = [];
 
     for (const reserved of input.reservedPackages ?? []) {
-      seedRoleState(states, reserved, true);
+      seedRoleState(states, documentState, reserved, true);
     }
     for (const previous of input.previousPackages ?? []) {
-      seedRoleState(states, previous, false);
+      seedRoleState(states, documentState, previous, false);
     }
 
     const orderedPlans = [...input.plans].sort((left, right) => {
@@ -183,7 +194,7 @@ export class RealKeywordAllocator implements KeywordAllocator {
         plan,
         requirement,
         assignment,
-        usedCanonicalKeys: state.usedActionVerbKeys,
+        usedCanonicalKeys: documentState.usedActionVerbKeys,
       });
 
       const directKeywordLimit =
@@ -195,7 +206,7 @@ export class RealKeywordAllocator implements KeywordAllocator {
         jobDescription: input.jobDescription,
         plan,
         requirementsById,
-        usedCanonicalKeys: state.usedGlobalKeywordKeys,
+        usedCanonicalKeys: documentState.usedGlobalKeywordKeys,
         maximumKeywords: directKeywordLimit,
       });
       const directKeys = new Set(direct.keywords.map(canonicalKeywordKey));
@@ -205,14 +216,14 @@ export class RealKeywordAllocator implements KeywordAllocator {
         plan,
         requirement,
         assignment,
-        usedCanonicalKeys: state.usedGlobalKeywordKeys,
+        usedCanonicalKeys: documentState.usedGlobalKeywordKeys,
         directCanonicalKeys: directKeys,
         directKeywords: direct.keywords,
         maximumKeywords: this.supportingKeywordsPerBullet,
       });
 
       const currentPackageKeywordKeys = new Set<string>([
-        ...state.usedGlobalKeywordKeys,
+        ...documentState.usedGlobalKeywordKeys,
         ...directKeys,
         ...supporting.map((detail) => detail.canonicalKey),
       ]);
@@ -224,6 +235,7 @@ export class RealKeywordAllocator implements KeywordAllocator {
       });
 
       state.usedActionVerbKeys.add(action.canonicalKey);
+      documentState.usedActionVerbKeys.add(action.canonicalKey);
       locks.push(
         lock(
           plan.experienceId,
@@ -237,9 +249,11 @@ export class RealKeywordAllocator implements KeywordAllocator {
 
       for (const evidence of direct.evidence) {
         const canonicalKey = canonicalKeywordKey(evidence.keyword);
-        const reused = state.usedGlobalKeywordKeys.has(canonicalKey);
+        const reused = documentState.usedGlobalKeywordKeys.has(canonicalKey);
         state.usedDirectKeys.add(canonicalKey);
         state.usedGlobalKeywordKeys.add(canonicalKey);
+        documentState.usedDirectKeys.add(canonicalKey);
+        documentState.usedGlobalKeywordKeys.add(canonicalKey);
         locks.push(
           lock(
             plan.experienceId,
@@ -260,6 +274,8 @@ export class RealKeywordAllocator implements KeywordAllocator {
       for (const detail of supporting) {
         state.usedSupportingKeys.add(detail.canonicalKey);
         state.usedGlobalKeywordKeys.add(detail.canonicalKey);
+        documentState.usedSupportingKeys.add(detail.canonicalKey);
+        documentState.usedGlobalKeywordKeys.add(detail.canonicalKey);
         locks.push(
           lock(
             plan.experienceId,
@@ -275,6 +291,8 @@ export class RealKeywordAllocator implements KeywordAllocator {
       for (const detail of outcomes) {
         state.usedOutcomeKeys.add(detail.canonicalKey);
         state.usedGlobalKeywordKeys.add(detail.canonicalKey);
+        documentState.usedOutcomeKeys.add(detail.canonicalKey);
+        documentState.usedGlobalKeywordKeys.add(detail.canonicalKey);
         locks.push(
           lock(
             plan.experienceId,
@@ -305,7 +323,7 @@ export class RealKeywordAllocator implements KeywordAllocator {
           `Allocated ${direct.keywords.length} direct JD keyword(s), ${supporting.length} non-repeating supporting keyword(s), and ${outcomes.length} distinct outcome keyword(s).`,
           direct.controlledReuse.length > 0
             ? "Direct JD wording was reused only as controlled grounding for a sparse or repeated requirement plan."
-            : "All selected direct JD keyword concepts were unused earlier in this role.",
+            : "All selected direct JD keyword concepts were unused earlier in this generation.",
         ].join(" "),
       });
     }

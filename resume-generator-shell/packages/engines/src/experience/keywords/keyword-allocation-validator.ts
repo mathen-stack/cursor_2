@@ -32,6 +32,13 @@ function repeatedWithinExperience(
   return repeated;
 }
 
+function repeatedAcrossGeneration(
+  packages: KeywordPackage[],
+  values: (keywordPackage: KeywordPackage) => string[],
+): string[] {
+  return duplicateValues(packages.flatMap(values).filter(Boolean));
+}
+
 function packageText(keywordPackage: KeywordPackage): string {
   return [
     ...keywordPackage.directKeywords,
@@ -96,16 +103,16 @@ export function validateKeywordAllocation(input: {
     }
   }
 
-  const repeatedActionVerbKeys = repeatedWithinExperience(
+  const repeatedActionVerbKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) => [keywordPackage.actionVerbCanonicalKey],
   );
-  const repeatedSupportingKeywordKeys = repeatedWithinExperience(
+  const repeatedSupportingKeywordKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) =>
       keywordPackage.supportingKeywordDetails.map((detail) => detail.canonicalKey),
   );
-  const repeatedOutcomeKeywordKeys = repeatedWithinExperience(
+  const repeatedOutcomeKeywordKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) =>
       keywordPackage.outcomeKeywordDetails.map((detail) => detail.canonicalKey),
@@ -195,16 +202,16 @@ export function validateKeywordAllocation(input: {
     errors.push(`Ungrounded direct keywords: ${ungroundedDirectKeywords.join(", ")}.`);
   }
   if (!actionVerbsUniqueWithinRoles) {
-    errors.push(`Repeated action verbs within roles: ${repeatedActionVerbKeys.join(", ")}.`);
+    errors.push(`Repeated action verbs across the generation: ${repeatedActionVerbKeys.join(", ")}.`);
   }
   if (!supportingKeywordsDistinctWithinRoles) {
     errors.push(
-      `Repeated supporting keyword concepts within roles: ${repeatedSupportingKeywordKeys.join(", ")}.`,
+      `Repeated supporting keyword concepts across the generation: ${repeatedSupportingKeywordKeys.join(", ")}.`,
     );
   }
   if (!outcomeKeywordsDistinctWithinRoles) {
     errors.push(
-      `Repeated outcome keyword concepts within roles: ${repeatedOutcomeKeywordKeys.join(", ")}.`,
+      `Repeated outcome keyword concepts across the generation: ${repeatedOutcomeKeywordKeys.join(", ")}.`,
     );
   }
   if (!keywordConceptsDistinctAcrossKindsWithinRoles) {
