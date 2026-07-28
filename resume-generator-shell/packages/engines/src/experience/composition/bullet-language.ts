@@ -189,6 +189,17 @@ export function isBrokenBulletWording(text: string): boolean {
   ) {
     return true;
   }
+  // Alias twins / tautologies / intra-bullet content-noun echoes.
+  if (
+    /\bREST(?:ful)?\s+APIs?\s+and\s+REST(?:ful)?\s+APIs?\b/i.test(value) ||
+    /\b(?:Directed|Directs|Directing)\s+technical\s+direction\b/i.test(value) ||
+    /\bcross-functional\b[\s\S]*\bcross-functional\b/i.test(value) ||
+    /\bdistributed\b[\s\S]*\bdistributed\b/i.test(value) ||
+    /\bsecurity\b[\s\S]*\bsecurity\b/i.test(value) ||
+    /\bcost\b[\s\S]*\bcost\b/i.test(value)
+  ) {
+    return true;
+  }
   // Import locally-shaped checks via repeated-phrase detection in strip path.
   return hasRepeatedFourWordPhrase(value);
 }
@@ -257,7 +268,7 @@ const LENGTH_PAD_CLAUSES = [
   "reducing operational risk across production workloads",
   "strengthening release confidence for customer workloads",
   "raising service reliability during peak demand",
-  "improving integration reliability across distributed services",
+  "improving integration reliability across platform services",
   "reducing coordination overhead for platform delivery",
   "strengthening compliance readiness across critical services",
   "improving engineering velocity for shared delivery goals",
@@ -390,7 +401,7 @@ export const UNIQUE_SCOPE_QUALIFIERS = [
   "critical services",
   "customer workloads",
   "peak demand windows",
-  "distributed services",
+  "platform services",
   "operational readiness gates",
 ] as const;
 
@@ -402,7 +413,7 @@ export const UNIQUE_SCOPE_REPLACEMENTS = [
   "critical service readiness",
   "customer workload performance",
   "peak demand capacity planning",
-  "distributed service operations",
+  "service operations excellence",
   "operational readiness gates",
   "model serving throughput",
   "inference delivery pathways",
@@ -422,6 +433,18 @@ function orderedScopeTokens(scope: string): string[] {
     .filter(Boolean);
 }
 
+/** High-collision 2-word stems that must stay unique across the resume. */
+const SIGNIFICANT_TWO_WORD_STEMS = new Set([
+  "distributed systems",
+  "distributed system",
+  "distributed services",
+  "distributed processing",
+  "rest apis",
+  "restful apis",
+  "security posture",
+  "cross functional",
+]);
+
 /** Ordered 4–8 word phrases used to detect cloned stems after qualifier appends. */
 export function actionScopePhraseKeys(
   scope: string,
@@ -430,6 +453,14 @@ export function actionScopePhraseKeys(
   const stem = scope.replace(/\s+across\s+[\s\S]+$/i, "").trim();
   const keys = new Set<string>();
   for (const sequence of [orderedScopeTokens(scope), orderedScopeTokens(stem)]) {
+    if (sequence.length >= 2) {
+      for (let start = 0; start + 2 <= sequence.length; start += 1) {
+        const phrase = sequence.slice(start, start + 2).join(" ");
+        if (SIGNIFICANT_TWO_WORD_STEMS.has(phrase)) {
+          keys.add(`ng:${phrase}`);
+        }
+      }
+    }
     if (sequence.length < minimumWords) {
       continue;
     }
@@ -444,6 +475,49 @@ export function actionScopePhraseKeys(
     }
   }
   return [...keys];
+}
+
+/** Document-wide single-token locks for words that read as clones when reused. */
+const HIGH_COLLISION_CONTENT_ALTERNATES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  distributed: ["resilient", "scalable", "multi-node", "platform-scale"],
+};
+
+/**
+ * Keeps the first document occurrence of high-collision content tokens and
+ * rewrites later bullets so "distributed" is not highlighted across the page.
+ */
+export function diversifyHighCollisionContentTokens(
+  text: string,
+  usedScopeKeys: Set<string>,
+  seed = "",
+): string {
+  let result = text;
+  const seedIndex = hashSeed(seed || text);
+  for (const [token, alternates] of Object.entries(
+    HIGH_COLLISION_CONTENT_ALTERNATES,
+  )) {
+    const claimKey = `cw:${token}`;
+    const alreadyClaimed = usedScopeKeys.has(claimKey);
+    let keptFirstInBullet = false;
+    let altOffset = 0;
+    result = result.replace(new RegExp(`\\b${token}\\b`, "gi"), (match) => {
+      if (!alreadyClaimed && !keptFirstInBullet) {
+        keptFirstInBullet = true;
+        usedScopeKeys.add(claimKey);
+        return match;
+      }
+      const alternate =
+        alternates[(seedIndex + altOffset) % alternates.length]!;
+      altOffset += 1;
+      if (/^[A-Z]/.test(match)) {
+        return `${alternate.charAt(0).toUpperCase()}${alternate.slice(1)}`;
+      }
+      return alternate;
+    });
+  }
+  return result;
 }
 
 function claimActionScopeKeys(
@@ -567,8 +641,14 @@ export function ensureUniqueActionScopeBullet(input: {
     return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
   })();
 
+  const diversified = diversifyHighCollisionContentTokens(
+    scoped,
+    input.usedScopeKeys,
+    input.bulletId,
+  );
+
   return ensureAllocatedOpeningVerb(
-    ensureMinimumBulletWords(scoped, minimumWords, input.bulletId),
+    ensureMinimumBulletWords(diversified, minimumWords, input.bulletId),
     input.actionVerb,
   );
 }
@@ -767,6 +847,8 @@ export function normalizeBulletSentence(value: string): string {
           // Never leave internal plan identifiers in visible resume text.
           .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
           .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
+          // JD scopes sometimes arrive with a terminal period mid-clause.
+          .replace(/\.(?=\s+(?:through|using|with|,|and|while|that)\b)/gi, "")
           .replace(/\s+,/g, ",")
           .replace(/,\s*,+/g, ", ")
           .replace(/\s+/g, " ")
@@ -801,6 +883,113 @@ export function actionVerbStem(verb: string): string {
  */
 export function stripIntraBulletRepetition(sentence: string): string {
   let text = sentence.replace(/[.!?]+$/g, "").trim();
+
+  // Alias twins: "RESTful APIs and REST APIs" → keep the more specific form.
+  text = text.replace(
+    /\bRESTful\s+APIs?\s+and\s+REST\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+  text = text.replace(
+    /\bREST\s+APIs?\s+and\s+RESTful\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+  text = text.replace(/\bREST\s+APIs?\s+and\s+REST\s+APIs?\b/gi, "REST APIs");
+  text = text.replace(
+    /\bRESTful\s+APIs?\s+and\s+RESTful\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+
+  // Verb/object tautologies: "Directed technical direction for …".
+  text = text.replace(
+    /\b(Direct(?:ed|s|ing)|Lead(?:s|ing)?|Led)\s+technical\s+direction(?:\s+for)?\b/gi,
+    "$1",
+  );
+
+  // Repeated cross-functional markers inside one bullet.
+  {
+    let crossFunctionalSeen = false;
+    text = text.replace(
+      /\bcross-functional(\s+[A-Za-z][\w-]*)?\b/gi,
+      (full, rest = "") => {
+        if (!crossFunctionalSeen) {
+          crossFunctionalSeen = true;
+          return full;
+        }
+        if (/^\s+planning$/i.test(rest)) {
+          return "delivery planning";
+        }
+        if (/^\s+collaboration$/i.test(rest)) {
+          return "stakeholder collaboration";
+        }
+        return `shared${rest}`;
+      },
+    );
+  }
+
+  // Repeated "distributed" markers inside one bullet.
+  {
+    let distributedSeen = false;
+    text = text.replace(/\bdistributed(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!distributedSeen) {
+        distributedSeen = true;
+        return full;
+      }
+      if (/^\s+systems?$/i.test(rest)) {
+        return "platform services";
+      }
+      if (/^\s+processing$/i.test(rest)) {
+        return "parallel processing";
+      }
+      return `scalable${rest}`;
+    });
+  }
+
+  // Outcome-clause content-noun echoes.
+  text = text.replace(
+    /\breducing security findings by (\d+(?:\.\d+)?(?:%|x))\s+and improving security posture\b/gi,
+    "reducing security findings by $1 and improving control coverage",
+  );
+  text = text.replace(
+    /\breducing infrastructure cost by (\d+(?:\.\d+)?(?:%|x))\s+while strengthening cloud cost efficiency\b/gi,
+    "reducing infrastructure cost by $1 while strengthening cloud efficiency",
+  );
+  text = text.replace(
+    /\brelease failures\b([^,.]*?)\band strengthening release reliability\b/gi,
+    "release failures$1 and strengthening deployment reliability",
+  );
+
+  // Repeated "security" markers inside one bullet (posture + findings, etc.).
+  {
+    let securitySeen = false;
+    text = text.replace(/\bsecurity(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!securitySeen) {
+        securitySeen = true;
+        return full;
+      }
+      if (/^\s+findings?$/i.test(rest)) {
+        return "control findings";
+      }
+      if (/^\s+posture$/i.test(rest)) {
+        return "control coverage";
+      }
+      return `control${rest}`;
+    });
+  }
+
+  // Repeated "cost" markers inside one bullet.
+  {
+    let costSeen = false;
+    text = text.replace(/\bcost(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!costSeen) {
+        costSeen = true;
+        return full;
+      }
+      if (/^\s+efficiency$/i.test(rest)) {
+        return "efficiency";
+      }
+      return `spend${rest}`;
+    });
+  }
 
   // Coordinated/Aligned/Automated ... delivery coordination → keep a collaboration signal.
   text = text.replace(
@@ -857,6 +1046,12 @@ export function stripIntraBulletRepetition(sentence: string): string {
       if (
         /^(?:stabil|orchestr)$/i.test(verbStem) &&
         /^(?:stabil|orchestr)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:direct|lead)$/i.test(verbStem) &&
+        /^(?:direct|lead)$/i.test(nextStem)
       ) {
         return verb;
       }
@@ -1004,18 +1199,26 @@ export function substantiveKeyword(keyword: string): string {
 }
 
 function uniquePhrases(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const selected: string[] = [];
+  const byKey = new Map<string, string>();
+  const order: string[] = [];
   for (const value of values) {
     const cleaned = stripTerminal(value);
     const key = canonicalKeywordKey(cleaned);
-    if (!cleaned || !key || seen.has(key)) {
+    if (!cleaned || !key) {
       continue;
     }
-    seen.add(key);
-    selected.push(cleaned);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, cleaned);
+      order.push(key);
+      continue;
+    }
+    // Prefer the longer / more specific surface form (RESTful APIs > REST APIs).
+    if (cleaned.length > existing.length) {
+      byKey.set(key, cleaned);
+    }
   }
-  return selected;
+  return order.map((key) => byKey.get(key)!);
 }
 
 function removeContainedPhrases(values: readonly string[]): string[] {

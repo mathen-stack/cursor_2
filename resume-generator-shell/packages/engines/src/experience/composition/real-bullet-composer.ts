@@ -19,6 +19,7 @@ import {
   normalizeBulletSentence,
   repairBrokenBulletWording,
   stripFirstPersonPronouns,
+  stripTerminal,
   substantiveKeyword,
 } from "./bullet-language";
 import { validateBulletComposition } from "./bullet-composition-validator";
@@ -307,7 +308,7 @@ export class RealBulletComposer implements BulletComposer {
         const support = joinNatural(
           compositionPackage.supportingKeywords.slice(0, 2),
         );
-        const scope =
+        const rawScope =
           compositionPackage.directKeywords
             .map((keyword) => substantiveKeyword(keyword))
             .find(
@@ -316,16 +317,25 @@ export class RealBulletComposer implements BulletComposer {
                 !isJdMarketingOrMetaScope(value) &&
                 !isBrokenBulletWording(value),
             ) ||
-          plan.roleFocusArea ||
+          substantiveKeyword(plan.roleFocusArea || "") ||
           "production delivery outcomes";
+        const scope =
+          stripTerminal(rawScope).replace(/[.!?]+$/g, "").trim() ||
+          "production delivery outcomes";
+        const safeScope =
+          scope &&
+          !isJdMarketingOrMetaScope(scope) &&
+          !isBrokenBulletWording(scope)
+            ? scope
+            : "production delivery outcomes";
         const metric = story.metrics[0];
         const metricClause = metric
           ? metricAsGerund(metric)
           : "improving delivery predictability by 20%";
         finalBullet = repairBrokenBulletWording(
           normalizeBulletSentence(
-            `${keywordPackage.actionVerb} ${scope}${
-              support ? ` through ${support}` : ""
+            `${keywordPackage.actionVerb} ${safeScope}${
+              support ? ` through ${stripTerminal(support)}` : ""
             }${
               plan.communicationFocused
                 ? " with product and engineering stakeholders"

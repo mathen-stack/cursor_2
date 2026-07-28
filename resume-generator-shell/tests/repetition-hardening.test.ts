@@ -661,4 +661,90 @@ Lead technical strategy.`,
       expect({ ending, count }).toEqual({ ending, count: 1 });
     }
   });
+
+  it("scrubs REST alias twins, directed/direction tautologies, and content-noun echoes", () => {
+    expect(
+      normalizeBulletSentence(
+        "Designed RESTful APIs and REST APIs through design reviews, reducing cycle time by 27%.",
+      ),
+    ).not.toMatch(/\bREST(?:ful)?\s+APIs?\s+and\s+REST(?:ful)?\s+APIs?\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Designed RESTful APIs and REST APIs through design reviews, reducing cycle time by 27%.",
+      ),
+    ).toMatch(/RESTful APIs/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Directed technical direction for engineering standards and execution planning, increasing velocity by 26%.",
+      ),
+    ).not.toMatch(/\bDirected\s+technical\s+direction\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Directed technical direction for engineering standards and execution planning, increasing velocity by 26%.",
+      ),
+    ).toMatch(/^Directed\s+engineering standards/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Facilitated cross-functional collaboration through cross-team agreements and cross-functional planning, reducing rework by 25%.",
+      ),
+    ).not.toMatch(/\bcross-functional\b[\s\S]*\bcross-functional\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Scaled microservices for high-performance distributed systems through distributed processing, delivering a 3.2x reduction in peak-time errors.",
+      ),
+    ).not.toMatch(/\bdistributed\b[\s\S]*\bdistributed\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Secured system reliability through access controls, reducing security findings by 33% and improving security posture.",
+      ),
+    ).not.toMatch(/\bsecurity\b[\s\S]*\bsecurity\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Consolidated query optimization, reducing infrastructure cost by 24% while strengthening cloud cost efficiency.",
+      ),
+    ).not.toMatch(/\bcost\b[\s\S]*\bcost\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Launched genai releases, delivering a 23% reduction in release failures and strengthening release reliability.",
+      ),
+    ).not.toMatch(/\brelease failures\b[\s\S]*\brelease reliability\b/i);
+  });
+
+  it("diversifies distributed across bullets while keeping the first occurrence", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Designed RESTful APIs through distributed systems and design reviews, reducing cycle time by 27%.",
+      actionVerb: "Designed",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Optimized distributed systems through adaptive batching, increasing throughput by 31%.",
+      actionVerb: "Optimized",
+      bulletId: "EXP-001-B-003",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Scaled microservices for high-performance distributed systems through parallel workers, delivering a 3.2x error reduction.",
+      actionVerb: "Scaled",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toMatch(/\bdistributed\b/);
+    expect(second.toLowerCase()).not.toMatch(/\bdistributed\b/);
+    expect(third.toLowerCase()).not.toMatch(/\bdistributed\b/);
+    expect(isBrokenBulletWording(first)).toBe(false);
+    expect(isBrokenBulletWording(second)).toBe(false);
+    expect(isBrokenBulletWording(third)).toBe(false);
+  });
 });

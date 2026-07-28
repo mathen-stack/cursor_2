@@ -46,6 +46,7 @@ const TOKEN_ALIASES: Readonly<Record<string, string>> = {
   pipelines: "pipeline",
   services: "service",
   workflows: "workflow",
+  restful: "rest",
   prometheus: "prometheus",
   kubernetes: "kubernetes",
   redis: "redis",

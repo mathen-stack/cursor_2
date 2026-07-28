@@ -130,8 +130,21 @@ export function hasRepeatedContentNoun(value: string): boolean {
   ) {
     return true;
   }
-  return /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+(?:[a-z][a-z0-9+./-]*\s+){0,3}(velocity|throughput|adoption|latency|reliability)\b[^.]*\b(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
-    value,
+  if (
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+(?:[a-z][a-z0-9+./-]*\s+){0,3}(velocity|throughput|adoption|latency|reliability)\b[^.]*\b(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  // Intra-bullet content-noun / alias echoes that read as clones in the UI.
+  return (
+    /\bREST(?:ful)?\s+APIs?\s+and\s+REST(?:ful)?\s+APIs?\b/i.test(value) ||
+    /\b(?:Directed|Directs|Directing)\s+technical\s+direction\b/i.test(value) ||
+    /\bcross-functional\b[\s\S]*\bcross-functional\b/i.test(value) ||
+    /\bdistributed\b[\s\S]*\bdistributed\b/i.test(value) ||
+    /\bsecurity\b[\s\S]*\bsecurity\b/i.test(value) ||
+    /\bcost\b[\s\S]*\bcost\b/i.test(value)
   );
 }
 
