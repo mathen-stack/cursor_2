@@ -233,6 +233,29 @@ textarea:focus {
   padding-top: 0;
 }
 
+.entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.entry-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.entry-remove {
+  margin-left: auto;
+  min-height: 2.2rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+}
+
 .section-actions {
   display: flex;
   justify-content: flex-start;

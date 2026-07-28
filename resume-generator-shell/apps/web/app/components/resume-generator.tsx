@@ -328,6 +328,17 @@ export default function ResumeGenerator() {
 
           {profile.careerHistory.map((entry, index) => (
             <div key={entry.experienceId} className="entry-block">
+              <div className="entry-head">
+                <p className="entry-label">Experience {index + 1}</p>
+                <button
+                  type="button"
+                  className="secondary-action entry-remove"
+                  disabled={profile.careerHistory.length === 1}
+                  onClick={() => removeCareer(index)}
+                >
+                  Remove Experience
+                </button>
+              </div>
               <div className="profile-grid">
                 <label className="profile-field profile-field-full">
                   <span>Company</span>
@@ -368,16 +379,6 @@ export default function ResumeGenerator() {
                   />
                 </label>
               </div>
-              <div className="section-actions">
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={profile.careerHistory.length === 1}
-                  onClick={() => removeCareer(index)}
-                >
-                  Remove Experience
-                </button>
-              </div>
             </div>
           ))}
 
@@ -397,6 +398,16 @@ export default function ResumeGenerator() {
 
           {profile.education.map((entry, index) => (
             <div key={entry.educationId} className="entry-block">
+              <div className="entry-head">
+                <p className="entry-label">Education {index + 1}</p>
+                <button
+                  type="button"
+                  className="secondary-action entry-remove"
+                  onClick={() => removeEducation(index)}
+                >
+                  Remove Education
+                </button>
+              </div>
               <div className="profile-grid">
                 <label className="profile-field">
                   <span>School</span>
@@ -449,15 +460,6 @@ export default function ResumeGenerator() {
                     }
                   />
                 </label>
-              </div>
-              <div className="section-actions">
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => removeEducation(index)}
-                >
-                  Remove Education
-                </button>
               </div>
             </div>
           ))}
