@@ -46,6 +46,14 @@ function formatEducationPeriod(entry: {
   return start || end;
 }
 
+function monthInputValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || /^present$/i.test(trimmed)) return "";
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}$/.test(trimmed)) return `${trimmed}-01`;
+  return "";
+}
+
 function atsScoreClass(score: number): string {
   if (score >= 90) return "high";
   if (score >= 75) return "mid";
@@ -373,27 +381,40 @@ export default function ResumeGenerator() {
                   <span>Period</span>
                   <div className="period-inputs">
                     <input
-                      type="text"
+                      type="month"
                       name={`careerStartDate-${entry.experienceId}`}
                       aria-label="Experience start date"
-                      placeholder="2022-01"
-                      value={entry.startDate}
+                      value={monthInputValue(entry.startDate)}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateCareer(index, "startDate", event.target.value)
                       }
                     />
                     <span className="period-separator">-</span>
                     <input
-                      type="text"
+                      type="month"
                       name={`careerEndDate-${entry.experienceId}`}
                       aria-label="Experience end date"
-                      placeholder="Present"
-                      value={entry.endDate}
+                      value={monthInputValue(entry.endDate)}
+                      disabled={/^present$/i.test(entry.endDate.trim())}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateCareer(index, "endDate", event.target.value)
                       }
                     />
                   </div>
+                  <label className="period-present">
+                    <input
+                      type="checkbox"
+                      checked={/^present$/i.test(entry.endDate.trim())}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(
+                          index,
+                          "endDate",
+                          event.target.checked ? "Present" : "",
+                        )
+                      }
+                    />
+                    <span>Present</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -473,22 +494,20 @@ export default function ResumeGenerator() {
                   <span>Period</span>
                   <div className="period-inputs">
                     <input
-                      type="text"
+                      type="month"
                       name={`educationStartDate-${entry.educationId}`}
                       aria-label="Education start date"
-                      placeholder="2014-09"
-                      value={entry.startDate}
+                      value={monthInputValue(entry.startDate)}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateEducation(index, "startDate", event.target.value)
                       }
                     />
                     <span className="period-separator">-</span>
                     <input
-                      type="text"
+                      type="month"
                       name={`educationEndDate-${entry.educationId}`}
                       aria-label="Education end date"
-                      placeholder="2018-06"
-                      value={entry.endDate}
+                      value={monthInputValue(entry.endDate)}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateEducation(index, "endDate", event.target.value)
                       }

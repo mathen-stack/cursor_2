@@ -710,6 +710,7 @@ textarea {
   font: inherit;
   font-size: 0.92rem;
   outline: none;
+  color-scheme: dark;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -718,9 +719,31 @@ textarea {
   box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
 }
 
+.period-inputs input:disabled {
+  opacity: 0.55;
+}
+
 .period-separator {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 650;
   text-align: center;
+}
+
+.period-present {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.period-present input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
