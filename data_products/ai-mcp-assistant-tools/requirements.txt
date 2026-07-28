@@ -1,0 +1,2 @@
+nxd_data_product[spec]
+nxd-drivers[rpc]
