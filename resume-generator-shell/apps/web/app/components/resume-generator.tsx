@@ -8,6 +8,7 @@ import type {
   FinalResumeData,
   UserProfile,
 } from "@resume/contracts";
+import { PeriodDateControl } from "./period-date-control";
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
@@ -44,14 +45,6 @@ function formatEducationPeriod(entry: {
   const end = entry.endDate?.trim() ?? "";
   if (start && end) return `${start} – ${end}`;
   return start || end;
-}
-
-function monthInputValue(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || /^present$/i.test(trimmed)) return "";
-  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
-  if (/^\d{4}$/.test(trimmed)) return `${trimmed}-01`;
-  return "";
 }
 
 function atsScoreClass(score: number): string {
@@ -379,42 +372,13 @@ export default function ResumeGenerator() {
 
                 <div className="profile-field">
                   <span>Period</span>
-                  <div className="period-inputs">
-                    <input
-                      type="month"
-                      name={`careerStartDate-${entry.experienceId}`}
-                      aria-label="Experience start date"
-                      value={monthInputValue(entry.startDate)}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(index, "startDate", event.target.value)
-                      }
-                    />
-                    <span className="period-separator">-</span>
-                    <input
-                      type="month"
-                      name={`careerEndDate-${entry.experienceId}`}
-                      aria-label="Experience end date"
-                      value={monthInputValue(entry.endDate)}
-                      disabled={/^present$/i.test(entry.endDate.trim())}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(index, "endDate", event.target.value)
-                      }
-                    />
-                  </div>
-                  <label className="period-present">
-                    <input
-                      type="checkbox"
-                      checked={/^present$/i.test(entry.endDate.trim())}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(
-                          index,
-                          "endDate",
-                          event.target.checked ? "Present" : "",
-                        )
-                      }
-                    />
-                    <span>Present</span>
-                  </label>
+                  <PeriodDateControl
+                    startValue={entry.startDate}
+                    endValue={entry.endDate}
+                    allowPresentEnd
+                    onStartChange={(value) => updateCareer(index, "startDate", value)}
+                    onEndChange={(value) => updateCareer(index, "endDate", value)}
+                  />
                 </div>
               </div>
             </div>
@@ -492,27 +456,14 @@ export default function ResumeGenerator() {
 
                 <div className="profile-field">
                   <span>Period</span>
-                  <div className="period-inputs">
-                    <input
-                      type="month"
-                      name={`educationStartDate-${entry.educationId}`}
-                      aria-label="Education start date"
-                      value={monthInputValue(entry.startDate)}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateEducation(index, "startDate", event.target.value)
-                      }
-                    />
-                    <span className="period-separator">-</span>
-                    <input
-                      type="month"
-                      name={`educationEndDate-${entry.educationId}`}
-                      aria-label="Education end date"
-                      value={monthInputValue(entry.endDate)}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateEducation(index, "endDate", event.target.value)
-                      }
-                    />
-                  </div>
+                  <PeriodDateControl
+                    startValue={entry.startDate}
+                    endValue={entry.endDate}
+                    onStartChange={(value) =>
+                      updateEducation(index, "startDate", value)
+                    }
+                    onEndChange={(value) => updateEducation(index, "endDate", value)}
+                  />
                 </div>
               </div>
             </div>
