@@ -1,175 +1,115 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMemo, type ChangeEvent } from "react";
 
 const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  { value: "01", label: "Jan" },
+  { value: "02", label: "Feb" },
+  { value: "03", label: "Mar" },
+  { value: "04", label: "Apr" },
+  { value: "05", label: "May" },
+  { value: "06", label: "Jun" },
+  { value: "07", label: "Jul" },
+  { value: "08", label: "Aug" },
+  { value: "09", label: "Sep" },
+  { value: "10", label: "Oct" },
+  { value: "11", label: "Nov" },
+  { value: "12", label: "Dec" },
 ] as const;
 
-function parseMonthValue(value: string): { year: number; month: number } | null {
+function parseMonthValue(value: string): { year: string; month: string } | null {
   const trimmed = value.trim();
   if (!trimmed || /^present$/i.test(trimmed)) return null;
   const match = /^(\d{4})-(\d{2})$/.exec(trimmed);
   if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (!Number.isFinite(year) || month < 1 || month > 12) return null;
-  return { year, month };
+  return { year: match[1], month: match[2] };
 }
 
-function formatMonthValue(year: number, month: number): string {
-  return `${year}-${String(month).padStart(2, "0")}`;
+function buildYears(centerYear: number): string[] {
+  const years: string[] = [];
+  for (let year = centerYear + 1; year >= centerYear - 60; year -= 1) {
+    years.push(String(year));
+  }
+  return years;
 }
 
-function displayMonthValue(value: string): string {
-  if (/^present$/i.test(value.trim())) return "Present";
-  const parsed = parseMonthValue(value);
-  if (!parsed) return "Select month";
-  return `${MONTHS[parsed.month - 1]} ${parsed.year}`;
-}
-
-type MonthPickerProps = {
+type MonthYearFieldsProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  disabled?: boolean;
   allowPresent?: boolean;
+  years: readonly string[];
 };
 
-function MonthPicker({
+function MonthYearFields({
   label,
   value,
   onChange,
-  disabled = false,
   allowPresent = false,
-}: MonthPickerProps) {
-  const panelId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
+  years,
+}: MonthYearFieldsProps) {
   const isPresent = /^present$/i.test(value.trim());
   const parsed = parseMonthValue(value);
-  const [open, setOpen] = useState(false);
-  const [viewYear, setViewYear] = useState(
-    () => parsed?.year ?? new Date().getFullYear(),
-  );
+  const month = parsed?.month ?? "";
+  const year = parsed?.year ?? "";
 
-  useEffect(() => {
-    if (!open) return;
-    setViewYear(parsed?.year ?? new Date().getFullYear());
-  }, [open, parsed?.year]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+  function emit(nextMonth: string, nextYear: string) {
+    if (!nextMonth || !nextYear) {
+      onChange("");
+      return;
     }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const selectedKey = useMemo(() => {
-    if (!parsed) return "";
-    return formatMonthValue(parsed.year, parsed.month);
-  }, [parsed]);
+    onChange(`${nextYear}-${nextMonth}`);
+  }
 
   return (
-    <div className={`month-picker${disabled ? " is-disabled" : ""}`} ref={rootRef}>
-      <button
-        type="button"
-        className={`month-picker-trigger${open ? " is-open" : ""}${
-          parsed || isPresent ? " has-value" : ""
-        }`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={panelId}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="month-picker-label">{label}</span>
-        <strong className="month-picker-value">{displayMonthValue(value)}</strong>
-      </button>
+    <div className="period-part">
+      <span className="period-part-label">{label}</span>
+      <div className="period-part-controls">
+        <select
+          className="period-select"
+          aria-label={`${label} month`}
+          value={isPresent ? "" : month}
+          disabled={isPresent}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+            emit(event.target.value, year || String(new Date().getFullYear()))
+          }
+        >
+          <option value="">Month</option>
+          {MONTHS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
 
-      {open ? (
-        <div className="month-picker-panel" id={panelId} role="dialog" aria-label={label}>
-          <div className="month-picker-toolbar">
-            <button
-              type="button"
-              className="month-picker-nav"
-              aria-label="Previous year"
-              onClick={() => setViewYear((year) => year - 1)}
-            >
-              ‹
-            </button>
-            <p className="month-picker-year">{viewYear}</p>
-            <button
-              type="button"
-              className="month-picker-nav"
-              aria-label="Next year"
-              onClick={() => setViewYear((year) => year + 1)}
-            >
-              ›
-            </button>
-          </div>
+        <select
+          className="period-select"
+          aria-label={`${label} year`}
+          value={isPresent ? "" : year}
+          disabled={isPresent}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+            emit(month || "01", event.target.value)
+          }
+        >
+          <option value="">Year</option>
+          {years.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
 
-          <div className="month-picker-grid" role="listbox" aria-label="Months">
-            {MONTHS.map((month, index) => {
-              const monthNumber = index + 1;
-              const key = formatMonthValue(viewYear, monthNumber);
-              const selected = selectedKey === key;
-              return (
-                <button
-                  key={month}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  className={`month-picker-cell${selected ? " is-selected" : ""}`}
-                  onClick={() => {
-                    onChange(key);
-                    setOpen(false);
-                  }}
-                >
-                  {month}
-                </button>
-              );
-            })}
-          </div>
-
-          {allowPresent ? (
-            <button
-              type="button"
-              className={`month-picker-present${isPresent ? " is-active" : ""}`}
-              onClick={() => {
-                onChange("Present");
-                setOpen(false);
-              }}
-            >
-              Present / Current
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+        {allowPresent ? (
+          <button
+            type="button"
+            className={`period-present-chip${isPresent ? " is-active" : ""}`}
+            aria-pressed={isPresent}
+            onClick={() => onChange(isPresent ? "" : "Present")}
+          >
+            Present
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -180,8 +120,6 @@ type PeriodDateControlProps = {
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
   allowPresentEnd?: boolean;
-  startLabel?: string;
-  endLabel?: string;
 };
 
 export function PeriodDateControl({
@@ -190,20 +128,26 @@ export function PeriodDateControl({
   onStartChange,
   onEndChange,
   allowPresentEnd = false,
-  startLabel = "Start",
-  endLabel = "End",
 }: PeriodDateControlProps) {
+  const years = useMemo(() => buildYears(new Date().getFullYear()), []);
+
   return (
     <div className="period-date-control">
-      <MonthPicker label={startLabel} value={startValue} onChange={onStartChange} />
+      <MonthYearFields
+        label="Start"
+        value={startValue}
+        onChange={onStartChange}
+        years={years}
+      />
       <span className="period-separator" aria-hidden>
         -
       </span>
-      <MonthPicker
-        label={endLabel}
+      <MonthYearFields
+        label="End"
         value={endValue}
         onChange={onEndChange}
         allowPresent={allowPresentEnd}
+        years={years}
       />
     </div>
   );
