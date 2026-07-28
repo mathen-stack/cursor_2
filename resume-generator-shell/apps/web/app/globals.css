@@ -291,12 +291,12 @@ textarea:focus {
 }
 
 .secondary-action.entry-remove {
-  height: 1.4rem;
-  min-height: 1.4rem;
-  max-height: 1.4rem;
+  height: 1.65rem;
+  min-height: 1.65rem;
+  max-height: 1.65rem;
   margin-left: auto;
-  padding: 0 0.5rem;
-  font-size: 0.7rem;
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
   font-weight: 650;
   line-height: 1;
   transform: none;
