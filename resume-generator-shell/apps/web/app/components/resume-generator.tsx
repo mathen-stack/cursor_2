@@ -392,31 +392,32 @@ export default function ResumeGenerator() {
                   />
                 </label>
 
-                <label className="profile-field">
-                  <span>Start Date</span>
-                  <input
-                    type="text"
-                    name={`careerStartDate-${entry.experienceId}`}
-                    placeholder="2022-01"
-                    value={entry.startDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "startDate", event.target.value)
-                    }
-                  />
-                </label>
-
-                <label className="profile-field">
-                  <span>End Date</span>
-                  <input
-                    type="text"
-                    name={`careerEndDate-${entry.experienceId}`}
-                    placeholder="Present"
-                    value={entry.endDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "endDate", event.target.value)
-                    }
-                  />
-                </label>
+                <div className="profile-field">
+                  <span>Period</span>
+                  <div className="period-inputs">
+                    <input
+                      type="text"
+                      name={`careerStartDate-${entry.experienceId}`}
+                      aria-label="Experience start date"
+                      placeholder="2022-01"
+                      value={entry.startDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(index, "startDate", event.target.value)
+                      }
+                    />
+                    <span className="period-separator">-</span>
+                    <input
+                      type="text"
+                      name={`careerEndDate-${entry.experienceId}`}
+                      aria-label="Experience end date"
+                      placeholder="Present"
+                      value={entry.endDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(index, "endDate", event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           ))}
