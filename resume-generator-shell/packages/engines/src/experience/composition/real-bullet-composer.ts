@@ -11,6 +11,7 @@ import {
   ensureCompositionCommunicationSignal,
   ensureUniqueActionScopeBullet,
   ensureMinimumBulletWords,
+  ensureAllocatedOpeningVerb,
   containsVagueBuzzwords,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
@@ -440,10 +441,9 @@ export class RealBulletComposer implements BulletComposer {
       }
       return {
         ...draft,
-        finalBullet: ensureMinimumBulletWords(
-          finalBullet,
-          minimumWords,
-          draft.bulletId,
+        finalBullet: ensureAllocatedOpeningVerb(
+          ensureMinimumBulletWords(finalBullet, minimumWords, draft.bulletId),
+          draft.actionVerb,
         ),
       };
     };
@@ -455,13 +455,16 @@ export class RealBulletComposer implements BulletComposer {
       const draft = drafts[index]!;
       drafts[index] = restoreMissingSupport({
         ...draft,
-        finalBullet: ensureUniqueActionScopeBullet({
-          finalBullet: draft.finalBullet,
-          actionVerb: draft.actionVerb,
-          bulletId: draft.bulletId,
-          usedScopeKeys: usedActionScopeKeys,
-          minimumWords,
-        }),
+        finalBullet: ensureAllocatedOpeningVerb(
+          ensureUniqueActionScopeBullet({
+            finalBullet: draft.finalBullet,
+            actionVerb: draft.actionVerb,
+            bulletId: draft.bulletId,
+            usedScopeKeys: usedActionScopeKeys,
+            minimumWords,
+          }),
+          draft.actionVerb,
+        ),
       });
     }
     // Re-uniqueify after support restore, then claim only keywords still present.
@@ -470,13 +473,16 @@ export class RealBulletComposer implements BulletComposer {
       const draft = drafts[index]!;
       drafts[index] = syncClaimedKeywords({
         ...draft,
-        finalBullet: ensureUniqueActionScopeBullet({
-          finalBullet: draft.finalBullet,
-          actionVerb: draft.actionVerb,
-          bulletId: draft.bulletId,
-          usedScopeKeys: finalizedScopeKeys,
-          minimumWords,
-        }),
+        finalBullet: ensureAllocatedOpeningVerb(
+          ensureUniqueActionScopeBullet({
+            finalBullet: draft.finalBullet,
+            actionVerb: draft.actionVerb,
+            bulletId: draft.bulletId,
+            usedScopeKeys: finalizedScopeKeys,
+            minimumWords,
+          }),
+          draft.actionVerb,
+        ),
       });
     }
 
@@ -506,7 +512,7 @@ export class RealBulletComposer implements BulletComposer {
         validation.diagnostics
           .filter((item) =>
             item.errors.some((error) =>
-              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language|personal pronoun|first-person|supporting keywords|outcome keywords|direct JD keyword/i.test(
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language|personal pronoun|first-person|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
                 error,
               ),
             ),
@@ -526,13 +532,16 @@ export class RealBulletComposer implements BulletComposer {
               draft.bulletId,
             );
           }
-          finalBullet = ensureUniqueActionScopeBullet({
-            finalBullet,
-            actionVerb: draft.actionVerb,
-            bulletId: draft.bulletId,
-            usedScopeKeys: repairedScopeKeys,
-            minimumWords,
-          });
+          finalBullet = ensureAllocatedOpeningVerb(
+            ensureUniqueActionScopeBullet({
+              finalBullet,
+              actionVerb: draft.actionVerb,
+              bulletId: draft.bulletId,
+              usedScopeKeys: repairedScopeKeys,
+              minimumWords,
+            }),
+            draft.actionVerb,
+          );
           drafts[index] = syncClaimedKeywords({
             ...draft,
             finalBullet,

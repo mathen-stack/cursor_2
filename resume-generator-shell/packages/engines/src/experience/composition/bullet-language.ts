@@ -301,6 +301,43 @@ export function ensureMinimumBulletWords(
   );
 }
 
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Forces the bullet to start with its allocated action verb + a concrete object.
+ * Uniqueify/repair/support-restore can otherwise leave a comma-led or verb-less
+ * opening that fails sentence-strength validation.
+ */
+export function ensureAllocatedOpeningVerb(
+  text: string,
+  actionVerb: string,
+): string {
+  const verb = actionVerb.replace(/\s+/g, " ").trim();
+  if (!verb) {
+    return normalizeBulletSentence(text);
+  }
+  let body = text.replace(/\s+/g, " ").trim().replace(/[.!?]+$/g, "");
+  if (!body) {
+    return normalizeBulletSentence(`${verb} production delivery outcomes`);
+  }
+
+  const verbPattern = new RegExp(`^${escapeRegExpLiteral(verb)}\\s*`, "i");
+  if (verbPattern.test(body)) {
+    body = body.replace(verbPattern, "").trim();
+  } else {
+    // Drop a different leading verb/token so we can reattach the allocated one.
+    body = body.replace(/^[A-Za-z][A-Za-z-]*\s*/, "").trim();
+  }
+
+  if (!body || /^[,;:]/.test(body)) {
+    body = `production delivery outcomes${body}`;
+  }
+
+  return normalizeBulletSentence(`${verb} ${body}`);
+}
+
 /**
  * Short uniqueness qualifiers — never expose internal bullet IDs.
  * Prefer content-heavy phrases so validator keys (stop-word stripped bags)
@@ -402,7 +439,10 @@ export function ensureUniqueActionScopeBullet(input: {
     return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
   })();
 
-  return ensureMinimumBulletWords(scoped, minimumWords, input.bulletId);
+  return ensureAllocatedOpeningVerb(
+    ensureMinimumBulletWords(scoped, minimumWords, input.bulletId),
+    input.actionVerb,
+  );
 }
 
 function hashSeed(seed: string): number {

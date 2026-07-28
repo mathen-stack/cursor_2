@@ -3,6 +3,7 @@ import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
   actionScopeFingerprint,
   createProductionExperienceEngine,
+  ensureAllocatedOpeningVerb,
   ensureMinimumBulletWords,
   ensureUniqueActionScopeBullet,
   extractActionObjectScope,
@@ -23,6 +24,27 @@ describe("repetition hardening", () => {
         "Successfully delivered various platform upgrades very effectively, reducing incidents by 24%.",
       ),
     ).not.toMatch(/\b(?:successfully|various|very|effectively|really|numerous)\b/i);
+  });
+
+  it("restores allocated opening action verbs after repair or uniqueify damage", () => {
+    expect(
+      ensureAllocatedOpeningVerb(
+        "cross-functional delivery priorities with product stakeholders, reducing cycle time by 24%.",
+        "Collaborated",
+      ),
+    ).toMatch(/^Collaborated\s+/);
+    expect(
+      ensureAllocatedOpeningVerb(
+        "Collaborated, reducing delivery cycle time by 24%.",
+        "Collaborated",
+      ),
+    ).toMatch(/^Collaborated\s+\S+/);
+    expect(
+      ensureAllocatedOpeningVerb(
+        "reviews and solution design, reducing deployment cycle time by 47%.",
+        "Deployed",
+      ),
+    ).toMatch(/^Deployed\s+/);
   });
 
   it("scrubs vague resume buzzwords into concrete evidence wording", () => {
