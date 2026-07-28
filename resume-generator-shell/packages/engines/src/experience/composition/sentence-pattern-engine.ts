@@ -12,6 +12,7 @@ import {
   metricAsGerund,
   metricAsNoun,
   normalizeBulletSentence,
+  sentenceCount,
   stripFirstPersonPronouns,
   substantiveKeyword,
   uncoveredOutcomeKeywords,
@@ -353,10 +354,14 @@ export class SentencePatternEngine {
         !input.usedEndingSkeletons ||
         input.usedEndingSkeletons.size === 0 ||
         !input.usedEndingSkeletons.has(skeleton);
+      const singleSentence =
+        sentenceCount(candidate.finalBullet) === 1 &&
+        candidate.finalBullet.endsWith(".");
       return (
         count >= minimumWords &&
         count <= input.maximumWords &&
         endingFree &&
+        singleSentence &&
         preserve.every((phrase) => !phrase || containsPhrase(candidate.finalBullet, phrase))
       );
     });

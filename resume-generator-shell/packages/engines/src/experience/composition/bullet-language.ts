@@ -187,6 +187,59 @@ export function stripFirstPersonPronouns(value: string): string {
     .trim();
 }
 
+/**
+ * Protect decimals, tech tokens (React.js / ASP.NET), and abbreviations so they
+ * are not treated as sentence boundaries. Abbreviation periods are protected
+ * only when followed by more sentence content — a trailing "Inc." period can
+ * still serve as the bullet's terminal punctuation.
+ */
+function protectNonSentencePeriods(value: string): {
+  text: string;
+  restore: (text: string) => string;
+} {
+  const slots: string[] = [];
+  const protect = (match: string): string => {
+    const token = `@@DOT${slots.length}@@`;
+    slots.push(match);
+    return token;
+  };
+
+  let text = value.replace(/(?<=\d)\.(?=\d)/g, (match) => protect(match));
+  text = text.replace(/\b(?:e\.g\.|i\.e\.)(?=\s+\S)/gi, (match) => protect(match));
+  text = text.replace(/\b(?:u\.s\.|e\.u\.|u\.k\.)(?=\s+\S)/gi, (match) => protect(match));
+  text = text.replace(
+    /\b(?:inc|ltd|llc|corp|jr|sr|mr|mrs|ms|dr|prof|vs|etc|approx)\.(?=\s+\S)/gi,
+    (match) => protect(match),
+  );
+  // Dotted product/tech tokens: React.js, Node.js, ASP.NET, file-like ids.
+  text = text.replace(
+    /\b[A-Za-z][A-Za-z0-9+#]*\.[A-Za-z][A-Za-z0-9+#.]*\b/g,
+    (match) => protect(match),
+  );
+  // Leading .NET-style tokens.
+  text = text.replace(/(?<=^|[\s(,])\.[A-Za-z][A-Za-z0-9+#]*/g, (match) =>
+    protect(match),
+  );
+
+  return {
+    text,
+    restore: (input: string) =>
+      input.replace(/@@DOT(\d+)@@/g, (_, index) => slots[Number(index)] ?? ""),
+  };
+}
+
+function collapseLeakedSentenceBreaks(value: string): string {
+  const { text, restore } = protectNonSentencePeriods(value);
+  const collapsed = text
+    .replace(/[.!?]+(?=\s+\S)/g, ",")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[,:;]+$/g, "");
+  return restore(collapsed);
+}
+
 export function normalizeBulletSentence(value: string): string {
   const normalized = stripFirstPersonPronouns(
     value
@@ -224,7 +277,11 @@ export function normalizeBulletSentence(value: string): string {
     return "";
   }
   const withoutEcho = stripIntraBulletRepetition(normalized);
-  return `${withoutEcho.charAt(0).toUpperCase()}${withoutEcho.slice(1)}.`;
+  const singleSentence = collapseLeakedSentenceBreaks(withoutEcho);
+  if (!singleSentence) {
+    return "";
+  }
+  return `${singleSentence.charAt(0).toUpperCase()}${singleSentence.slice(1)}.`;
 }
 
 /** Morphological stem used to catch Coordinated/coordination style echoes. */
@@ -777,8 +834,8 @@ export function wordCount(value: string): number {
 }
 
 export function sentenceCount(value: string): number {
-  const withoutDecimals = value.replace(/(?<=\d)\.(?=\d)/g, "");
-  const matches = withoutDecimals.match(/[.!?](?:\s|$)/g);
+  const { text } = protectNonSentencePeriods(value);
+  const matches = text.match(/[.!?](?:\s|$)/g);
   return matches?.length ?? 0;
 }
 
