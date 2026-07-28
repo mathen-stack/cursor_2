@@ -197,6 +197,16 @@ function toolFamilyStem(token: string): string {
   return token.toLowerCase().replace(/\.(?:js|ts|tsx|jsx)$/i, "");
 }
 
+function sourceTokenGroundsStem(sourceToken: string, stem: string): boolean {
+  const lower = sourceToken.toLowerCase();
+  if (lower === stem || toolFamilyStem(sourceToken) === stem) {
+    return true;
+  }
+  // Product/domain spellings such as terraform.io or registry.terraform.io
+  // must still ground the catalog tool token "terraform".
+  return lower.split(/[.-]/).includes(stem);
+}
+
 function tokensOverlap(
   normalizedTokens: ReadonlySet<string>,
   sourceTokens: ReadonlySet<string>,
@@ -209,8 +219,8 @@ function tokensOverlap(
     if (stem.length < 2) {
       return false;
     }
-    return [...sourceTokens].some(
-      (sourceToken) => toolFamilyStem(sourceToken) === stem,
+    return [...sourceTokens].some((sourceToken) =>
+      sourceTokenGroundsStem(sourceToken, stem),
     );
   });
 }

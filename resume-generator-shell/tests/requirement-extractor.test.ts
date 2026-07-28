@@ -282,6 +282,29 @@ describe("Real JD Requirement Extraction Engine", () => {
     ).toBe(false);
   });
 
+  it("grounds Terraform requirements when the JD uses terraform.io product forms", async () => {
+    const jd = [
+      "Senior DevOps Engineer.",
+      "Experience with terraform.io is required.",
+      "Hands-on terraform.io/cloud provisioning experience is preferred.",
+      "Collaborate with platform and application teams on developer experience.",
+      "Build CI/CD pipelines and improve Kubernetes reliability for production platforms.",
+    ].join("\n");
+    const result = await new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    }).execute(createExtractorInput(jd));
+
+    const terraformRequirements = result.requirements.filter((item) =>
+      /terraform/i.test(item.normalizedText),
+    );
+    expect(terraformRequirements.length).toBeGreaterThan(0);
+    expect(
+      terraformRequirements.some((item) =>
+        /^Experience with Terraform\.$/i.test(item.normalizedText),
+      ),
+    ).toBe(true);
+  });
+
   it("integrates the real extractor while downstream engines remain mocked", async () => {
     const input = createExtractorInput(compoundJd);
     const result = await createMilestone2ExperienceEngine().execute({
