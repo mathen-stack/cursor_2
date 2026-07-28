@@ -358,19 +358,6 @@ export default function ResumeGenerator() {
               </div>
               <div className="profile-grid">
                 <label className="profile-field">
-                  <span>Role</span>
-                  <input
-                    type="text"
-                    name={`roleTitle-${entry.experienceId}`}
-                    placeholder="Senior Software Engineer"
-                    value={entry.roleTitle ?? ""}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "roleTitle", event.target.value)
-                    }
-                  />
-                </label>
-
-                <label className="profile-field">
                   <span>Company</span>
                   <input
                     type="text"
@@ -379,6 +366,19 @@ export default function ResumeGenerator() {
                     value={entry.companyName}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCareer(index, "companyName", event.target.value)
+                    }
+                  />
+                </label>
+
+                <label className="profile-field">
+                  <span>Role</span>
+                  <input
+                    type="text"
+                    name={`roleTitle-${entry.experienceId}`}
+                    placeholder="Senior Software Engineer"
+                    value={entry.roleTitle ?? ""}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updateCareer(index, "roleTitle", event.target.value)
                     }
                   />
                 </label>

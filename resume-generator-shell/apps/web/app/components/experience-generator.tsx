@@ -182,6 +182,16 @@ export default function ExperienceGenerator() {
                   }}
                 >
                   <label>
+                    <small>Company</small>
+                    <input
+                      style={inputStyle}
+                      value={entry.companyName}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareerEntry(index, "companyName", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label>
                     <small>Role</small>
                     <input
                       style={inputStyle}
@@ -189,16 +199,6 @@ export default function ExperienceGenerator() {
                       value={entry.roleTitle ?? ""}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateCareerEntry(index, "roleTitle", event.target.value)
-                      }
-                    />
-                  </label>
-                  <label>
-                    <small>Company</small>
-                    <input
-                      style={inputStyle}
-                      value={entry.companyName}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareerEntry(index, "companyName", event.target.value)
                       }
                     />
                   </label>
