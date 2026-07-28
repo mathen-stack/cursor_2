@@ -5,6 +5,14 @@ import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 import { cleanScope } from "../star/star-language";
 import { joinNatural, lowerFirst } from "../star/star-utils";
 
+/** Document-wide action-scope key — must match real-experience-validator normalizeText. */
+export function actionScopeFingerprint(scope: string): string {
+  return canonicalKeywordKey(scope)
+    .replace(/\b\d+(?:\.\d+)?\b/g, "#")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const STAR_OWNERSHIP_BOILERPLATE =
   /\b(?:effort to|responsibility to|owned the|took responsibility|delivery planning required|collaboration and delivery planning|collaborative delivery planning|cross-functional collaboration and delivery planning|cross-team product partnership|stakeholder communication loops|requirements discovery with partners|technical direction and cross-team execution)\b/i;
 
@@ -195,17 +203,98 @@ export function repairBrokenBulletWording(text: string): string {
   return repaired;
 }
 
-/** Short uniqueness qualifiers — never expose internal bullet IDs. */
-const UNIQUE_SCOPE_QUALIFIERS = [
-  "across production systems",
-  "for platform delivery",
-  "in release workflows",
-  "across critical services",
-  "for customer workloads",
-  "during peak demand",
-  "across distributed services",
-  "for operational readiness",
+/**
+ * Short uniqueness qualifiers — never expose internal bullet IDs.
+ * Prefer content-heavy phrases so validator keys (stop-word stripped bags)
+ * stay distinct after normalizeText / stemming.
+ */
+export const UNIQUE_SCOPE_QUALIFIERS = [
+  "production systems",
+  "platform delivery lanes",
+  "release workflows",
+  "critical services",
+  "customer workloads",
+  "peak demand windows",
+  "distributed services",
+  "operational readiness gates",
 ] as const;
+
+/**
+ * Rewrites a bullet when its multi-word action object collides with a scope
+ * already used earlier in the generation. Keys use the same normalizeText
+ * fingerprint as action-scope-repetition validation.
+ */
+export function ensureUniqueActionScopeBullet(input: {
+  finalBullet: string;
+  actionVerb: string;
+  bulletId: string;
+  usedScopeKeys: Set<string>;
+}): string {
+  const scrubbed = repairBrokenBulletWording(input.finalBullet);
+  const scope = extractActionObjectScope(scrubbed, input.actionVerb);
+  const tokenCount = scope.split(/\s+/).filter(Boolean).length;
+  if (tokenCount < 3) {
+    return scrubbed;
+  }
+  const scopeKey = actionScopeFingerprint(scope);
+  if (!scopeKey) {
+    return scrubbed;
+  }
+  if (!input.usedScopeKeys.has(scopeKey)) {
+    input.usedScopeKeys.add(scopeKey);
+    return scrubbed;
+  }
+
+  const verb = input.actionVerb;
+  const rest = scrubbed
+    .replace(/[.!?]+$/g, "")
+    .replace(new RegExp(`^${verb}\\s+`, "i"), "")
+    .trim();
+  const tailMatch = rest.match(/\s+(?:using|through|,)\s+[\s\S]*$/i);
+  const tail = tailMatch?.[0] ?? "";
+  const head = rest.slice(0, rest.length - tail.length).trim() || scope;
+  const seed = hashSeed(input.bulletId);
+  for (let offset = 0; offset < UNIQUE_SCOPE_QUALIFIERS.length; offset += 1) {
+    const qualifier =
+      UNIQUE_SCOPE_QUALIFIERS[(seed + offset) % UNIQUE_SCOPE_QUALIFIERS.length]!;
+    const candidateScope = `${head} across ${qualifier}`.replace(/\s+/g, " ").trim();
+    const candidateKey = actionScopeFingerprint(candidateScope);
+    if (!candidateKey || input.usedScopeKeys.has(candidateKey)) {
+      continue;
+    }
+    input.usedScopeKeys.add(candidateKey);
+    return repairBrokenBulletWording(`${verb} ${candidateScope}${tail}`);
+  }
+
+  // Last resort: mutate with a distinct content noun drawn from the bullet id hash.
+  // Never leak internal bullet identifiers into visible resume text.
+  const laneNouns = [
+    "automation",
+    "observability",
+    "throughput",
+    "resilience",
+    "governance",
+    "provisioning",
+    "orchestration",
+    "compliance",
+  ] as const;
+  for (let offset = 0; offset < laneNouns.length; offset += 1) {
+    const lane = laneNouns[(seed + offset) % laneNouns.length]!;
+    const lastResort = `${head} with ${lane} focus`.replace(/\s+/g, " ").trim();
+    const lastKey = actionScopeFingerprint(lastResort);
+    if (!lastKey || input.usedScopeKeys.has(lastKey)) {
+      continue;
+    }
+    input.usedScopeKeys.add(lastKey);
+    return repairBrokenBulletWording(`${verb} ${lastResort}${tail}`);
+  }
+  const forced = `${head} with ${laneNouns[seed % laneNouns.length]} focus`;
+  const forcedKey = actionScopeFingerprint(forced);
+  if (forcedKey) {
+    input.usedScopeKeys.add(forcedKey);
+  }
+  return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
+}
 
 function hashSeed(seed: string): number {
   return Math.abs(
@@ -296,7 +385,8 @@ export function extractActionObjectScope(bulletText: string, actionVerb?: string
 
 const TERMINAL_PUNCTUATION = /[.!?;:,]+$/g;
 const LEADING_CONNECTOR = /^(?:which|that|and|while|thereby|resulting in)\s+/i;
-const WEAK_FILLER = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various|multiple tasks|successfully|effectively)\b/gi;
+const WEAK_FILLER =
+  /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various|multiple tasks|multiple different|numerous various|successfully|effectively|very|really|numerous)\b/gi;
 
 const PRESERVED_TOKEN_CASE: Readonly<Record<string, string>> = {
   docker: "Docker",

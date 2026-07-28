@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
+  actionScopeFingerprint,
   createProductionExperienceEngine,
+  ensureUniqueActionScopeBullet,
+  extractActionObjectScope,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   normalizeBulletSentence,
@@ -13,6 +16,118 @@ import {
 const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
 
 describe("repetition hardening", () => {
+  it("scrubs filler and self-congratulatory wording from bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Successfully delivered various platform upgrades very effectively, reducing incidents by 24%.",
+      ),
+    ).not.toMatch(/\b(?:successfully|various|very|effectively|really|numerous)\b/i);
+  });
+
+  it("rewrites cloned multi-word action scopes to unique fingerprints", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Terraform, reducing incidents by 24%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Kubernetes, reducing downtime by 18%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-002-B-001",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Prometheus, reducing alerts by 21%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+    });
+
+    const keys = [first, second, third].map((bullet) =>
+      actionScopeFingerprint(extractActionObjectScope(bullet, "Delivered")),
+    );
+    expect(new Set(keys).size).toBe(3);
+    expect(second).not.toBe(first);
+    expect(third).not.toBe(first);
+    expect(third).not.toBe(second);
+  });
+
+  it("approves three-career Platform Engineer generation without action-scope or filler rejects", async () => {
+    const jobDescription = createJobDescription(
+      `Platform Engineer
+Standardize market launches — build repeatable infrastructure provisioning so new markets can launch quickly.
+Design scalable cloud platforms on AWS and Kubernetes.
+Launch CI/CD pipelines with Terraform.
+Secure harden security posture with cloud security posture management.
+Accelerate inference performance and reduce latency.
+Instrument monitoring with Prometheus.
+Orchestrate security mindset — experience with access control best practices through penetration testing.
+Collaborate with product and engineering stakeholders.
+Lead technical strategy.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-THREE-CAREER-REP", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Company",
+          startDate: "2017-08",
+          endDate: "2018-02",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Prior Labs",
+          startDate: "2015-01",
+          endDate: "2017-07",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    expect(
+      result.validation.issues.filter(
+        (issue) =>
+          issue.issueCode === "action-scope-repetition" &&
+          issue.severity === "error",
+      ),
+    ).toEqual([]);
+    expect(
+      result.validation.diagnostics.filter((item) =>
+        item.errors.some((error) => /filler|self-congratulatory/i.test(error)),
+      ),
+    ).toEqual([]);
+
+    const scopes = result.experiences.flatMap((experience) =>
+      experience.bullets
+        .map((bullet) => {
+          const scope = extractActionObjectScope(
+            bullet.finalBullet,
+            bullet.actionVerb,
+          );
+          if (scope.split(/\s+/).filter(Boolean).length < 3) {
+            return null;
+          }
+          return actionScopeFingerprint(scope);
+        })
+        .filter((scope): scope is string => Boolean(scope)),
+    );
+    expect(new Set(scopes).size).toBe(scopes.length);
+  });
+
   it("removes within-bullet verb and measure echoes", () => {
     expect(
       stripIntraBulletRepetition(

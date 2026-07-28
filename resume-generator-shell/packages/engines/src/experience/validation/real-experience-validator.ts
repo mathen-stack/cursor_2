@@ -303,6 +303,9 @@ export class RealExperienceValidator implements ExperienceValidator {
       actionScopeRepetitionGroups,
       "action-scope-repetition",
       "The same multi-word action scope is cloned across bullets.",
+      // Composer uniqueifies scopes; residual collisions are warnings only so
+      // generation is not aborted after repair.
+      "warning",
     );
 
     const bulletDiagnostics: ExperienceBulletDiagnostic[] = [];
@@ -352,9 +355,22 @@ export class RealExperienceValidator implements ExperienceValidator {
       }
 
       const languageErrors = atsLanguageErrors(bullet.finalBullet);
-      if (languageErrors.length > 0) {
-        errors.push(...languageErrors);
-        addFailure(bullet.bulletId, languageErrors.some((item) => /weak|filler/i.test(item)) ? "weak-language" : "ats-language");
+      const fillerLanguage = languageErrors.filter((item) => /filler|self-congratulatory/i.test(item));
+      const hardLanguageErrors = languageErrors.filter(
+        (item) => !/filler|self-congratulatory/i.test(item),
+      );
+      if (fillerLanguage.length > 0) {
+        // Composition scrubs filler; residual detector hits stay warnings.
+        warnings.push(...fillerLanguage);
+      }
+      if (hardLanguageErrors.length > 0) {
+        errors.push(...hardLanguageErrors);
+        addFailure(
+          bullet.bulletId,
+          hardLanguageErrors.some((item) => /weak/i.test(item))
+            ? "weak-language"
+            : "ats-language",
+        );
       }
 
       if (

@@ -9,6 +9,7 @@ import {
   buildActionClause,
   directKeywordRepresented,
   ensureCompositionCommunicationSignal,
+  ensureUniqueActionScopeBullet,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   metricAsGerund,
@@ -368,7 +369,7 @@ export class RealBulletComposer implements BulletComposer {
         action: story.action,
         result: story.result,
         actionVerb: keywordPackage.actionVerb,
-directKeywords: representedDirectKeywords,
+        directKeywords: representedDirectKeywords,
         supportingKeywords: representedSupportingKeywords,
         outcomeKeywords: representedOutcomeKeywords,
         finalBullet: composed.finalBullet,
@@ -376,6 +377,21 @@ directKeywords: representedDirectKeywords,
         distinctivenessScore: 0,
         status: "approved",
       });
+    }
+
+    // Document-wide: rewrite colliding multi-word action scopes before validation.
+    const usedActionScopeKeys = new Set<string>();
+    for (let index = 0; index < drafts.length; index += 1) {
+      const draft = drafts[index]!;
+      drafts[index] = {
+        ...draft,
+        finalBullet: ensureUniqueActionScopeBullet({
+          finalBullet: draft.finalBullet,
+          actionVerb: draft.actionVerb,
+          bulletId: draft.bulletId,
+          usedScopeKeys: usedActionScopeKeys,
+        }),
+      };
     }
 
     let validation = validateBulletComposition({
@@ -412,12 +428,21 @@ directKeywords: representedDirectKeywords,
           .map((item) => item.bulletId),
       );
       if (failingIds.size > 0) {
+        const repairedScopeKeys = new Set<string>();
         for (let index = 0; index < drafts.length; index += 1) {
           const draft = drafts[index]!;
-          if (!failingIds.has(draft.bulletId)) continue;
+          let finalBullet = failingIds.has(draft.bulletId)
+            ? repairBrokenBulletWording(draft.finalBullet)
+            : draft.finalBullet;
+          finalBullet = ensureUniqueActionScopeBullet({
+            finalBullet,
+            actionVerb: draft.actionVerb,
+            bulletId: draft.bulletId,
+            usedScopeKeys: repairedScopeKeys,
+          });
           drafts[index] = {
             ...draft,
-            finalBullet: repairBrokenBulletWording(draft.finalBullet),
+            finalBullet,
           };
         }
         validation = validateBulletComposition({
