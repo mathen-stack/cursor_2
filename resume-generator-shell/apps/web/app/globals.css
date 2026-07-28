@@ -681,14 +681,6 @@ textarea {
   .role-head {
     flex-direction: column;
   }
-
-  .period-inputs {
-    grid-template-columns: 1fr;
-  }
-
-  .period-separator {
-    text-align: left;
-  }
 }
 
 .period-date-control {
