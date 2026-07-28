@@ -42,14 +42,14 @@ export default function ExperienceGenerator() {
     {
       experienceId: "EXP-001",
       companyName: "Example AI Company",
-      startDate: "2022-01",
+      startDate: "Jan 2022",
       endDate: "Present",
     },
     {
       experienceId: "EXP-002",
       companyName: "Example Software Company",
-      startDate: "2018-03",
-      endDate: "2021-12",
+      startDate: "Mar 2018",
+      endDate: "Dec 2021",
     },
   ]);
   const [run, setRun] = useState<ExperienceGenerationRunRecord | null>(null);

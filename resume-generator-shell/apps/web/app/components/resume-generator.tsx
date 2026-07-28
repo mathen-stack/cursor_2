@@ -68,14 +68,14 @@ export default function ResumeGenerator() {
       {
         experienceId: "EXP-001",
         companyName: "Example AI Company",
-        startDate: "2022-01",
+        startDate: "Jan 2022",
         endDate: "Present",
       },
       {
         experienceId: "EXP-002",
         companyName: "Example Software Company",
-        startDate: "2018-03",
-        endDate: "2021-12",
+        startDate: "Mar 2018",
+        endDate: "Dec 2021",
       },
     ],
     education: [
@@ -84,8 +84,8 @@ export default function ResumeGenerator() {
         institution: "Example University",
         degree: "Bachelor of Science",
         field: "Computer Science",
-        startDate: "2014-09",
-        endDate: "2018-06",
+        startDate: "Sep 2014",
+        endDate: "Jun 2018",
       },
     ],
   });
@@ -337,8 +337,8 @@ export default function ResumeGenerator() {
             <div>
               <h2>Career History</h2>
               <p className="hint">
-                Add company and dates for each position. Role titles are assigned from
-                the JD during generation.
+                Add company and dates for each position. Use dates like Aug 2018.
+                Role titles are assigned from the JD during generation.
               </p>
             </div>
           </div>
@@ -396,7 +396,8 @@ export default function ResumeGenerator() {
             <div>
               <h2>Education</h2>
               <p className="hint">
-                Required. Add school, degree, field, and the study period.
+                Required. Add school, degree, field, and the study period (e.g. Aug
+                2018).
               </p>
             </div>
           </div>

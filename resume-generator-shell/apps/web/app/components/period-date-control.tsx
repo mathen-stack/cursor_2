@@ -18,8 +18,8 @@ export function PeriodDateControl({
   onStartChange,
   onEndChange,
   allowPresentEnd = false,
-  startPlaceholder = "2022-01",
-  endPlaceholder = allowPresentEnd ? "Present" : "2024-12",
+  startPlaceholder = "Aug 2018",
+  endPlaceholder = allowPresentEnd ? "Present" : "May 2022",
 }: PeriodDateControlProps) {
   return (
     <div className="period-date-control">
