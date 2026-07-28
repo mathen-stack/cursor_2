@@ -457,6 +457,14 @@ export function stripIntraBulletRepetition(sentence: string): string {
     /\b(Mentor(?:s|ed|ing)?)\b([^]*?)\bmentoring\b/gi,
     "$1$2 capability building",
   );
+  text = text.replace(
+    /\b(Collaborat(?:e|es|ed|ing))\b([^]*?)\bcross-functional collaboration\b/gi,
+    "$1$2 cross-functional delivery priorities",
+  );
+  text = text.replace(
+    /\b(Collaborat(?:e|es|ed|ing))\b([^]*?)\bcollaboration\b/gi,
+    "$1$2 stakeholder alignment",
+  );
 
   // Past-tense verb + same-stem / related infinitive object.
   // e.g. "Accelerated accelerate inference" or "Secured harden security".

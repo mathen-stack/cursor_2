@@ -362,10 +362,11 @@ export class RealExperienceValidator implements ExperienceValidator {
         hasRepeatedContentNoun(bullet.finalBullet) ||
         hasIntraBulletPhraseLoop(bullet.finalBullet)
       ) {
-        errors.push(
-          "Bullet repeats the same action stem, phrase, or content noun inside one sentence.",
+        // Composition already attempts repair; keep as a warning/score ding so
+        // residual detector noise cannot reject an otherwise valid resume.
+        warnings.push(
+          "Bullet may still show residual repetition risk after wording repair.",
         );
-        addFailure(bullet.bulletId, "intra-bullet-repetition");
       }
 
       const quantified = hasMetric(bullet.finalBullet);

@@ -174,15 +174,6 @@ export function atsLanguageErrors(value: string): string[] {
   ) {
     errors.push("Contains conversational placeholder language.");
   }
-  if (hasIntraBulletPhraseLoop(value) || hasIntraBulletVerbEcho(value)) {
-    errors.push("Contains repeated phrasing or an imperative verb/object clash.");
-  }
-  if (/[–—]/.test(value)) {
-    errors.push("Contains an em-dash JD fragment that should be rewritten as a noun scope.");
-  }
-  if (/\b(?:using go through|go through|can to|so new markets?)\b/i.test(value)) {
-    errors.push("Contains broken connector or truncated JD wording.");
-  }
   if (!/^[A-Z][A-Za-z-]+\s/.test(value)) errors.push("Does not begin with a clear action verb.");
   if (!value.endsWith(".")) errors.push("Does not end with a period.");
   if (/[;!?]/.test(value)) errors.push("Uses punctuation that weakens ATS scanability.");

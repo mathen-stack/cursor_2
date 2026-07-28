@@ -378,7 +378,7 @@ directKeywords: representedDirectKeywords,
       });
     }
 
-    const validation = validateBulletComposition({
+    let validation = validateBulletComposition({
       plans: input.plans,
       keywordPackages: drafts.map((bullet) => {
         const original = packagesByBullet.get(bullet.bulletId);
@@ -397,6 +397,51 @@ directKeywords: representedDirectKeywords,
       patternsByBullet,
       sentenceQualityValidator: this.sentenceQualityValidator,
     });
+
+    // One repair pass for bullets that still fail on wording diagnostics.
+    if (validation.overallStatus !== "approved") {
+      const failingIds = new Set(
+        validation.diagnostics
+          .filter((item) =>
+            item.errors.some((error) =>
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment/i.test(
+                error,
+              ),
+            ),
+          )
+          .map((item) => item.bulletId),
+      );
+      if (failingIds.size > 0) {
+        for (let index = 0; index < drafts.length; index += 1) {
+          const draft = drafts[index]!;
+          if (!failingIds.has(draft.bulletId)) continue;
+          drafts[index] = {
+            ...draft,
+            finalBullet: repairBrokenBulletWording(draft.finalBullet),
+          };
+        }
+        validation = validateBulletComposition({
+          plans: input.plans,
+          keywordPackages: drafts.map((bullet) => {
+            const original = packagesByBullet.get(bullet.bulletId);
+            if (!original) {
+              throw new Error(`Missing keyword package for composed bullet ${bullet.bulletId}.`);
+            }
+            return {
+              ...original,
+              directKeywords: bullet.directKeywords,
+              supportingKeywords: bullet.supportingKeywords,
+              outcomeKeywords: bullet.outcomeKeywords,
+            };
+          }),
+          stories: input.stories,
+          bullets: drafts,
+          patternsByBullet,
+          sentenceQualityValidator: this.sentenceQualityValidator,
+        });
+      }
+    }
+
     if (validation.overallStatus !== "approved") {
       throw new Error(
         `Compressed STAR bullet composition failed validation: ${validation.errors.join(" ")} ${validation.diagnostics
