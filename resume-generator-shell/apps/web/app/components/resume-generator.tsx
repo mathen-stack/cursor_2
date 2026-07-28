@@ -16,15 +16,6 @@ Collaborate with product, data, and platform teams to translate business require
 Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
 Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`;
 
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  padding: "10px 12px",
-  font: "inherit",
-};
-
 function newCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
@@ -219,14 +210,22 @@ export default function ResumeGenerator() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section style={{ background: "white", padding: 24, borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Resume input</h2>
-        <div style={{ display: "grid", gap: 16 }}>
-          <label>
-            <strong>Job description</strong>
+    <div className="workspace">
+      <section className="panel">
+        <header className="panel-intro">
+          <p className="panel-kicker">Compose</p>
+          <h2 className="panel-title">Job and profile</h2>
+          <p className="panel-note">
+            Same generation pipeline as before—just a calmer place to paste the role
+            and your background.
+          </p>
+        </header>
+
+        <div className="stack">
+          <label className="field">
+            <span className="field-label">Job description</span>
             <textarea
-              style={{ ...inputStyle, minHeight: 210, marginTop: 6, resize: "vertical" }}
+              className="control"
               value={jobDescriptionText}
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                 setJobDescriptionText(event.target.value)
@@ -235,17 +234,10 @@ export default function ResumeGenerator() {
           </label>
 
           <div>
-            <strong>Profile and contact</strong>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 10,
-                marginTop: 8,
-              }}
-            >
+            <span className="field-label">Profile and contact</span>
+            <div className="grid-2" style={{ marginTop: 8 }}>
               <input
-                style={inputStyle}
+                className="control"
                 aria-label="Profile ID"
                 placeholder="Profile ID"
                 value={profile.profileId}
@@ -257,11 +249,13 @@ export default function ResumeGenerator() {
                 (field) => (
                   <input
                     key={field}
-                    style={inputStyle}
+                    className="control"
                     aria-label={field}
                     placeholder={field}
                     value={profile.personalInformation[field] ?? ""}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => updatePersonal(field, event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updatePersonal(field, event.target.value)
+                    }
                   />
                 ),
               )}
@@ -269,35 +263,41 @@ export default function ResumeGenerator() {
           </div>
 
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <strong>Career history</strong>
-              <button type="button" onClick={addCareer}>Add company</button>
+            <div className="row-head">
+              <span className="field-label">Career history</span>
+              <button className="btn-ghost" type="button" onClick={addCareer}>
+                Add company
+              </button>
             </div>
-            <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+            <div className="row-list">
               {profile.careerHistory.map((entry, index) => (
-                <div
-                  key={entry.experienceId}
-                  style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8 }}
-                >
+                <div key={entry.experienceId} className="grid-career">
                   <input
-                    style={inputStyle}
+                    className="control"
                     placeholder="Company"
                     value={entry.companyName}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => updateCareer(index, "companyName", event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updateCareer(index, "companyName", event.target.value)
+                    }
                   />
                   <input
-                    style={inputStyle}
+                    className="control"
                     placeholder="2022-01"
                     value={entry.startDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => updateCareer(index, "startDate", event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updateCareer(index, "startDate", event.target.value)
+                    }
                   />
                   <input
-                    style={inputStyle}
+                    className="control"
                     placeholder="Present"
                     value={entry.endDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => updateCareer(index, "endDate", event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updateCareer(index, "endDate", event.target.value)
+                    }
                   />
                   <button
+                    className="btn-ghost"
                     type="button"
                     disabled={profile.careerHistory.length === 1}
                     onClick={() => removeCareer(index)}
@@ -310,42 +310,49 @@ export default function ResumeGenerator() {
           </div>
 
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <strong>Education</strong>
-              <button type="button" onClick={addEducation}>Add education</button>
+            <div className="row-head">
+              <span className="field-label">Education</span>
+              <button className="btn-ghost" type="button" onClick={addEducation}>
+                Add education
+              </button>
             </div>
-            <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+            <div className="row-list">
               {profile.education.map((entry, index) => (
-                <div
-                  key={entry.educationId}
-                  style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1.4fr 1fr auto", gap: 8 }}
-                >
+                <div key={entry.educationId} className="grid-edu">
                   {(["institution", "degree", "field", "graduationDate"] as const).map(
                     (field) => (
                       <input
                         key={field}
-                        style={inputStyle}
+                        className="control"
                         placeholder={field}
                         value={entry[field] ?? ""}
-                        onChange={(event: ChangeEvent<HTMLInputElement>) => updateEducation(index, field, event.target.value)}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          updateEducation(index, field, event.target.value)
+                        }
                       />
                     ),
                   )}
-                  <button type="button" onClick={() => removeEducation(index)}>Remove</button>
+                  <button
+                    className="btn-ghost"
+                    type="button"
+                    onClick={() => removeEducation(index)}
+                  >
+                    Remove
+                  </button>
                 </div>
               ))}
             </div>
           </div>
 
           <button
+            className="btn-primary"
             type="button"
             disabled={!canGenerate || loading}
             onClick={generate}
-            style={{ padding: "12px 18px", borderRadius: 8, fontWeight: 700 }}
           >
             {loading ? "Generating complete resume…" : "Generate complete resume"}
           </button>
-          {error ? <p style={{ color: "#b91c1c", margin: 0 }}>{error}</p> : null}
+          {error ? <p className="alert-error">{error}</p> : null}
         </div>
       </section>
 
@@ -360,9 +367,11 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
   const [exportError, setExportError] = useState("");
   const [externalOverallScore, setExternalOverallScore] = useState("");
   const [externalRelevancyScore, setExternalRelevancyScore] = useState("");
-  const [feedbackCategory, setFeedbackCategory] = useState<ExternalResumeFeedbackCategory>("impact");
+  const [feedbackCategory, setFeedbackCategory] =
+    useState<ExternalResumeFeedbackCategory>("impact");
   const [feedbackMessage, setFeedbackMessage] = useState("");
-  const [calibrationRecord, setCalibrationRecord] = useState<ExternalResumeTestRecord | null>(null);
+  const [calibrationRecord, setCalibrationRecord] =
+    useState<ExternalResumeTestRecord | null>(null);
   const [calibrationError, setCalibrationError] = useState("");
   const [calibrating, setCalibrating] = useState(false);
 
@@ -448,113 +457,114 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
     }
   }
 
-
   return (
-    <section style={{ background: "white", padding: 24, borderRadius: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <h2 style={{ marginTop: 0 }}>Final assembled resume</h2>
-          <code>{resume.context.generationId}</code>
+    <section className="panel">
+      <header className="panel-intro">
+        <p className="panel-kicker">Result</p>
+        <div className="preview-meta">
+          <div>
+            <h2 className="panel-title">Final assembled resume</h2>
+            <code>{resume.context.generationId}</code>
+          </div>
+          <div className="meta-side">
+            <span className="status-pill">
+              {resume.assemblyValidation.overallStatus.toUpperCase()}
+            </span>
+            <div>{resume.orchestration.totalDurationMs} ms</div>
+            <div>{template.templateName}</div>
+          </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <strong>{resume.assemblyValidation.overallStatus.toUpperCase()}</strong>
-          <div>{resume.orchestration.totalDurationMs} ms</div>
-          <div>{template.templateName}</div>
-        </div>
-      </div>
+      </header>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+      <div className="actions">
         {(["docx", "pdf", "txt"] as const).map((format) => (
           <button
             key={format}
+            className="btn-secondary"
             type="button"
             disabled={exporting !== null}
             onClick={() => exportResume(format)}
-            style={{ padding: "9px 14px", borderRadius: 7, fontWeight: 700 }}
           >
-            {exporting === format ? `Exporting ${format.toUpperCase()}…` : `Export ${format.toUpperCase()}`}
+            {exporting === format
+              ? `Exporting ${format.toUpperCase()}…`
+              : `Export ${format.toUpperCase()}`}
           </button>
         ))}
       </div>
-      {exportError ? <p style={{ color: "#b91c1c" }}>{exportError}</p> : null}
+      {exportError ? <p className="alert-error">{exportError}</p> : null}
 
       {resume.readiness ? (
         <section
-          style={{
-            marginTop: 20,
-            padding: 18,
-            border: "1px solid #cbd5e1",
-            borderRadius: 10,
-            background: resume.readiness.readyForExternalTest ? "#f0fdf4" : "#fff7ed",
-          }}
+          className={`readiness ${
+            resume.readiness.readyForExternalTest ? "ready" : "needs-work"
+          }`}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Resume Worded readiness</h3>
-              <p style={{ margin: "5px 0 0" }}>
-                Internal quality gate: {resume.readiness.targetInternalScore}+. External goal: 90+.
-              </p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <strong style={{ fontSize: 28 }}>{resume.readiness.internalScore}</strong>
-              <div>{resume.readiness.readyForExternalTest ? "Ready for external test" : "Needs targeted improvement"}</div>
+          <div className="readiness-banner">
+            <div className="readiness-head">
+              <div>
+                <h3>Resume Worded readiness</h3>
+                <p>
+                  Internal quality gate: {resume.readiness.targetInternalScore}+. External
+                  goal: 90+.
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="score">{resume.readiness.internalScore}</div>
+                <div className="score-caption">
+                  {resume.readiness.readyForExternalTest
+                    ? "Ready for external test"
+                    : "Needs targeted improvement"}
+                </div>
+              </div>
             </div>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 8,
-              marginTop: 14,
-            }}
-          >
+
+          <div className="score-grid">
             {resume.readiness.categories.map((category) => (
-              <div key={category.categoryId} style={{ padding: 10, background: "white", borderRadius: 8 }}>
+              <div key={category.categoryId} className="score-item">
                 <strong>{category.label}</strong>
                 <div>{category.score}/100</div>
               </div>
             ))}
           </div>
+
           {resume.readiness.issues.length > 0 ? (
-            <div style={{ marginTop: 14 }}>
+            <div className="findings">
               <strong>Targeted findings</strong>
-              <ul style={{ marginBottom: 0 }}>
+              <ul>
                 {resume.readiness.issues.slice(0, 6).map((issue) => (
-                  <li key={issue.issueCode} style={{ marginTop: 5 }}>
+                  <li key={issue.issueCode}>
                     {issue.message} <em>Owner: {issue.owner}</em>
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
-          <p style={{ marginBottom: 0, fontSize: 13 }}>{resume.readiness.disclaimer}</p>
+          <p className="disclaimer">{resume.readiness.disclaimer}</p>
 
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #cbd5e1" }}>
+          <div className="calibration">
             <strong>Record an external Resume Worded test</strong>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                gap: 8,
-                marginTop: 8,
-              }}
-            >
+            <div className="score-grid" style={{ marginTop: 8 }}>
               <input
-                style={inputStyle}
+                className="control"
                 inputMode="decimal"
                 placeholder="Overall score (0–100)"
                 value={externalOverallScore}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setExternalOverallScore(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setExternalOverallScore(event.target.value)
+                }
               />
               <input
-                style={inputStyle}
+                className="control"
                 inputMode="decimal"
                 placeholder="Relevancy score (optional)"
                 value={externalRelevancyScore}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setExternalRelevancyScore(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setExternalRelevancyScore(event.target.value)
+                }
               />
               <select
-                style={inputStyle}
+                className="control"
                 value={feedbackCategory}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) =>
                   setFeedbackCategory(event.target.value as ExternalResumeFeedbackCategory)
@@ -573,28 +583,37 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
                   "formatting",
                   "other",
                 ].map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
                 ))}
               </select>
             </div>
             <textarea
-              style={{ ...inputStyle, minHeight: 76, marginTop: 8 }}
+              className="control"
+              style={{ minHeight: 76, marginTop: 8 }}
               placeholder="Paste one feedback item from Resume Worded (optional)"
               value={feedbackMessage}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFeedbackMessage(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                setFeedbackMessage(event.target.value)
+              }
             />
             <button
+              className="btn-secondary"
               type="button"
               disabled={calibrating || !externalOverallScore.trim()}
               onClick={submitCalibration}
-              style={{ marginTop: 8, padding: "9px 14px", borderRadius: 7, fontWeight: 700 }}
+              style={{ marginTop: 8 }}
             >
               {calibrating ? "Recording…" : "Record external test"}
             </button>
-            {calibrationError ? <p style={{ color: "#b91c1c" }}>{calibrationError}</p> : null}
+            {calibrationError ? <p className="alert-error">{calibrationError}</p> : null}
             {calibrationRecord ? (
-              <p style={{ marginBottom: 0 }}>
-                Recorded {calibrationRecord.externalOverallScore}/100 for this exact resume. Internal-to-external delta: {calibrationRecord.overallScoreDelta >= 0 ? "+" : ""}{calibrationRecord.overallScoreDelta}.
+              <p className="calibration-note">
+                Recorded {calibrationRecord.externalOverallScore}/100 for this exact
+                resume. Internal-to-external delta:{" "}
+                {calibrationRecord.overallScoreDelta >= 0 ? "+" : ""}
+                {calibrationRecord.overallScoreDelta}.
               </p>
             ) : null}
           </div>
@@ -602,11 +621,9 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
       ) : null}
 
       <div
+        className="resume-sheet"
         style={{
           maxWidth: template.pageSize === "a4" ? 794 : 816,
-          margin: "24px auto 0",
-          padding: 48,
-          border: "1px solid #cbd5e1",
           fontFamily: template.typography.fontFamily,
           fontSize: template.typography.bodySizePt,
           lineHeight: template.typography.bodyLineHeight,
@@ -617,11 +634,17 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
             const contact = section.content;
             return (
               <header key={section.id} style={{ textAlign: template.alignment.contact }}>
-                <h1 style={{ margin: 0, fontSize: template.typography.nameSizePt + 4 }}>
+                <h1 style={{ fontSize: template.typography.nameSizePt + 4 }}>
                   {contact.fullName}
                 </h1>
-                <div style={{ marginTop: 6 }}>
-                  {[contact.email, contact.phone, contact.location, contact.linkedin, contact.portfolio]
+                <div className="contact-line">
+                  {[
+                    contact.email,
+                    contact.phone,
+                    contact.location,
+                    contact.linkedin,
+                    contact.portfolio,
+                  ]
                     .filter(Boolean)
                     .join(" | ")}
                 </div>
@@ -629,19 +652,13 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
             );
           }
           return (
-            <section key={section.id} style={{ marginTop: 20 }}>
-              <h2
-                style={{
-                  margin: "0 0 7px",
-                  fontSize: template.typography.sectionHeadingSizePt,
-                  borderBottom: "1px solid #0f172a",
-                }}
-              >
+            <section key={section.id} className="resume-section">
+              <h2 style={{ fontSize: template.typography.sectionHeadingSizePt }}>
                 {section.heading}
               </h2>
               {section.id === "professional-summary" ? <p>{section.content}</p> : null}
               {section.id === "skills" ? (
-                <div style={{ display: "grid", gap: 5 }}>
+                <div className="skills-list">
                   {section.content.map((category) => (
                     <div key={category.name}>
                       <strong>{category.name}:</strong> {category.skills.join(", ")}
@@ -651,14 +668,18 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
               ) : null}
               {section.id === "professional-experience"
                 ? section.content.map((entry) => (
-                    <article key={entry.experienceId} style={{ marginTop: 13 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-                        <strong>{entry.assignedRole} | {entry.companyName}</strong>
-                        <span>{entry.startDate} – {entry.endDate}</span>
+                    <article key={entry.experienceId} className="role-block">
+                      <div className="role-head">
+                        <strong>
+                          {entry.assignedRole} | {entry.companyName}
+                        </strong>
+                        <span>
+                          {entry.startDate} – {entry.endDate}
+                        </span>
                       </div>
-                      <ul style={{ marginTop: 7 }}>
+                      <ul className="bullet-list">
                         {entry.bullets.map((bullet, index) => (
-                          <li key={`${entry.experienceId}-${index}`} style={{ marginTop: 5 }}>{bullet}</li>
+                          <li key={`${entry.experienceId}-${index}`}>{bullet}</li>
                         ))}
                       </ul>
                     </article>
@@ -666,8 +687,11 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
                 : null}
               {section.id === "education"
                 ? section.content.map((entry) => (
-                    <div key={entry.educationId} style={{ marginTop: 8 }}>
-                      <strong>{entry.degree} in {entry.field}</strong>, {entry.institution}
+                    <div key={entry.educationId} className="edu-line">
+                      <strong>
+                        {entry.degree} in {entry.field}
+                      </strong>
+                      , {entry.institution}
                       {entry.graduationDate ? ` | ${entry.graduationDate}` : ""}
                     </div>
                   ))
