@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ChangeEvent } from "react";
 
 const MONTHS = [
   { value: "01", label: "Jan" },
@@ -17,116 +17,99 @@ const MONTHS = [
   { value: "12", label: "Dec" },
 ] as const;
 
-function parseMonthValue(value: string): { year: number; month: string } | null {
+function parseMonthValue(value: string): { year: string; month: string } | null {
   const trimmed = value.trim();
   if (!trimmed || /^present$/i.test(trimmed)) return null;
   const match = /^(\d{4})-(\d{2})$/.exec(trimmed);
   if (!match) return null;
-  const year = Number(match[1]);
-  const month = match[2];
-  if (!Number.isFinite(year) || !MONTHS.some((item) => item.value === month)) {
-    return null;
+  return { year: match[1], month: match[2] };
+}
+
+function buildYears(centerYear: number): string[] {
+  const years: string[] = [];
+  for (let year = centerYear + 1; year >= centerYear - 60; year -= 1) {
+    years.push(String(year));
   }
-  return { year, month };
+  return years;
 }
 
-function formatDisplay(value: string): string {
-  if (/^present$/i.test(value.trim())) return "Present";
-  const parsed = parseMonthValue(value);
-  if (!parsed) return "Not set";
-  const month = MONTHS.find((item) => item.value === parsed.month)?.label ?? parsed.month;
-  return `${month} ${parsed.year}`;
-}
-
-type SidePickerProps = {
+type MonthYearFieldsProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
   allowPresent?: boolean;
-  minYear: number;
-  maxYear: number;
+  years: readonly string[];
 };
 
-function SidePicker({
+function MonthYearFields({
   label,
   value,
   onChange,
   allowPresent = false,
-  minYear,
-  maxYear,
-}: SidePickerProps) {
+  years,
+}: MonthYearFieldsProps) {
   const isPresent = /^present$/i.test(value.trim());
   const parsed = parseMonthValue(value);
-  const year = parsed?.year ?? new Date().getFullYear();
   const month = parsed?.month ?? "";
+  const year = parsed?.year ?? "";
 
-  function setYear(nextYear: number) {
-    const clamped = Math.min(maxYear, Math.max(minYear, nextYear));
-    onChange(`${clamped}-${month || "01"}`);
-  }
-
-  function setMonth(nextMonth: string) {
-    onChange(`${year}-${nextMonth}`);
+  function emit(nextMonth: string, nextYear: string) {
+    if (!nextMonth || !nextYear) {
+      onChange("");
+      return;
+    }
+    onChange(`${nextYear}-${nextMonth}`);
   }
 
   return (
-    <div className={`period-side${isPresent ? " is-present" : ""}`}>
-      <div className="period-side-head">
-        <span className="period-side-label">{label}</span>
-        <strong className="period-side-value">{formatDisplay(value)}</strong>
-      </div>
-
-      <div className="period-year-row">
-        <button
-          type="button"
-          className="period-year-nav"
-          aria-label={`Earlier ${label.toLowerCase()} year`}
-          disabled={isPresent || year <= minYear}
-          onClick={() => setYear(year - 1)}
+    <div className="period-part">
+      <span className="period-part-label">{label}</span>
+      <div className="period-part-controls">
+        <select
+          className="period-select"
+          aria-label={`${label} month`}
+          value={isPresent ? "" : month}
+          disabled={isPresent}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+            emit(event.target.value, year || String(new Date().getFullYear()))
+          }
         >
-          ‹
-        </button>
-        <p className="period-year-display">{isPresent ? "——" : year}</p>
-        <button
-          type="button"
-          className="period-year-nav"
-          aria-label={`Later ${label.toLowerCase()} year`}
-          disabled={isPresent || year >= maxYear}
-          onClick={() => setYear(year + 1)}
-        >
-          ›
-        </button>
-      </div>
-
-      <div className="period-month-grid" role="listbox" aria-label={`${label} month`}>
-        {MONTHS.map((item) => {
-          const selected = !isPresent && month === item.value;
-          return (
-            <button
-              key={item.value}
-              type="button"
-              role="option"
-              aria-selected={selected}
-              className={`period-month-pill${selected ? " is-selected" : ""}`}
-              disabled={isPresent}
-              onClick={() => setMonth(item.value)}
-            >
+          <option value="">Month</option>
+          {MONTHS.map((item) => (
+            <option key={item.value} value={item.value}>
               {item.label}
-            </button>
-          );
-        })}
-      </div>
+            </option>
+          ))}
+        </select>
 
-      {allowPresent ? (
-        <button
-          type="button"
-          className={`period-present-toggle${isPresent ? " is-active" : ""}`}
-          aria-pressed={isPresent}
-          onClick={() => onChange(isPresent ? `${year}-01` : "Present")}
+        <select
+          className="period-select"
+          aria-label={`${label} year`}
+          value={isPresent ? "" : year}
+          disabled={isPresent}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+            emit(month || "01", event.target.value)
+          }
         >
-          {isPresent ? "Using Present" : "Set as Present"}
-        </button>
-      ) : null}
+          <option value="">Year</option>
+          {years.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+
+        {allowPresent ? (
+          <button
+            type="button"
+            className={`period-present-chip${isPresent ? " is-active" : ""}`}
+            aria-pressed={isPresent}
+            onClick={() => onChange(isPresent ? "" : "Present")}
+          >
+            Present
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -146,31 +129,25 @@ export function PeriodDateControl({
   onEndChange,
   allowPresentEnd = false,
 }: PeriodDateControlProps) {
-  const nowYear = useMemo(() => new Date().getFullYear(), []);
-  const minYear = nowYear - 60;
-  const maxYear = nowYear + 1;
+  const years = useMemo(() => buildYears(new Date().getFullYear()), []);
 
   return (
     <div className="period-date-control">
-      <SidePicker
+      <MonthYearFields
         label="Start"
         value={startValue}
         onChange={onStartChange}
-        minYear={minYear}
-        maxYear={maxYear}
+        years={years}
       />
-      <div className="period-bridge" aria-hidden>
-        <span className="period-bridge-line" />
-        <span className="period-bridge-dot">-</span>
-        <span className="period-bridge-line" />
-      </div>
-      <SidePicker
+      <span className="period-separator" aria-hidden>
+        -
+      </span>
+      <MonthYearFields
         label="End"
         value={endValue}
         onChange={onEndChange}
         allowPresent={allowPresentEnd}
-        minYear={minYear}
-        maxYear={maxYear}
+        years={years}
       />
     </div>
   );
