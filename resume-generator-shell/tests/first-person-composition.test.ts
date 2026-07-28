@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
   createProductionExperienceEngine,
+  normalizeBulletSentence,
   RuleBasedRequirementModel,
+  stripFirstPersonPronouns,
 } from "@resume/engines";
 
 const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
@@ -12,17 +14,17 @@ We are looking for a Senior Data Engineer to join our team and help us scale our
 
 Responsibilities:
 - Design and build our scalable data architecture
-- Develop our ETL pipelines using Spark and Airflow
+- Develop your ETL pipelines using Spark and Airflow
 - Deploy our data services to production
-- Monitor our pipeline health and SLAs
+- Monitor your pipeline health and SLAs
 - Optimize our warehouse performance
 - Collaborate with our analytics and product stakeholders
 - Lead our technical strategy and mentor engineers
-- Improve our customer-facing reporting reliability
+- Improve your customer-facing reporting reliability
 - Build streaming ingestion with Kafka
 - Ensure our data quality and governance
 - Implement security controls for our sensitive datasets
-- Automate CI/CD for our data pipelines
+- Automate CI/CD for your data pipelines
 
 Requirements:
 - 5+ years of experience
@@ -60,8 +62,21 @@ describe("first-person JD wording composition", () => {
     expect(result.status).toBe("approved");
     for (const experience of result.experiences) {
       for (const bullet of experience.bullets) {
-        expect(bullet.finalBullet).not.toMatch(/\b(?:I|me|my|mine|we|us|our|ours)\b/i);
+        expect(bullet.finalBullet).not.toMatch(
+          /\b(?:I|me|my|mine|we|us|our|ours|you|your|yours)\b/i,
+        );
       }
     }
+  });
+
+  it("scrubs second-person your/you out of visible bullet text", () => {
+    expect(
+      stripFirstPersonPronouns("Improve your inference performance for your team"),
+    ).not.toMatch(/\b(?:your|you)\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Optimized your inference performance through profiling, reducing your latency by 42%.",
+      ),
+    ).not.toMatch(/\b(?:your|you)\b/i);
   });
 });

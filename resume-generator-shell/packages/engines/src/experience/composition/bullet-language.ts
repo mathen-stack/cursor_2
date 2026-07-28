@@ -573,12 +573,16 @@ export function stripTerminal(value: string): string {
 }
 
 /**
- * Resume bullets must stay third-person. JD wording often contains "our/we/us";
- * strip those pronouns so composed text and keyword checks stay consistent.
+ * Resume bullets must stay third-person. JD wording often contains "our/we/us"
+ * and second-person "you/your"; strip those pronouns so composed text stays
+ * Resume Worded / ATS clean.
  */
 export function stripFirstPersonPronouns(value: string): string {
   return value
-    .replace(/\b(?:I|me|my|mine|we|us|our|ours)\b/gi, " ")
+    .replace(
+      /\b(?:I|me|my|mine|we|us|our|ours|you|your|yours|you(?:'re|’re|re)|you(?:'d|’d|d)|you(?:'ll|’ll|ll)|you(?:'ve|’ve|ve))\b/gi,
+      " ",
+    )
     .replace(/\s+'/g, "'")
     .replace(/\s+,/g, ",")
     .replace(/,\s*,+/g, ", ")

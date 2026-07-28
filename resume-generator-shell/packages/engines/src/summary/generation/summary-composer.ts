@@ -9,6 +9,19 @@ import {
   formatSummaryMetricSentence,
   selectSummaryMetrics,
 } from "./summary-metric-selector";
+import { stripFirstPersonPronouns } from "../../experience/composition/bullet-language";
+
+function scrubSummaryPersonalPronouns(summary: string): string {
+  const scrubbed = stripFirstPersonPronouns(summary)
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!scrubbed) {
+    return summary;
+  }
+  return `${scrubbed.charAt(0).toUpperCase()}${scrubbed.slice(1)}`;
+}
 
 const ROLE_FAMILY_FOCUS: Readonly<Record<string, string>> = {
   "generative-ai": "generative AI applications",
@@ -283,6 +296,7 @@ export class SummaryComposer {
     }
 
     const usedKeys = new Set<string>();
+    summary = scrubSummaryPersonalPronouns(summary);
     for (const keyword of [...domains, ...selectedTechnical, ...selectedOutcomes, ...people]) {
       if (summary.toLowerCase().includes(keyword.text.toLowerCase())) {
         usedKeys.add(keyword.normalizedKey);

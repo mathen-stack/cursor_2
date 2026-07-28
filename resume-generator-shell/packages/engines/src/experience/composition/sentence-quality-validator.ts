@@ -15,7 +15,8 @@ import {
 } from "./bullet-language";
 import { hasIntraBulletVerbEcho } from "../validation/experience-validation-language";
 
-const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
+const FIRST_PERSON =
+  /\b(?:I|me|my|mine|we|us|our|ours|you|your|yours|you(?:'re|’re)|you(?:'d|’d)|you(?:'ll|’ll)|you(?:'ve|’ve))\b/i;
 const WEAK_LANGUAGE = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various tasks|successfully|effectively)\b/i;
 const PASSIVE_LANGUAGE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|designed|deployed|managed|created|optimized|led|completed)\b/i;
 const QUANTIFIED = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)/i;
@@ -138,7 +139,7 @@ export class SentenceQualityValidator {
     if (!outcomeKeywordCoverage) errors.push("Bullet omits one or more allocated outcome keywords.");
     if (!quantifiedImpactPresent) errors.push("Bullet has no quantified impact.");
     if (!activeVoice) errors.push("Bullet is not consistently written in active voice.");
-    if (!firstPersonFree) errors.push("Bullet contains a first-person pronoun.");
+    if (!firstPersonFree) errors.push("Bullet contains a personal pronoun.");
     if (!weakLanguageFree) errors.push("Bullet contains weak or filler language.");
     if (!punctuationValid) errors.push("Bullet must be one clean sentence with one terminal period.");
     if (!communicationSignalPresent) errors.push("Communication-focused bullet lost its stakeholder or collaboration signal.");

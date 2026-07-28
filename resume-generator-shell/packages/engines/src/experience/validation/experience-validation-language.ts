@@ -6,7 +6,8 @@ const STOP_WORDS = new Set([
   "that", "this", "their", "its", "measurable", "improving", "improved",
 ]);
 
-const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
+const FIRST_PERSON =
+  /\b(?:I|me|my|mine|we|us|our|ours|you|your|yours|you(?:'re|’re)|you(?:'d|’d)|you(?:'ll|’ll)|you(?:'ve|’ve))\b/i;
 const WEAK_OPENING = /^(?:Responsible for|Worked on|Helped with|Assisted with|Participated in|Involved in)\b/i;
 const FILLER = /\b(?:successfully|effectively|various|multiple different|numerous various|very|really)\b/i;
 /** Resume Worded-style soft/vague phrases that must not appear in bullets. */
@@ -156,7 +157,7 @@ export function hasVagueBuzzwords(value: string): boolean {
 
 export function atsLanguageErrors(value: string): string[] {
   const errors: string[] = [];
-  if (FIRST_PERSON.test(value)) errors.push("Uses a first-person pronoun.");
+  if (FIRST_PERSON.test(value)) errors.push("Uses a personal pronoun.");
   if (WEAK_OPENING.test(value)) errors.push("Starts with weak responsibility language.");
   if (FILLER.test(value)) errors.push("Contains filler or self-congratulatory wording.");
   if (hasVagueBuzzwords(value)) {

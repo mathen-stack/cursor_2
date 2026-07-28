@@ -85,9 +85,12 @@ export class SummaryValidator {
       addIssue(issues, "SENIORITY_ALIGNMENT", "error", "Summary language does not align with the detected JD seniority.");
     }
 
-    const noPersonalPronouns = !/\b(?:i|me|my|mine|we|us|our|ours)\b/i.test(input.summary);
+    const noPersonalPronouns =
+      !/\b(?:i|me|my|mine|we|us|our|ours|you|your|yours|you(?:'re|’re)|you(?:'d|’d)|you(?:'ll|’ll)|you(?:'ve|’ve))\b/i.test(
+        input.summary,
+      );
     if (!noPersonalPronouns) {
-      addIssue(issues, "PERSONAL_PRONOUNS", "error", "Summary contains first-person pronouns.");
+      addIssue(issues, "PERSONAL_PRONOUNS", "error", "Summary contains personal pronouns.");
     }
 
     const noCliches = !/\b(?:results[- ]driven|dynamic(?:\s+professional)?|go[- ]getter|hard[- ]working|team player|proven track record|seasoned(?:\s+professional)?|passionate(?:\s+about)?|proactive|synergistic|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker|(?:verbal and written\s+)?communication skills|soft skills|interpersonal skills|people skills)\b/i.test(input.summary);
