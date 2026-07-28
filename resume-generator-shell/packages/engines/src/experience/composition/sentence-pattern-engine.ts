@@ -9,6 +9,7 @@ import {
   businessImpactAsGerund,
   businessImpactAsInfinitive,
   compactBusinessImpact,
+  hasCompositionCommunicationSignal,
   metricAsGerund,
   metricAsNoun,
   normalizeBulletSentence,
@@ -327,7 +328,19 @@ export class SentencePatternEngine {
   }): { finalBullet: string; sentencePattern: BulletSentencePattern; connectors: string[] } {
     const minimumWords = input.minimumWords ?? 16;
     const preferredPattern = patternForPlan(input.plan, input.patternOffset ?? 0);
-    const preserve = requiredPhrases(input.keywordPackage);
+    const communicationAnchor = input.plan.communicationFocused
+      ? [
+          "product and engineering stakeholders",
+          "cross-functional collaboration",
+          "stakeholder communication",
+          "requirements alignment",
+        ].find((phrase) => containsPhrase(input.actionClause, phrase)) ??
+        "product and engineering stakeholders"
+      : undefined;
+    const preserve = [
+      ...requiredPhrases(input.keywordPackage),
+      ...(communicationAnchor ? [communicationAnchor] : []),
+    ];
     const actionBudgets = [
       wordCount(input.actionClause),
       Math.max(10, input.maximumWords - 16),
@@ -342,7 +355,11 @@ export class SentencePatternEngine {
       );
       return buildCandidates({
         ...input,
-        actionClause,
+        actionClause: input.plan.communicationFocused
+          ? hasCompositionCommunicationSignal(actionClause)
+            ? actionClause
+            : `${actionClause} with product and engineering stakeholders`
+          : actionClause,
       });
     });
 

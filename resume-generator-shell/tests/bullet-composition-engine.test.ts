@@ -322,3 +322,225 @@ describe("Sentence pattern length recovery", () => {
     expect(composed.finalBullet.toLowerCase()).toContain("mentored");
   });
 });
+
+describe("Communication signal preservation during composition", () => {
+  it("re-injects collaboration evidence when compression would strip it", async () => {
+    const {
+      ensureCompositionCommunicationSignal,
+      hasCompositionCommunicationSignal,
+      SentenceQualityValidator,
+    } = await import("@resume/engines");
+
+    const stripped =
+      "Led platform delivery outcomes through progressive delivery and feature flagging, increasing delivery predictability by 22%.";
+    expect(hasCompositionCommunicationSignal(stripped)).toBe(false);
+
+    const repaired = ensureCompositionCommunicationSignal(stripped);
+    expect(hasCompositionCommunicationSignal(repaired)).toBe(true);
+    expect(repaired).toMatch(/product and engineering stakeholders/i);
+
+    const plan = {
+      bulletId: "EXP-002-B-005",
+      experienceId: "EXP-002",
+      requirementId: "REQ-COMM",
+      supportingRequirementIds: [],
+      sequence: 5,
+      achievementTheme: "collaboration",
+      achievementDimension: "cross-functional-alignment" as const,
+      roleFocusArea: "platform delivery",
+      communicationFocused: true,
+      leadershipFocused: false,
+      targetSeniority: "senior" as const,
+      chronologyRank: 2,
+    };
+    const keywordPackage = {
+      bulletId: plan.bulletId,
+      experienceId: plan.experienceId,
+      requirementId: plan.requirementId,
+      achievementDimension: plan.achievementDimension,
+      actionVerb: "Led",
+      actionVerbCanonicalKey: "lead",
+      directKeywords: ["platform delivery"],
+      directKeywordEvidence: [],
+      supportingKeywords: ["progressive delivery", "feature flagging"],
+      supportingKeywordDetails: [
+        {
+          keyword: "progressive delivery",
+          canonicalKey: "delivery|progressive",
+          origin: "strongly-inferred" as const,
+          rationale: "test",
+        },
+        {
+          keyword: "feature flagging",
+          canonicalKey: "feature|flagging",
+          origin: "strongly-inferred" as const,
+          rationale: "test",
+        },
+      ],
+      outcomeKeywords: ["delivery predictability"],
+      outcomeKeywordDetails: [
+        {
+          keyword: "delivery predictability",
+          canonicalKey: "delivery|predictability",
+          rationale: "test",
+        },
+      ],
+      allocationRationale: "test",
+    };
+    const story = {
+      bulletId: plan.bulletId,
+      experienceId: plan.experienceId,
+      requirementId: plan.requirementId,
+      situation: "Needed clearer delivery ownership.",
+      task: "Owned collaborative delivery planning required to improve outcomes.",
+      action: "Led platform delivery outcomes through progressive delivery.",
+      result: "Improved delivery predictability.",
+      metrics: [
+        {
+          metricId: "M1",
+          direction: "increase" as const,
+          value: 22,
+          unit: "%",
+          measure: "delivery predictability",
+          outcomeKeyword: "delivery predictability",
+          displayText: "increased delivery predictability by 22%",
+          rationale: "test",
+          provenance: "generated-hypothetical" as const,
+        },
+      ],
+      status: "approved" as const,
+      coherenceScore: 9,
+      metricPlausibilityScore: 9,
+    };
+
+    const before = new SentenceQualityValidator().validate({
+      plan,
+      keywordPackage,
+      story,
+      bullet: {
+        bulletId: plan.bulletId,
+        requirementId: plan.requirementId,
+        situation: story.situation,
+        task: story.task,
+        action: story.action,
+        result: story.result,
+        actionVerb: keywordPackage.actionVerb,
+        directKeywords: keywordPackage.directKeywords,
+        supportingKeywords: keywordPackage.supportingKeywords,
+        outcomeKeywords: keywordPackage.outcomeKeywords,
+        finalBullet: stripped,
+        strengthScore: 0,
+        distinctivenessScore: 9,
+        status: "approved" as const,
+      },
+      sentencePattern: "action-metric-business-impact",
+      distinctivenessScore: 9,
+    });
+    expect(before.communicationSignalPresent).toBe(false);
+
+    const after = new SentenceQualityValidator().validate({
+      plan,
+      keywordPackage,
+      story,
+      bullet: {
+        bulletId: plan.bulletId,
+        requirementId: plan.requirementId,
+        situation: story.situation,
+        task: story.task,
+        action: story.action,
+        result: story.result,
+        actionVerb: keywordPackage.actionVerb,
+        directKeywords: keywordPackage.directKeywords,
+        supportingKeywords: keywordPackage.supportingKeywords,
+        outcomeKeywords: keywordPackage.outcomeKeywords,
+        finalBullet: repaired,
+        strengthScore: 0,
+        distinctivenessScore: 9,
+        status: "approved" as const,
+      },
+      sentencePattern: "action-metric-business-impact",
+      distinctivenessScore: 9,
+    });
+    expect(after.communicationSignalPresent).toBe(true);
+  });
+
+  it("keeps communication coverage on multi-role SAMPLE_JD composition including EXP-002-B-005", async () => {
+    const sampleJd = `Senior Machine Learning Engineer
+Build and deploy scalable machine learning models in production environments.
+Implement model monitoring, improve inference performance, and automate CI/CD workflows.
+Collaborate with product, data, and platform teams to translate business requirements into technical solutions.
+Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
+Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`;
+    const { input } = await createRealCompositionInput(sampleJd);
+    // Force two roles like the UI demo profile.
+    const jobDescription = createJobDescription(sampleJd);
+    const context = createGenerationContext("PROFILE-DEMO-COMM", jobDescription);
+    const careerHistory = [
+      {
+        experienceId: "EXP-001",
+        companyName: "Example AI Company",
+        startDate: "2022-01",
+        endDate: "Present",
+      },
+      {
+        experienceId: "EXP-002",
+        companyName: "Example Software Company",
+        startDate: "2018-03",
+        endDate: "2021-12",
+      },
+    ];
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const requirements = await extractor.execute({ context, jobDescription });
+    const roles = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute({
+      context,
+      jobDescription,
+      careerHistory,
+      requirements: requirements.requirements,
+    });
+    const plans = await new RealBulletPlanner().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: requirements.requirements,
+      minimumBulletsPerRole: 5,
+    });
+    const keywords = await new RealKeywordAllocator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: requirements.requirements,
+      plans: plans.plans,
+    });
+    const stories = await new RealStarGenerator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: requirements.requirements,
+      plans: plans.plans,
+      keywordPackages: keywords.packages,
+    });
+    const output = await new RealBulletComposer().execute({
+      context,
+      jobDescription,
+      plans: plans.plans,
+      keywordPackages: keywords.packages,
+      stories: stories.stories,
+    });
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.validation?.communicationCoveragePreserved).toBe(true);
+    const exp002Comm = plans.plans.find(
+      (plan) => plan.bulletId === "EXP-002-B-005" || (plan.experienceId === "EXP-002" && plan.communicationFocused),
+    );
+    expect(exp002Comm).toBeDefined();
+    const bullet = output.bullets.find((item) => item.bulletId === exp002Comm?.bulletId);
+    expect(bullet?.finalBullet).toMatch(
+      /stakeholder|cross-functional|cross-team|product|business|alignment|requirements|team|collaborat|partner|facilitat|coordinat|align/i,
+    );
+    void input;
+  });
+});

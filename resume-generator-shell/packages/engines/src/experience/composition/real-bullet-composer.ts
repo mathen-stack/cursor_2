@@ -8,6 +8,8 @@ import type {
 import {
   buildActionClause,
   directKeywordRepresented,
+  ensureCompositionCommunicationSignal,
+  hasCompositionCommunicationSignal,
   isJdMarketingOrMetaScope,
   stripFirstPersonPronouns,
   substantiveKeyword,
@@ -170,7 +172,10 @@ export class RealBulletComposer implements BulletComposer {
             return keyword.replace(/\bcoordination\b/gi, "planning");
           }
           if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
-            return keyword.replace(/\balignment\b/gi, "planning");
+            const rewritten = keyword.replace(/\balignment\b/gi, "planning");
+            return hasCompositionCommunicationSignal(rewritten)
+              ? rewritten
+              : "cross-functional planning";
           }
           if (/^mentor/i.test(keywordPackage.actionVerb) && /\bmentoring\b/i.test(keyword)) {
             return keyword.replace(/\bmentoring\b/gi, "capability building");
@@ -196,7 +201,10 @@ export class RealBulletComposer implements BulletComposer {
             keyword = keyword.replace(/\bcoordination\b/gi, "planning");
           }
           if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
-            keyword = keyword.replace(/\balignment\b/gi, "planning");
+            const rewritten = keyword.replace(/\balignment\b/gi, "planning");
+            keyword = hasCompositionCommunicationSignal(rewritten)
+              ? rewritten
+              : "cross-functional planning";
           }
           if (/^mentor/i.test(keywordPackage.actionVerb) && /\bmentoring\b/i.test(keyword)) {
             keyword = keyword.replace(/\bmentoring\b/gi, "capability building");
@@ -273,6 +281,18 @@ export class RealBulletComposer implements BulletComposer {
         usedConnectors.add(connector);
       }
       usedEndingSkeletons.add(endingSkeleton(composed.finalBullet));
+
+      // Communication-focused bullets must keep stakeholder/collaboration evidence
+      // even after compression or Align/coordination echo rewrites.
+      if (plan.communicationFocused) {
+        const repaired = ensureCompositionCommunicationSignal(composed.finalBullet);
+        if (repaired !== composed.finalBullet) {
+          composed = {
+            ...composed,
+            finalBullet: repaired,
+          };
+        }
+      }
 
       // Only claim directs that survived composition/compression so sentence
       // validation cannot reject the bullet for truncated JD phrases.

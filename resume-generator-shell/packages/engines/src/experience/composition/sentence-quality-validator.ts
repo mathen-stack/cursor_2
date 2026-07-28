@@ -17,7 +17,9 @@ const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_LANGUAGE = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various tasks|successfully|effectively)\b/i;
 const PASSIVE_LANGUAGE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|designed|deployed|managed|created|optimized|led|completed)\b/i;
 const QUANTIFIED = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)/i;
-const COMMUNICATION_SIGNAL = /stakeholder|cross-functional|product|business|alignment|requirements|team/i;
+/** Keep in sync with composition ensureCompositionCommunicationSignal. */
+const COMMUNICATION_SIGNAL =
+  /stakeholder|cross-functional|cross-team|product|business|alignment|requirements|team|collaborat|communicat|partner|facilitat|coordinat|\balign(?:ed|ing|s)?\b/i;
 const LEADERSHIP_SIGNAL = /strategy|direction|leadership|architecture|roadmap|design decision|standard/i;
 
 function startsWithVerb(text: string, verb: string): boolean {

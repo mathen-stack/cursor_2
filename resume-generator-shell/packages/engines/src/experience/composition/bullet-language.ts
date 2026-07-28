@@ -76,8 +76,49 @@ const COMMUNICATION_SCOPE_VARIANTS = [
   "stakeholder communication across product and platform teams",
   "requirements alignment with product and business partners",
   "cross-team delivery planning with product stakeholders",
-  "architecture and delivery discussions with engineering partners",
+  "architecture workshops with product and engineering stakeholders",
 ] as const;
+
+/**
+ * Evidence that a communication-focused bullet still carries stakeholder or
+ * collaboration wording after composition/compression.
+ */
+export const COMPOSITION_COMMUNICATION_SIGNAL =
+  /stakeholder|cross-functional|cross-team|product|business|alignment|requirements|team|collaborat|communicat|partner|facilitat|coordinat|\balign(?:ed|ing|s)?\b/i;
+
+const COMMUNICATION_SIGNAL_PHRASE =
+  "with product and engineering stakeholders";
+
+export function hasCompositionCommunicationSignal(text: string): boolean {
+  return COMPOSITION_COMMUNICATION_SIGNAL.test(text);
+}
+
+/**
+ * Re-injects a compact collaboration phrase when shortening, Align/coordination
+ * echo rewrites, or scope uniqueness would otherwise leave a communication
+ * bullet without stakeholder/collaboration evidence.
+ */
+export function ensureCompositionCommunicationSignal(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed || hasCompositionCommunicationSignal(trimmed)) {
+    return trimmed;
+  }
+  const endsWithPeriod = /[.!?]$/.test(trimmed);
+  const body = trimmed.replace(/[.!?]+$/g, "").trim();
+  let repaired = body;
+  if (/\b(?:using|through)\b/i.test(body)) {
+    repaired = body.replace(
+      /\b(using|through)\b/i,
+      `${COMMUNICATION_SIGNAL_PHRASE} $1`,
+    );
+  } else if (/,/.test(body)) {
+    repaired = body.replace(",", ` ${COMMUNICATION_SIGNAL_PHRASE},`);
+  } else {
+    repaired = `${body} ${COMMUNICATION_SIGNAL_PHRASE}`;
+  }
+  repaired = repaired.replace(/\s+/g, " ").trim();
+  return endsWithPeriod ? `${repaired}.` : repaired;
+}
 
 /** Short uniqueness qualifiers — never expose internal bullet IDs. */
 const UNIQUE_SCOPE_QUALIFIERS = [
@@ -335,7 +376,7 @@ export function stripIntraBulletRepetition(sentence: string): string {
   );
   text = text.replace(
     /\b(Align(?:s|ed|ing)?)\b([^]*?)\balignment\b/gi,
-    "$1$2 priorities",
+    "$1$2 cross-functional priorities",
   );
   text = text.replace(
     /\b(Mentor(?:s|ed|ing)?)\b([^]*?)\bmentoring\b/gi,
@@ -634,14 +675,17 @@ export function buildActionClause(input: {
   if (/^align/i.test(verb)) {
     normalizedDirectScope = normalizedDirectScope
       .replace(/\bstakeholder alignment\b/gi, "cross-functional priorities")
-      .replace(/\balignment\b/gi, "priorities");
+      .replace(/\balignment\b/gi, "cross-functional priorities");
   }
   const filteredMethods = inferredMethods.map((keyword) => {
     if (/^(?:coordinat|automat)/i.test(verb) && /\bcoordination\b/i.test(keyword)) {
       return keyword.replace(/\bcoordination\b/gi, "planning");
     }
     if (/^align/i.test(verb) && /\balignment\b/i.test(keyword)) {
-      return keyword.replace(/\balignment\b/gi, "planning");
+      const rewritten = keyword.replace(/\balignment\b/gi, "planning");
+      return hasCompositionCommunicationSignal(rewritten)
+        ? rewritten
+        : "cross-functional planning";
     }
     return keyword;
   });
@@ -707,8 +751,10 @@ export function buildActionClause(input: {
       input.usedScopeKeys,
       input.plan.bulletId,
     );
-    return stripTerminal(
-      `${verb} ${communicationScope}${buildSupportClause(communicationScope)}`,
+    return ensureCompositionCommunicationSignal(
+      stripTerminal(
+        `${verb} ${communicationScope}${buildSupportClause(communicationScope)}`,
+      ),
     );
   }
 
