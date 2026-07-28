@@ -249,33 +249,6 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.entry-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  height: 1.05rem;
-  min-height: 1.05rem;
-  max-height: 1.05rem;
-  width: auto;
-  padding: 0 0.35rem;
-  border: 1px solid var(--line-strong);
-  background: var(--surface-2);
-  color: var(--ink);
-  font-size: 0.6rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  text-transform: none;
-}
-
-.entry-remove:hover:not(:disabled) {
-  border-color: var(--accent-deep);
-  background: color-mix(in srgb, var(--surface-2) 85%, var(--accent-deep));
-  color: white;
-  transform: none;
-}
-
 .section-actions {
   display: flex;
   justify-content: flex-start;
@@ -315,6 +288,22 @@ textarea:focus {
   background: color-mix(in srgb, var(--surface-2) 85%, var(--accent-deep));
   color: white;
   transform: translateY(-1px);
+}
+
+.secondary-action.entry-remove {
+  height: 1.1rem;
+  min-height: 1.1rem;
+  max-height: 1.1rem;
+  margin-left: auto;
+  padding: 0 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1;
+  transform: none;
+}
+
+.secondary-action.entry-remove:hover:not(:disabled) {
+  transform: none;
 }
 
 textarea {
