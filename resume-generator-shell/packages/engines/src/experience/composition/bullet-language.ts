@@ -379,9 +379,9 @@ export function ensureAllocatedOpeningVerb(
 }
 
 /**
- * Short uniqueness qualifiers — never expose internal bullet IDs.
- * Prefer content-heavy phrases so validator keys (stop-word stripped bags)
- * stay distinct after normalizeText / stemming.
+ * Short uniqueness replacements — used when a long JD stem would otherwise be
+ * cloned with only an "across …" suffix. Prefer content-heavy phrases so
+ * validator keys stay distinct after normalizeText / stemming.
  */
 export const UNIQUE_SCOPE_QUALIFIERS = [
   "production systems",
@@ -394,10 +394,89 @@ export const UNIQUE_SCOPE_QUALIFIERS = [
   "operational readiness gates",
 ] as const;
 
+/** Full replacement scopes when a 4+ word action-object stem collides. */
+export const UNIQUE_SCOPE_REPLACEMENTS = [
+  "production systems reliability",
+  "platform delivery outcomes",
+  "release workflow automation",
+  "critical service readiness",
+  "customer workload performance",
+  "peak demand capacity planning",
+  "distributed service operations",
+  "operational readiness gates",
+  "model serving throughput",
+  "inference delivery pathways",
+  "training pipeline stability",
+  "deployment rollout quality",
+  "observability incident response",
+  "runtime performance tuning",
+  "containerized service delivery",
+  "capacity planning workflows",
+] as const;
+
+function orderedScopeTokens(scope: string): string[] {
+  return scope
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9+.#/\s-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Ordered 4–8 word phrases used to detect cloned stems after qualifier appends. */
+export function actionScopePhraseKeys(
+  scope: string,
+  minimumWords = 4,
+): string[] {
+  const stem = scope.replace(/\s+across\s+[\s\S]+$/i, "").trim();
+  const keys = new Set<string>();
+  for (const sequence of [orderedScopeTokens(scope), orderedScopeTokens(stem)]) {
+    if (sequence.length < minimumWords) {
+      continue;
+    }
+    for (
+      let length = Math.min(8, sequence.length);
+      length >= minimumWords;
+      length -= 1
+    ) {
+      for (let start = 0; start + length <= sequence.length; start += 1) {
+        keys.add(`ng:${sequence.slice(start, start + length).join(" ")}`);
+      }
+    }
+  }
+  return [...keys];
+}
+
+function claimActionScopeKeys(
+  scope: string,
+  usedScopeKeys: Set<string>,
+): void {
+  const fingerprint = actionScopeFingerprint(scope);
+  if (fingerprint) {
+    usedScopeKeys.add(fingerprint);
+  }
+  for (const phraseKey of actionScopePhraseKeys(scope)) {
+    usedScopeKeys.add(phraseKey);
+  }
+}
+
+function actionScopeCollides(
+  scope: string,
+  usedScopeKeys: ReadonlySet<string>,
+): boolean {
+  const fingerprint = actionScopeFingerprint(scope);
+  if (fingerprint && usedScopeKeys.has(fingerprint)) {
+    return true;
+  }
+  return actionScopePhraseKeys(scope).some((phraseKey) =>
+    usedScopeKeys.has(phraseKey),
+  );
+}
+
 /**
  * Rewrites a bullet when its multi-word action object collides with a scope
  * already used earlier in the generation. Keys use the same normalizeText
- * fingerprint as action-scope-repetition validation.
+ * fingerprint as action-scope-repetition validation, plus 4+ word phrase locks
+ * so "… across release workflows" cannot keep a cloned JD stem.
  */
 export function ensureUniqueActionScopeBullet(input: {
   finalBullet: string;
@@ -419,12 +498,8 @@ export function ensureUniqueActionScopeBullet(input: {
     if (tokenCount < 2) {
       return scrubbed;
     }
-    const scopeKey = actionScopeFingerprint(scope);
-    if (!scopeKey) {
-      return scrubbed;
-    }
-    if (!input.usedScopeKeys.has(scopeKey)) {
-      input.usedScopeKeys.add(scopeKey);
+    if (!actionScopeCollides(scope, input.usedScopeKeys)) {
+      claimActionScopeKeys(scope, input.usedScopeKeys);
       return scrubbed;
     }
 
@@ -435,17 +510,32 @@ export function ensureUniqueActionScopeBullet(input: {
       .trim();
     const tailMatch = rest.match(/\s+(?:using|through|,)\s+[\s\S]*$/i);
     const tail = tailMatch?.[0] ?? "";
-    const head = rest.slice(0, rest.length - tail.length).trim() || scope;
     const seed = hashSeed(input.bulletId);
+
+    // Replace the colliding stem entirely — appending "across …" still leaves
+    // the same 4+ word JD phrase visible across bullets.
+    for (let offset = 0; offset < UNIQUE_SCOPE_REPLACEMENTS.length; offset += 1) {
+      const replacement =
+        UNIQUE_SCOPE_REPLACEMENTS[
+          (seed + offset) % UNIQUE_SCOPE_REPLACEMENTS.length
+        ]!;
+      if (actionScopeCollides(replacement, input.usedScopeKeys)) {
+        continue;
+      }
+      claimActionScopeKeys(replacement, input.usedScopeKeys);
+      return repairBrokenBulletWording(`${verb} ${replacement}${tail}`);
+    }
+
     for (let offset = 0; offset < UNIQUE_SCOPE_QUALIFIERS.length; offset += 1) {
       const qualifier =
         UNIQUE_SCOPE_QUALIFIERS[(seed + offset) % UNIQUE_SCOPE_QUALIFIERS.length]!;
-      const candidateScope = `${head} across ${qualifier}`.replace(/\s+/g, " ").trim();
-      const candidateKey = actionScopeFingerprint(candidateScope);
-      if (!candidateKey || input.usedScopeKeys.has(candidateKey)) {
+      const candidateScope = `${qualifier} delivery outcomes`
+        .replace(/\s+/g, " ")
+        .trim();
+      if (actionScopeCollides(candidateScope, input.usedScopeKeys)) {
         continue;
       }
-      input.usedScopeKeys.add(candidateKey);
+      claimActionScopeKeys(candidateScope, input.usedScopeKeys);
       return repairBrokenBulletWording(`${verb} ${candidateScope}${tail}`);
     }
 
@@ -463,19 +553,17 @@ export function ensureUniqueActionScopeBullet(input: {
     ] as const;
     for (let offset = 0; offset < laneNouns.length; offset += 1) {
       const lane = laneNouns[(seed + offset) % laneNouns.length]!;
-      const lastResort = `${head} with ${lane} focus`.replace(/\s+/g, " ").trim();
-      const lastKey = actionScopeFingerprint(lastResort);
-      if (!lastKey || input.usedScopeKeys.has(lastKey)) {
+      const lastResort = `production ${lane} outcomes`
+        .replace(/\s+/g, " ")
+        .trim();
+      if (actionScopeCollides(lastResort, input.usedScopeKeys)) {
         continue;
       }
-      input.usedScopeKeys.add(lastKey);
+      claimActionScopeKeys(lastResort, input.usedScopeKeys);
       return repairBrokenBulletWording(`${verb} ${lastResort}${tail}`);
     }
-    const forced = `${head} with ${laneNouns[seed % laneNouns.length]} focus`;
-    const forcedKey = actionScopeFingerprint(forced);
-    if (forcedKey) {
-      input.usedScopeKeys.add(forcedKey);
-    }
+    const forced = `production ${laneNouns[seed % laneNouns.length]} outcomes`;
+    claimActionScopeKeys(forced, input.usedScopeKeys);
     return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
   })();
 

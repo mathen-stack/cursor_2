@@ -191,6 +191,42 @@ Deploy with Kubernetes.`,
     expect(second).not.toBe(first);
     expect(third).not.toBe(first);
     expect(third).not.toBe(second);
+    // Must replace the stem — not just append "across …".
+    expect(second.toLowerCase()).not.toContain("platform reliability improvements");
+    expect(third.toLowerCase()).not.toContain("platform reliability improvements");
+  });
+
+  it("replaces cloned scalable ML model stems instead of suffixing them", () => {
+    const used = new Set<string>();
+    const phrase = "scalable machine learning models in production environments";
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet: `Instrumented ${phrase} through incident response, maintaining 99.91% availability.`,
+      actionVerb: "Instrumented",
+      bulletId: "EXP-002-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet: `Accelerated ${phrase} through query optimization, reducing latency by 43%.`,
+      actionVerb: "Accelerated",
+      bulletId: "EXP-002-B-002",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet: `Launched ${phrase} through containerization, reducing release failures by 31%.`,
+      actionVerb: "Launched",
+      bulletId: "EXP-002-B-003",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toContain(phrase);
+    expect(second.toLowerCase()).not.toContain(phrase);
+    expect(third.toLowerCase()).not.toContain(phrase);
+    expect(second.toLowerCase()).not.toContain(
+      "scalable machine learning models in production",
+    );
+    expect(third.toLowerCase()).not.toContain(
+      "scalable machine learning models in production",
+    );
   });
 
   it("uniqueifies short two-word action scopes like security mindset", () => {
@@ -523,6 +559,11 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
       (scope) => scope.split(/\s+/).length >= 4,
     );
     expect(new Set(multiWordScopes).size).toBe(multiWordScopes.length);
+
+    const scalableMlHits = bullets.filter((bullet) =>
+      /scalable machine learning models in production/i.test(bullet),
+    );
+    expect(scalableMlHits.length).toBeLessThanOrEqual(1);
 
     for (const bullet of bullets) {
       expect(bullet).not.toMatch(/\bCoordinat\w*\b.*\bcoordination\b/i);

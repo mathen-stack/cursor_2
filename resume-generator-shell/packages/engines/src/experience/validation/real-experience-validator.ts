@@ -1,5 +1,6 @@
 import type { CareerEntry } from "@resume/contracts";
 import {
+  actionScopePhraseKeys,
   directKeywordRepresented,
   extractActionObjectScope,
 } from "../composition/bullet-language";
@@ -237,21 +238,42 @@ export class RealExperienceValidator implements ExperienceValidator {
       (item) => metricFingerprint(item.bullet.finalBullet),
     ).map((group) => group.map((item) => item.bullet.bulletId));
 
-    const actionScopeRepetitionGroups = duplicatesBy(
-      bulletContexts,
-      (item) => {
+    const actionScopeRepetitionGroups = (() => {
+      const fullScopeGroups = duplicatesBy(
+        bulletContexts,
+        (item) => {
+          const scope = extractActionObjectScope(
+            item.bullet.finalBullet,
+            item.bullet.actionVerb,
+          );
+          // Lock multi-word action objects (2+ tokens) document-wide so short
+          // clones like "security mindset" cannot repeat across roles.
+          if (scope.split(/\s+/).filter(Boolean).length < 2) {
+            return `unique:${item.bullet.bulletId}`;
+          }
+          return `scope:${normalizeText(scope)}`;
+        },
+      ).map((group) => group.map((item) => item.bullet.bulletId));
+
+      // Also catch shared 4+ word stems that survive "across …" qualifier appends.
+      const phraseOwners = new Map<string, string[]>();
+      for (const item of bulletContexts) {
         const scope = extractActionObjectScope(
           item.bullet.finalBullet,
           item.bullet.actionVerb,
         );
-        // Lock multi-word action objects (2+ tokens) document-wide so short
-        // clones like "security mindset" cannot repeat across roles.
-        if (scope.split(/\s+/).filter(Boolean).length < 2) {
-          return `unique:${item.bullet.bulletId}`;
+        for (const phraseKey of actionScopePhraseKeys(scope)) {
+          const owners = phraseOwners.get(phraseKey) ?? [];
+          owners.push(item.bullet.bulletId);
+          phraseOwners.set(phraseKey, owners);
         }
-        return `scope:${normalizeText(scope)}`;
-      },
-    ).map((group) => group.map((item) => item.bullet.bulletId));
+      }
+      const phraseGroups = [...phraseOwners.values()]
+        .map((owners) => [...new Set(owners)])
+        .filter((owners) => owners.length > 1);
+
+      return [...fullScopeGroups, ...phraseGroups];
+    })();
 
     const achievementRepetitionGroups = pairGroups(
       bulletContexts,
