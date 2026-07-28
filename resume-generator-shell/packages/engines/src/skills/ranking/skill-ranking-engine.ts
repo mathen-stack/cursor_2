@@ -277,12 +277,55 @@ export class SkillRankingEngine {
       );
     });
 
-    const dedupedCandidates = dropContainedSkills(selectedCandidates);
+    let dedupedCandidates = dropContainedSkills(selectedCandidates);
     for (const dropped of selectedCandidates) {
       if (!dedupedCandidates.some((item) => item.key === dropped.key)) {
         omitted.push(dropped.name);
       }
     }
+
+    // Contained-name dedupe must not re-break the density floor when grounded
+    // candidates are still available.
+    if (dedupedCandidates.length < minimumSkills) {
+      const keptKeys = new Set(dedupedCandidates.map((item) => item.key));
+      const refillPool = [
+        ...selectedCandidates.filter((item) => !keptKeys.has(item.key)),
+        ...ordered.filter((item) => !keptKeys.has(item.key)),
+      ].sort(
+        (left, right) =>
+          candidateWeight(right, experienceEvidenceKeys) -
+            candidateWeight(left, experienceEvidenceKeys) ||
+          left.name.localeCompare(right.name),
+      );
+      for (const candidate of refillPool) {
+        if (dedupedCandidates.length >= minimumSkills) {
+          break;
+        }
+        if (keptKeys.has(candidate.key)) {
+          continue;
+        }
+        dedupedCandidates.push(candidate);
+        keptKeys.add(candidate.key);
+      }
+    }
+
+    // Stable category ordering after possible density refill.
+    dedupedCandidates = [...dedupedCandidates].sort((left, right) => {
+      const categoryDifference =
+        SKILL_CATEGORY_ORDER.indexOf(left.category) -
+        SKILL_CATEGORY_ORDER.indexOf(right.category);
+      if (categoryDifference !== 0) return categoryDifference;
+      const leftEvidenced = experienceEvidenceKeys.has(left.key) ? 1 : 0;
+      const rightEvidenced = experienceEvidenceKeys.has(right.key) ? 1 : 0;
+      if (leftEvidenced !== rightEvidenced) {
+        return rightEvidenced - leftEvidenced;
+      }
+      return (
+        candidateWeight(right, experienceEvidenceKeys) -
+          candidateWeight(left, experienceEvidenceKeys) ||
+        left.name.localeCompare(right.name)
+      );
+    });
 
     const selected: GeneratedSkill[] = dedupedCandidates.map((candidate, index) => ({
       skillId: `SKILL-${String(index + 1).padStart(3, "0")}`,

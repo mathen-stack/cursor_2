@@ -230,4 +230,23 @@ Build and maintain production APIs with strong engineering standards.`;
     expect(output.validation.skillDensityApproved).toBe(true);
     expect(output.validation.inferredSkillsGrounded).toBe(true);
   });
+
+  it("fills soft-skill-only and thin infra JDs to the minimum skill density", async () => {
+    const softJd = `Collaborate with stakeholders. Mentor engineers. Communicate architecture decisions to non-technical stakeholders.
+Deliver production outcomes with strong engineering standards across teams.`;
+    const infraJd = `Engineer with Kubernetes and Terraform experience required for cloud platform delivery teams.`;
+
+    for (const [suffix, jdText] of [
+      ["SOFT", softJd],
+      ["INFRA", infraJd],
+    ] as const) {
+      const output = await createProductionSkillsEngine().execute(
+        input(jdText, suffix),
+      );
+      expect(output.status).toBe("approved");
+      expect(output.skills.length).toBeGreaterThanOrEqual(6);
+      expect(output.validation.skillDensityApproved).toBe(true);
+      expect(output.validation.inferredSkillsGrounded).toBe(true);
+    }
+  });
 });
