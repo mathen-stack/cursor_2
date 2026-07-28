@@ -691,8 +691,7 @@ textarea {
 }
 
 .period-separator {
-  align-self: end;
-  padding-bottom: 0.85rem;
+  align-self: center;
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 650;
@@ -701,16 +700,7 @@ textarea {
 
 .period-part {
   display: grid;
-  gap: 0.4rem;
   min-width: 0;
-}
-
-.period-part-label {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .period-part-controls {

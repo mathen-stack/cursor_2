@@ -63,7 +63,6 @@ function MonthYearFields({
 
   return (
     <div className="period-part">
-      <span className="period-part-label">{label}</span>
       <div className="period-part-controls">
         <select
           className="period-select"
