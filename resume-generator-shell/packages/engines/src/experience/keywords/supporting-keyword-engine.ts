@@ -225,18 +225,20 @@ export class SupportingKeywordEngine {
 
     const selected: SupportingCandidate[] = [];
     const preferCommunicationSignal = input.plan.communicationFocused;
-    const ordered = preferCommunicationSignal
-      ? [
-          ...unused.filter((candidate) =>
-            hasCommunicationAllocationSignal(candidate.keyword),
-          ),
-          ...unused.filter(
-            (candidate) => !hasCommunicationAllocationSignal(candidate.keyword),
-          ),
-        ]
-      : unused;
 
-    for (const candidate of ordered) {
+    // Keep normal score order so supporting pairs stay composition-friendly.
+    // For communication-focused plans, only reserve the first slot for a
+    // communication signal so uniqueness exhaustion cannot drop relevance.
+    if (preferCommunicationSignal) {
+      const signalCandidate = unused.find((candidate) =>
+        hasCommunicationAllocationSignal(candidate.keyword),
+      );
+      if (signalCandidate) {
+        selected.push(signalCandidate);
+      }
+    }
+
+    for (const candidate of unused) {
       if (selected.length >= maximumKeywords) {
         break;
       }
@@ -244,23 +246,6 @@ export class SupportingKeywordEngine {
         continue;
       }
       selected.push(candidate);
-    }
-
-    if (
-      preferCommunicationSignal &&
-      selected.length > 0 &&
-      !selected.some((candidate) =>
-        hasCommunicationAllocationSignal(candidate.keyword),
-      )
-    ) {
-      const signalCandidate = unused.find(
-        (candidate) =>
-          hasCommunicationAllocationSignal(candidate.keyword) &&
-          !selected.some((item) => item.canonicalKey === candidate.canonicalKey),
-      );
-      if (signalCandidate) {
-        selected[selected.length - 1] = signalCandidate;
-      }
     }
 
     // Prefer completing the bullet with one unique supporting method over failing

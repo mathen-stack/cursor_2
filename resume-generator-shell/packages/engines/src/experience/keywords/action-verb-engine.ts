@@ -5,7 +5,6 @@ import {
   ACTION_VERBS_BY_CATEGORY,
   ACTION_VERBS_BY_DIMENSION,
 } from "./keyword-taxonomy";
-import { hasCommunicationAllocationSignal } from "./keyword-signals";
 import { canonicalActionVerbKey } from "./keyword-normalizer";
 
 export interface ActionVerbSelection {
@@ -115,17 +114,6 @@ export class ActionVerbEngine {
         continue;
       }
       if (!suitableForSeniority(actionVerb, input.assignment, input.plan)) {
-        continue;
-      }
-      if (
-        input.plan.communicationFocused &&
-        !hasCommunicationAllocationSignal(actionVerb) &&
-        candidates.some(
-          (candidate) =>
-            hasCommunicationAllocationSignal(candidate) &&
-            !input.usedCanonicalKeys.has(canonicalActionVerbKey(candidate)),
-        )
-      ) {
         continue;
       }
       return {

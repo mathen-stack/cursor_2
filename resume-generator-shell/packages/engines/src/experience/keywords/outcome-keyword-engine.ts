@@ -5,7 +5,6 @@ import {
   CATEGORY_OUTCOME_HINTS,
   OUTCOMES_BY_DIMENSION,
 } from "./keyword-taxonomy";
-import { hasCommunicationAllocationSignal } from "./keyword-signals";
 import { canonicalKeywordKey } from "./keyword-normalizer";
 
 interface OutcomeCandidate extends OutcomeKeywordDetail {
@@ -103,18 +102,7 @@ export class OutcomeKeywordEngine {
       (candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey),
     );
 
-    const ordered = input.plan.communicationFocused
-      ? [
-          ...candidates.filter((candidate) =>
-            hasCommunicationAllocationSignal(candidate.keyword),
-          ),
-          ...candidates.filter(
-            (candidate) => !hasCommunicationAllocationSignal(candidate.keyword),
-          ),
-        ]
-      : candidates;
-
-    const selected = ordered.slice(0, maximumKeywords);
+    const selected = candidates.slice(0, maximumKeywords);
     if (selected.length < maximumKeywords) {
       throw new Error(
         `Outcome keyword inventory is insufficient for ${input.plan.bulletId}.`,
