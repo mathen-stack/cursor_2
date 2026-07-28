@@ -18,12 +18,19 @@ const PRIORITY_WEIGHT = {
   low: 100,
 } as const;
 
-function candidateWeight(candidate: SkillCandidate): number {
+function candidateWeight(
+  candidate: SkillCandidate,
+  experienceEvidenceKeys?: ReadonlySet<string>,
+): number {
+  const evidencedInExperience = experienceEvidenceKeys?.has(candidate.key)
+    ? 250
+    : 0;
   return (
     PRIORITY_WEIGHT[candidate.priority] +
     candidate.score +
     (candidate.source === "explicit" ? 100 : 0) +
-    Math.min(20, candidate.mentionCount * 4)
+    Math.min(20, candidate.mentionCount * 4) +
+    evidencedInExperience
   );
 }
 
@@ -74,10 +81,15 @@ export class SkillRankingEngine {
   }
 
   async execute(input: SkillRankingInput): Promise<SkillRankingOutput> {
+    const experienceEvidenceKeys = input.experienceEvidenceKeys ?? new Set<string>();
     const bestByKey = new Map<string, SkillCandidate>();
     for (const candidate of input.candidates) {
       const current = bestByKey.get(candidate.key);
-      if (!current || candidateWeight(candidate) > candidateWeight(current)) {
+      if (
+        !current ||
+        candidateWeight(candidate, experienceEvidenceKeys) >
+          candidateWeight(current, experienceEvidenceKeys)
+      ) {
         bestByKey.set(candidate.key, {
           ...candidate,
           evidence: candidate.evidence.map((evidence) => ({ ...evidence })),
@@ -90,7 +102,8 @@ export class SkillRankingEngine {
     for (const candidate of bestByKey.values()) {
       categoryScores.set(
         candidate.category,
-        (categoryScores.get(candidate.category) ?? 0) + candidateWeight(candidate),
+        (categoryScores.get(candidate.category) ?? 0) +
+          candidateWeight(candidate, experienceEvidenceKeys),
       );
     }
 
@@ -135,7 +148,9 @@ export class SkillRankingEngine {
     const selectedKeys = new Set<string>();
 
     const ordered = [...bestByKey.values()].sort((left, right) => {
-      const weightDifference = candidateWeight(right) - candidateWeight(left);
+      const weightDifference =
+        candidateWeight(right, experienceEvidenceKeys) -
+        candidateWeight(left, experienceEvidenceKeys);
       if (weightDifference !== 0) return weightDifference;
       const categoryDifference =
         SKILL_CATEGORY_ORDER.indexOf(left.category) -
@@ -145,8 +160,19 @@ export class SkillRankingEngine {
         : left.name.localeCompare(right.name);
     });
 
+    // Experience-evidenced skills are preferred among optionals so the Skills
+    // section reflects technologies demonstrated in generated experience.
     const requiredExplicit = ordered.filter(isRequiredExplicit);
-    const optional = ordered.filter((candidate) => !isRequiredExplicit(candidate));
+    const experienceEvidencedOptional = ordered.filter(
+      (candidate) =>
+        !isRequiredExplicit(candidate) &&
+        experienceEvidenceKeys.has(candidate.key),
+    );
+    const optional = ordered.filter(
+      (candidate) =>
+        !isRequiredExplicit(candidate) &&
+        !experienceEvidenceKeys.has(candidate.key),
+    );
 
     const trySelect = (candidate: SkillCandidate, forceRequired: boolean): boolean => {
       if (selectedKeys.has(candidate.key)) {
@@ -170,7 +196,8 @@ export class SkillRankingEngine {
           .filter(({ item }) => !isRequiredExplicit(item))
           .sort(
             (left, right) =>
-              candidateWeight(left.item) - candidateWeight(right.item),
+              candidateWeight(left.item, experienceEvidenceKeys) -
+              candidateWeight(right.item, experienceEvidenceKeys),
           )[0]?.index;
         if (dropIndex === undefined) {
           return false;
@@ -200,6 +227,11 @@ export class SkillRankingEngine {
         omitted.push(candidate.name);
       }
     }
+    for (const candidate of experienceEvidencedOptional) {
+      if (!trySelect(candidate, false)) {
+        omitted.push(candidate.name);
+      }
+    }
     for (const candidate of optional) {
       if (!trySelect(candidate, false)) {
         omitted.push(candidate.name);
@@ -211,7 +243,16 @@ export class SkillRankingEngine {
         SKILL_CATEGORY_ORDER.indexOf(left.category) -
         SKILL_CATEGORY_ORDER.indexOf(right.category);
       if (categoryDifference !== 0) return categoryDifference;
-      return candidateWeight(right) - candidateWeight(left) || left.name.localeCompare(right.name);
+      const leftEvidenced = experienceEvidenceKeys.has(left.key) ? 1 : 0;
+      const rightEvidenced = experienceEvidenceKeys.has(right.key) ? 1 : 0;
+      if (leftEvidenced !== rightEvidenced) {
+        return rightEvidenced - leftEvidenced;
+      }
+      return (
+        candidateWeight(right, experienceEvidenceKeys) -
+          candidateWeight(left, experienceEvidenceKeys) ||
+        left.name.localeCompare(right.name)
+      );
     });
 
     const dedupedCandidates = dropContainedSkills(selectedCandidates);
@@ -231,6 +272,7 @@ export class SkillRankingEngine {
       score: Math.max(0, Math.min(100, candidate.score)),
       evidence: candidate.evidence.map((evidence) => ({ ...evidence })),
       inferredFrom: [...candidate.inferredFrom],
+      evidencedInExperience: experienceEvidenceKeys.has(candidate.key),
     }));
 
     return {

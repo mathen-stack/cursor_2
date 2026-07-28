@@ -30,6 +30,8 @@ export const GeneratedSkillSchema = z.object({
   score: z.number().min(0).max(100),
   evidence: z.array(SkillEvidenceSchema),
   inferredFrom: z.array(z.string()).default([]),
+  /** True when this skill also appears as a keyword in generated experience bullets. */
+  evidencedInExperience: z.boolean().default(false),
 });
 export type GeneratedSkill = z.infer<typeof GeneratedSkillSchema>;
 
@@ -47,6 +49,12 @@ export interface SkillsValidationIssue {
 
 export interface SkillsEngineInput extends EngineInputBase {
   profile: UserProfile;
+  /**
+   * Keywords taken from approved experience bullets. Used only to boost and
+   * prioritize JD-grounded skills that the candidate actually demonstrated —
+   * never to invent technologies absent from the JD catalog match set.
+   */
+  experienceKeywordHints?: string[];
 }
 
 export interface SkillsEngineOutput extends EngineOutputBase {
@@ -61,6 +69,7 @@ export interface SkillsEngineOutput extends EngineOutputBase {
     totalSkillCount: number;
     explicitSkillCount: number;
     inferredSkillCount: number;
+    experienceEvidencedSkillCount: number;
     omittedLowPrioritySkills: string[];
     issues: SkillsValidationIssue[];
     overallStatus: "approved" | "rejected";

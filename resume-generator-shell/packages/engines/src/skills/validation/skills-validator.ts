@@ -28,6 +28,7 @@ export interface SkillsValidationResult {
   totalSkillCount: number;
   explicitSkillCount: number;
   inferredSkillCount: number;
+  experienceEvidencedSkillCount: number;
   issues: SkillsValidationIssue[];
   overallStatus: "approved" | "rejected";
 }
@@ -183,6 +184,10 @@ export class SkillsValidator {
       );
     }
 
+    const experienceEvidencedSkillCount = input.selected.filter(
+      (skill) => skill.evidencedInExperience,
+    ).length;
+
     const hasErrors = issues.some((item) => item.severity === "error");
     return {
       explicitSkillsCovered: missingRequired.length === 0,
@@ -195,6 +200,7 @@ export class SkillsValidator {
       totalSkillCount: skillCount,
       explicitSkillCount: input.selected.filter((skill) => skill.source === "explicit").length,
       inferredSkillCount: inferredCount,
+      experienceEvidencedSkillCount,
       issues,
       overallStatus: hasErrors ? "rejected" : "approved",
     };

@@ -5,6 +5,7 @@ import type {
   SkillsEngineOutput,
 } from "@resume/contracts";
 import { ExplicitSkillExtractor } from "./extraction/explicit-skill-extractor";
+import { matchSkillKeysFromExperienceKeywords } from "./experience-skill-evidence";
 import { SupportingSkillInferenceEngine } from "./inference/supporting-skill-inference-engine";
 import { SkillRankingEngine } from "./ranking/skill-ranking-engine";
 import { SKILL_CATEGORY_ORDER } from "./skill-taxonomy";
@@ -87,11 +88,16 @@ export class DefaultSkillsEngine implements SkillsEngine {
       this.dependencies.supportingSkillInferenceEngine.name,
     );
 
+    const experienceEvidenceKeys = matchSkillKeysFromExperienceKeywords(
+      input.experienceKeywordHints ?? [],
+    );
+
     const ranked = await this.dependencies.skillRankingEngine.execute({
       context: input.context,
       jobDescription: input.jobDescription,
       candidates: [...explicit.candidates, ...inferred.candidates],
       maximumSkills: this.maximumSkills,
+      experienceEvidenceKeys,
     });
     assertSkillsContextMatch(
       input.context,

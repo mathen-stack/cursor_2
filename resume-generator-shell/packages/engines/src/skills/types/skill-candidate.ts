@@ -37,6 +37,8 @@ export interface SkillInferenceInput extends SkillExtractionInput {
 export interface SkillRankingInput extends SkillExtractionInput {
   candidates: SkillCandidate[];
   maximumSkills: number;
+  /** Catalog skill keys evidenced by experience bullet keywords. */
+  experienceEvidenceKeys?: ReadonlySet<string>;
 }
 
 export interface SkillRankingOutput {

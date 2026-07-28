@@ -99,7 +99,7 @@ export class ResumeOrchestrator {
     );
     context.locale = safeRequest.locale;
 
-    const [experienceResult, summaryResult, skillsResult, templateResult] =
+    const [experienceResult, summaryResult, templateResult] =
       await Promise.all([
         executeTimed(() =>
           this.engines.experience.execute({
@@ -116,13 +116,6 @@ export class ResumeOrchestrator {
           }),
         ),
         executeTimed(() =>
-          this.engines.skills.execute({
-            context,
-            jobDescription: safeRequest.jobDescription,
-            profile: structuredClone(safeRequest.profile),
-          }),
-        ),
-        executeTimed(() =>
           this.engines.template.execute({
             context,
             jobDescription: safeRequest.jobDescription,
@@ -130,6 +123,35 @@ export class ResumeOrchestrator {
           }),
         ),
       ]);
+
+    // Skills wait for experience so bullet keywords can evidence JD skills in
+    // the Skills section without inventing technologies absent from the JD.
+    const experienceKeywordHints: string[] = [];
+    const seenHints = new Set<string>();
+    for (const experience of experienceResult.output.experiences) {
+      for (const bullet of experience.bullets) {
+        for (const keyword of [
+          ...bullet.directKeywords,
+          ...bullet.supportingKeywords,
+          bullet.finalBullet,
+        ]) {
+          const cleaned = keyword.replace(/\s+/g, " ").trim();
+          const key = cleaned.toLocaleLowerCase();
+          if (!cleaned || seenHints.has(key)) continue;
+          seenHints.add(key);
+          experienceKeywordHints.push(cleaned);
+        }
+      }
+    }
+
+    const skillsResult = await executeTimed(() =>
+      this.engines.skills.execute({
+        context,
+        jobDescription: safeRequest.jobDescription,
+        profile: structuredClone(safeRequest.profile),
+        experienceKeywordHints,
+      }),
+    );
 
     const outputs = [
       experienceResult.output,

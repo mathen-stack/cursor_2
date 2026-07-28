@@ -127,4 +127,45 @@ Python and REST APIs are required for production delivery.`;
     await createProductionSkillsEngine().execute(engineInput);
     expect(JSON.stringify(engineInput)).toBe(before);
   });
+
+  it("prioritizes JD skills evidenced by experience bullet keywords", async () => {
+    const withEvidence = await createProductionSkillsEngine().execute({
+      ...input(ML_JD, "EVIDENCED"),
+      experienceKeywordHints: [
+        "Python",
+        "Kubernetes",
+        "MLflow",
+        "Docker",
+        "model monitoring",
+      ],
+    });
+    const withoutEvidence = await createProductionSkillsEngine().execute(
+      input(ML_JD, "BASELINE"),
+    );
+
+    expect(withEvidence.status).toBe("approved");
+    expect(withEvidence.validation.experienceEvidencedSkillCount).toBeGreaterThan(0);
+    expect(
+      withEvidence.skills.some(
+        (skill) => skill.name === "Python" && skill.evidencedInExperience,
+      ),
+    ).toBe(true);
+    expect(
+      withEvidence.skills.some(
+        (skill) => skill.name === "Kubernetes" && skill.evidencedInExperience,
+      ),
+    ).toBe(true);
+
+    // Experience-evidenced skills appear earlier within their categories.
+    const programming = withEvidence.categories.find(
+      (category) => category.name === "Programming Languages",
+    );
+    expect(programming?.skills[0]).toBe("Python");
+
+    // Still JD-grounded: hints cannot invent unrelated stack items.
+    expect(withEvidence.skills.some((skill) => skill.name === "Terraform")).toBe(
+      false,
+    );
+    expect(withoutEvidence.validation.experienceEvidencedSkillCount).toBe(0);
+  });
 });
