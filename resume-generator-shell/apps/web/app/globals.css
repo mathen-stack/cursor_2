@@ -686,96 +686,47 @@ textarea {
 .period-date-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: start;
-  gap: 0.65rem;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .period-separator {
-  align-self: center;
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 650;
   text-align: center;
 }
 
-.period-part {
-  display: grid;
-  min-width: 0;
-}
-
-.period-part-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.period-part-controls:not(:has(.period-present-chip)) {
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-}
-
-.period-select {
+.period-text-input {
   width: 100%;
   min-width: 0;
-  min-height: 2.75rem;
-  padding: 0.65rem 0.7rem;
+  min-height: 2.85rem;
+  padding: 0.72rem 0.82rem;
   border: 1px solid var(--line-strong);
   border-radius: 0;
   background: var(--surface-2);
   color: var(--ink);
   font: inherit;
-  font-size: 0.9rem;
-  font-weight: 650;
+  font-size: 0.92rem;
   outline: none;
-  color-scheme: dark;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.period-select:focus {
+.period-text-input::placeholder {
+  color: #627068;
+}
+
+.period-text-input:focus {
   border-color: var(--accent-deep);
   box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
 }
 
-.period-select:disabled {
-  opacity: 0.45;
-}
-
-.period-present-chip {
-  min-height: 2.75rem;
-  padding: 0 0.7rem;
-  border: 1px solid rgba(62, 207, 142, 0.35);
-  background: transparent;
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-
-.period-present-chip:hover,
-.period-present-chip.is-active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-
-@media (max-width: 900px) {
+@media (max-width: 640px) {
   .period-date-control {
     grid-template-columns: 1fr;
   }
 
   .period-separator {
-    display: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .period-part-controls,
-  .period-part-controls:not(:has(.period-present-chip)) {
-    grid-template-columns: 1fr;
-  }
-
-  .period-present-chip {
-    width: 100%;
+    text-align: left;
   }
 }
