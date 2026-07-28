@@ -8,14 +8,12 @@ import type { KeywordPackage } from "../types/keyword-package";
 import type { StarStory } from "../types/star-story";
 import {
   directKeywordRepresented,
+  isBrokenBulletWording,
   sentenceCount,
   stripFirstPersonPronouns,
   wordCount,
 } from "./bullet-language";
-import {
-  hasIntraBulletPhraseLoop,
-  hasIntraBulletVerbEcho,
-} from "../validation/experience-validation-language";
+import { hasIntraBulletVerbEcho } from "../validation/experience-validation-language";
 
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_LANGUAGE = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various tasks|successfully|effectively)\b/i;
@@ -145,7 +143,7 @@ export class SentenceQualityValidator {
     if (!punctuationValid) errors.push("Bullet must be one clean sentence with one terminal period.");
     if (!communicationSignalPresent) errors.push("Communication-focused bullet lost its stakeholder or collaboration signal.");
     if (!leadershipSignalPresent) errors.push("Leadership-focused bullet lost its technical direction signal.");
-    if (hasIntraBulletPhraseLoop(text) || hasIntraBulletVerbEcho(text)) {
+    if (hasIntraBulletVerbEcho(text) || isBrokenBulletWording(text)) {
       errors.push("Bullet contains repeated phrasing or an imperative verb/object clash.");
     }
     if (/[–—]/.test(text) || /\b(?:using go through|can to|so new markets?)\b/i.test(text)) {

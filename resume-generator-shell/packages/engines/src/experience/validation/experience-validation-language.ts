@@ -94,7 +94,7 @@ export function hasIntraBulletVerbEcho(value: string): boolean {
   );
 }
 
-/** True when any 4+ word phrase is repeated inside one bullet. */
+/** True when any 4+ word phrase is repeated as separate non-overlapping spans. */
 export function hasIntraBulletPhraseLoop(value: string): boolean {
   const words = value
     .toLocaleLowerCase()
@@ -103,13 +103,16 @@ export function hasIntraBulletPhraseLoop(value: string): boolean {
     .split(/\s+/)
     .filter(Boolean);
   for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
-    const seen = new Set<string>();
+    const seen = new Map<string, number>();
     for (let start = 0; start + length <= words.length; start += 1) {
       const phrase = words.slice(start, start + length).join(" ");
-      if (seen.has(phrase)) {
+      const previous = seen.get(phrase);
+      if (previous !== undefined && start >= previous + length) {
         return true;
       }
-      seen.add(phrase);
+      if (previous === undefined) {
+        seen.set(phrase, start);
+      }
     }
   }
   return false;

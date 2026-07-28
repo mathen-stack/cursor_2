@@ -120,6 +120,81 @@ export function ensureCompositionCommunicationSignal(text: string): string {
   return endsWithPeriod ? `${repaired}.` : repaired;
 }
 
+/** Residual wording that must not ship after normalization. */
+export function isBrokenBulletWording(text: string): boolean {
+  const value = text.replace(/\s+/g, " ").trim();
+  if (!value) return true;
+  if (/[–—]/.test(value)) return true;
+  if (
+    /\b(?:using go through|go through|can to|so new markets?|experience with|and'?re in the middle|in the middle of a major)\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:Implemented|Secured|Stabilized|Accelerated|Orchestrated)\s+(?:standardize|harden|orchestrate|accelerate|implement|secure|build)\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  // Import locally-shaped checks via repeated-phrase detection in strip path.
+  return hasRepeatedFourWordPhrase(value);
+}
+
+function hasRepeatedFourWordPhrase(value: string): boolean {
+  const words = value
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9+.#/\s-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
+    const seen = new Map<string, number>();
+    for (let start = 0; start + length <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ");
+      const previous = seen.get(phrase);
+      if (previous !== undefined && start >= previous + length) {
+        return true;
+      }
+      if (previous === undefined) {
+        seen.set(phrase, start);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Aggressive repair for residual repetition / JD-fragment damage. Prefer this
+ * over failing generation so the UI receives a clean bullet.
+ */
+export function repairBrokenBulletWording(text: string): string {
+  let repaired = normalizeBulletSentence(text);
+  // Drop covering clauses entirely when they still collide with earlier scope.
+  repaired = repaired.replace(/\bcovering\s+[^,]+(?=,|\s+(?:to|using|through)\b|$)/gi, "");
+  // Collapse duplicated collaboration anchors.
+  repaired = repaired.replace(
+    /\b(with product and engineering stakeholders)\b(?:[^,]*?\b\1\b)+/gi,
+    "$1",
+  );
+  repaired = repaired.replace(
+    /\b(product and engineering stakeholders)\b(?:[^,]*?\b\1\b)+/gi,
+    "$1",
+  );
+  repaired = repaired.replace(/\band increased\b/gi, "and increasing");
+  repaired = repaired.replace(/\band reduced\b/gi, "and reducing");
+  repaired = repaired.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim();
+  repaired = normalizeBulletSentence(repaired);
+  // Second pass of phrase dedupe after covering removal.
+  if (isBrokenBulletWording(repaired)) {
+    const words = repaired.replace(/[.!?]+$/g, "").split(/\s+/).filter(Boolean);
+    const deduped = dedupeRepeatedPhrases(words.join(" "));
+    repaired = normalizeBulletSentence(deduped);
+  }
+  return repaired;
+}
+
 /** Short uniqueness qualifiers — never expose internal bullet IDs. */
 const UNIQUE_SCOPE_QUALIFIERS = [
   "across production systems",

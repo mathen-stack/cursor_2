@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
   createProductionExperienceEngine,
+  isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   normalizeBulletSentence,
+  repairBrokenBulletWording,
   stripIntraBulletRepetition,
   substantiveKeyword,
 } from "@resume/engines";
@@ -112,6 +114,16 @@ describe("repetition hardening", () => {
         "Mentored mentoring and roadmap planning, increasing supported workload scale by 22%",
       ),
     ).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
+  });
+
+  it("repairs broken wording instead of failing composition", () => {
+    const broken =
+      "Implemented standardize market launches — build repeatable infrastructure provisioning so new using go through delivery planning covering repeatable infrastructure provisioning so new markets can to strengthen integration reliability, reducing manual processing effort by 29%.";
+    const repaired = repairBrokenBulletWording(broken);
+    expect(repaired).not.toMatch(/standardize|—|using go through|covering repeatable|markets can to/i);
+    expect(isBrokenBulletWording(repaired)).toBe(false);
+    expect(repaired).toMatch(/^Implemented\b/);
+    expect(repaired).toMatch(/29%/);
   });
 
   it("scrubs imperative echoes, em-dash JD glue, and duplicated scopes from bullets", () => {
