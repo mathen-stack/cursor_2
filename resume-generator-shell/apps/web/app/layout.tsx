@@ -1,22 +1,26 @@
 import type { ReactNode } from "react";
+import { DM_Sans, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
+const display = Source_Serif_4({
+  subsets: ["latin"],
+  variable: "--font-display-loaded",
+});
+
+const body = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-body-loaded",
+});
+
 export const metadata = {
-  title: "Resume Generator",
-  description: "Turn a job description into a polished, JD-isolated resume.",
+  title: "Resume Tailor",
+  description:
+    "Paste a job description and generate an ATS-optimized, JD-isolated resume.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body>{children}</body>
     </html>
   );
