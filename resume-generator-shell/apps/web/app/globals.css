@@ -252,11 +252,22 @@ textarea:focus {
 .entry-remove {
   margin-left: auto;
   min-height: 0;
-  padding: 0.12rem 0.38rem;
-  font-size: 0.62rem;
+  padding: 0.05rem 0.28rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.58rem;
   font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.entry-remove:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger);
+  transform: none;
 }
 
 .section-actions {
