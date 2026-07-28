@@ -251,9 +251,11 @@ textarea:focus {
 
 .entry-remove {
   margin-left: auto;
-  min-height: 2.2rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.8rem;
+  min-height: 1.7rem;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .section-actions {
