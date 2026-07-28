@@ -68,8 +68,22 @@ pnpm dev
 ```
 
 Open `http://localhost:3000` and generate a complete JD-isolated resume.
-The default provider is offline and rule-based. Configure the optional
-OpenAI-compatible provider through environment variables only when needed.
+
+### AI model (OpenRouter)
+
+Resume generation is **AI-first via OpenRouter**. Add your key to `.env.local`:
+
+```bash
+EXPERIENCE_MODEL_PROVIDER=openai-compatible
+EXPERIENCE_MODEL_PROVIDER_NAME=openrouter
+EXPERIENCE_MODEL_API_KEY=sk-or-...
+EXPERIENCE_MODEL_NAME=openai/gpt-4o-mini
+EXPERIENCE_MODEL_BASE_URL=https://openrouter.ai/api/v1
+```
+
+`OPENROUTER_API_KEY` is also accepted. Without a key, the app falls back to
+deterministic rule-based generation so local demos still work. Set
+`EXPERIENCE_MODEL_PROVIDER=rule-based` to force offline mode.
 
 The project requires npm registry access for the first dependency installation.
 

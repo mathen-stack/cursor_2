@@ -110,39 +110,51 @@ export function createProductionExperienceEngine(
 export function loadExperienceModelProviderConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): ExperienceModelProviderConfig {
-  const provider = environment.EXPERIENCE_MODEL_PROVIDER?.trim();
-  if (!provider || provider === "rule-based") {
+  const providerRaw = environment.EXPERIENCE_MODEL_PROVIDER?.trim().toLowerCase();
+  const apiKey =
+    environment.EXPERIENCE_MODEL_API_KEY?.trim() ||
+    environment.OPENROUTER_API_KEY?.trim();
+  const model =
+    environment.EXPERIENCE_MODEL_NAME?.trim() || "openai/gpt-4o-mini";
+
+  // Explicit offline mode.
+  if (providerRaw === "rule-based") {
     return { provider: "rule-based" };
   }
 
-  if (provider !== "openai-compatible") {
+  // AI-first: openai-compatible / openrouter (default when unset) uses OpenRouter
+  // whenever an API key is present. Without a key, fall back to rule-based so
+  // local/demo runs still work.
+  const wantsOpenAiCompatible =
+    !providerRaw ||
+    providerRaw === "openai-compatible" ||
+    providerRaw === "openrouter";
+
+  if (!wantsOpenAiCompatible) {
     throw new Error(
-      `Unsupported EXPERIENCE_MODEL_PROVIDER: ${provider}. Expected rule-based or openai-compatible.`,
+      `Unsupported EXPERIENCE_MODEL_PROVIDER: ${providerRaw}. Expected rule-based, openai-compatible, or openrouter.`,
     );
   }
 
-  const apiKey = environment.EXPERIENCE_MODEL_API_KEY?.trim();
-  const model = environment.EXPERIENCE_MODEL_NAME?.trim();
-  if (!apiKey || !model) {
-    throw new Error(
-      "EXPERIENCE_MODEL_API_KEY and EXPERIENCE_MODEL_NAME are required for openai-compatible mode.",
-    );
+  if (!apiKey) {
+    return { provider: "rule-based" };
   }
 
   const config: ExperienceModelProviderConfig = {
     provider: "openai-compatible",
     providerName:
-      environment.EXPERIENCE_MODEL_PROVIDER_NAME?.trim() ?? "openai-compatible",
+      environment.EXPERIENCE_MODEL_PROVIDER_NAME?.trim() || "openrouter",
     apiKey,
     model,
+    baseUrl:
+      environment.EXPERIENCE_MODEL_BASE_URL?.trim() ||
+      "https://openrouter.ai/api/v1",
+    applicationTitle:
+      environment.EXPERIENCE_MODEL_APP_TITLE?.trim() || "Resume Generator",
   };
 
-  const baseUrl = environment.EXPERIENCE_MODEL_BASE_URL?.trim();
-  if (baseUrl) config.baseUrl = baseUrl;
   const referer = environment.EXPERIENCE_MODEL_HTTP_REFERER?.trim();
   if (referer) config.httpReferer = referer;
-  const title = environment.EXPERIENCE_MODEL_APP_TITLE?.trim();
-  if (title) config.applicationTitle = title;
 
   const timeout = Number(environment.EXPERIENCE_MODEL_TIMEOUT_MS);
   if (Number.isFinite(timeout) && timeout > 0) config.timeoutMs = timeout;

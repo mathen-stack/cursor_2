@@ -7,7 +7,6 @@ import {
   ensureMinimumBulletWords,
   ensureUniqueActionScopeBullet,
   extractActionObjectScope,
-  ensureMaximumBulletWords,
   finalizeComposedBullet,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
