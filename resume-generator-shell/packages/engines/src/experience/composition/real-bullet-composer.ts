@@ -15,6 +15,7 @@ import {
   containsVagueBuzzwords,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
+  highCollisionMethodRepresented,
   metricAsGerund,
   normalizeBulletSentence,
   repairBrokenBulletWording,
@@ -433,7 +434,8 @@ export class RealBulletComposer implements BulletComposer {
             Boolean(keyword) &&
             !isJdMarketingOrMetaScope(keyword) &&
             !containsVagueBuzzwords(keyword) &&
-            !directKeywordRepresented(finalBullet, keyword),
+            !directKeywordRepresented(finalBullet, keyword) &&
+            !highCollisionMethodRepresented(finalBullet, keyword),
         );
       if (missingSupport.length === 0) {
         return draft;

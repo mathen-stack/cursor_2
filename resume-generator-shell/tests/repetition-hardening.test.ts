@@ -747,4 +747,50 @@ Lead technical strategy.`,
     expect(isBrokenBulletWording(second)).toBe(false);
     expect(isBrokenBulletWording(third)).toBe(false);
   });
+
+  it("scrubs years-of-experience JD tenure and diversifies delivery planning across bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      ),
+    ).not.toMatch(/\b\d+\+?\s*years?(?:\s+of)?\s+experience\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      ),
+    ).toMatch(/^Collaborated\s+/i);
+    expect(isJdMarketingOrMetaScope("10+ years of experience")).toBe(true);
+    expect(
+      isBrokenBulletWording(
+        "Collaborated 10+ years of experience through workshops, reducing rework by 12%.",
+      ),
+    ).toBe(true);
+
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Implemented products through automated testing and delivery planning, reducing manual processing effort by 44%.",
+      actionVerb: "Implemented",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Facilitated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and delivery planning, reducing requirements rework by 25%.",
+      actionVerb: "Facilitated",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toMatch(/\bdelivery planning\b/);
+    expect(second.toLowerCase()).not.toMatch(/\bdelivery planning\b/);
+    expect(second.toLowerCase()).toMatch(
+      /\b(?:execution|release|roadmap|rollout)\s+planning\b/,
+    );
+    expect(
+      [first, second].filter((bullet) =>
+        /and delivery planning,\s*reducing/i.test(bullet),
+      ),
+    ).toHaveLength(1);
+  });
 });

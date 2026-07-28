@@ -97,6 +97,15 @@ export function isJdMarketingOrMetaScope(value: string): boolean {
   if (/\bbonus points?\b/i.test(cleaned) || /\brather have\b/i.test(cleaned)) {
     return true;
   }
+  // Years-of-experience hiring lines must never become the action object.
+  if (
+    /\b\d+\+?\s*(?:-\s*\d+\+?\s*)?years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(
+      cleaned,
+    ) ||
+    /^years? of experience\b/i.test(cleaned)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -113,6 +122,12 @@ export function scrubJdMetaFromVisibleText(value: string): string {
     )
     .replace(/\bcovering\s+(?=,|\s*$)/gi, " ")
     .replace(/\byou(?:'d|’d|'ll|’ll| will| are| have|ve|’ve)\b(?:\s+\w+){0,6}/gi, " ")
+    // JD tenure lines ("10+ years of experience") are requirements, not work scope.
+    .replace(
+      /\b\d+\+?\s*(?:-\s*\d+\+?\s*)?years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/gi,
+      "delivery outcomes",
+    )
+    .replace(/\byears? of experience\b/gi, "delivery outcomes")
     .replace(/\s+/g, " ")
     .replace(/\s+,/g, ",")
     .replace(/,\s*,+/g, ", ")
@@ -125,7 +140,7 @@ const COMMUNICATION_SCOPE_VARIANTS = [
   "product and engineering partnership on delivery priorities",
   "stakeholder communication across product and platform teams",
   "requirements alignment with product and business partners",
-  "cross-team delivery planning with product stakeholders",
+  "cross-team execution planning with product stakeholders",
   "architecture workshops with product and engineering stakeholders",
 ] as const;
 
@@ -196,7 +211,9 @@ export function isBrokenBulletWording(text: string): boolean {
     /\bcross-functional\b[\s\S]*\bcross-functional\b/i.test(value) ||
     /\bdistributed\b[\s\S]*\bdistributed\b/i.test(value) ||
     /\bsecurity\b[\s\S]*\bsecurity\b/i.test(value) ||
-    /\bcost\b[\s\S]*\bcost\b/i.test(value)
+    /\bcost\b[\s\S]*\bcost\b/i.test(value) ||
+    /\b\d+\+?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(value) ||
+    /\byears? of experience\b/i.test(value)
   ) {
     return true;
   }
@@ -520,6 +537,93 @@ export function diversifyHighCollisionContentTokens(
   return result;
 }
 
+/** Through-clause method phrases that clone across roles when left unchanged. */
+const HIGH_COLLISION_METHOD_ALTERNATES: ReadonlyArray<{
+  phrase: string;
+  alternates: readonly string[];
+}> = [
+  {
+    phrase: "delivery planning",
+    alternates: [
+      "execution planning",
+      "release planning",
+      "roadmap planning",
+      "rollout planning",
+    ],
+  },
+  {
+    phrase: "architecture workshops",
+    alternates: [
+      "design workshops",
+      "technical design sessions",
+      "solution design reviews",
+      "architecture design forums",
+    ],
+  },
+];
+
+/**
+ * Keeps the first document occurrence of high-collision method phrases
+ * (e.g. "delivery planning") and rewrites later bullets.
+ */
+export function diversifyHighCollisionMethodPhrases(
+  text: string,
+  usedScopeKeys: Set<string>,
+  seed = "",
+): string {
+  let result = text;
+  const seedIndex = hashSeed(seed || text);
+  for (const { phrase, alternates } of HIGH_COLLISION_METHOD_ALTERNATES) {
+    const claimKey = `mp:${phrase}`;
+    const alreadyClaimed = usedScopeKeys.has(claimKey);
+    let keptFirstInBullet = false;
+    let altOffset = 0;
+    const pattern = new RegExp(
+      `\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "gi",
+    );
+    result = result.replace(pattern, (match) => {
+      if (!alreadyClaimed && !keptFirstInBullet) {
+        keptFirstInBullet = true;
+        usedScopeKeys.add(claimKey);
+        return match;
+      }
+      const alternate =
+        alternates[(seedIndex + altOffset) % alternates.length]!;
+      altOffset += 1;
+      if (/^[A-Z]/.test(match)) {
+        return `${alternate.charAt(0).toUpperCase()}${alternate.slice(1)}`;
+      }
+      return alternate;
+    });
+  }
+  return result;
+}
+
+/** True when a diversified alternate already covers a high-collision method keyword. */
+export function highCollisionMethodRepresented(
+  text: string,
+  keyword: string,
+): boolean {
+  const lowerKeyword = keyword.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  const lowerText = text.toLocaleLowerCase();
+  for (const { phrase, alternates } of HIGH_COLLISION_METHOD_ALTERNATES) {
+    if (lowerKeyword !== phrase) {
+      continue;
+    }
+    if (new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(lowerText)) {
+      return true;
+    }
+    return alternates.some((alternate) =>
+      new RegExp(
+        `\\b${alternate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "i",
+      ).test(lowerText),
+    );
+  }
+  return false;
+}
+
 function claimActionScopeKeys(
   scope: string,
   usedScopeKeys: Set<string>,
@@ -641,8 +745,12 @@ export function ensureUniqueActionScopeBullet(input: {
     return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
   })();
 
-  const diversified = diversifyHighCollisionContentTokens(
-    scoped,
+  const diversified = diversifyHighCollisionMethodPhrases(
+    diversifyHighCollisionContentTokens(
+      scoped,
+      input.usedScopeKeys,
+      input.bulletId,
+    ),
     input.usedScopeKeys,
     input.bulletId,
   );
@@ -916,7 +1024,7 @@ export function stripIntraBulletRepetition(sentence: string): string {
           return full;
         }
         if (/^\s+planning$/i.test(rest)) {
-          return "delivery planning";
+          return "execution planning";
         }
         if (/^\s+collaboration$/i.test(rest)) {
           return "stakeholder collaboration";
@@ -1383,6 +1491,18 @@ export function buildActionClause(input: {
     normalizedDirectScope =
       compactFocus ||
       "cross-functional collaboration with product and engineering stakeholders";
+  }
+  if (
+    /\b\d+\+?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(
+      normalizedDirectScope,
+    ) ||
+    /^years? of experience\b/i.test(normalizedDirectScope)
+  ) {
+    normalizedDirectScope =
+      joinNatural(explicitTools.slice(0, 2)) ||
+      compactFocus ||
+      compactTheme ||
+      cleanFallback;
   }
   if (
     /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
