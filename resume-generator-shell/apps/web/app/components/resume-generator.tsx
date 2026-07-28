@@ -335,10 +335,8 @@ export default function ResumeGenerator() {
                   className="secondary-action entry-remove"
                   disabled={profile.careerHistory.length === 1}
                   onClick={() => removeCareer(index)}
-                  aria-label="Remove experience"
-                  title="Remove experience"
                 >
-                  ×
+                  Remove
                 </button>
               </div>
               <div className="profile-grid">
@@ -406,10 +404,8 @@ export default function ResumeGenerator() {
                   type="button"
                   className="secondary-action entry-remove"
                   onClick={() => removeEducation(index)}
-                  aria-label="Remove education"
-                  title="Remove education"
                 >
-                  ×
+                  Remove
                 </button>
               </div>
               <div className="profile-grid">
