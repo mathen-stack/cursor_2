@@ -1,0 +1,2 @@
+nxd_data_product[spec]
+snowflake-connector-python[pandas]==3.14.0
