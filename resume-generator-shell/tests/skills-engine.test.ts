@@ -193,4 +193,24 @@ Python and REST APIs are required for production delivery.`;
       expect(names.has(required)).toBe(true);
     }
   });
+
+  it("keeps bare CSS when Tailwind CSS and CSS Modules are also required", async () => {
+    const frontendJd = `Senior Frontend Engineer
+Build user interfaces with React, TypeScript, and CSS.
+Implement layouts with Tailwind CSS and CSS Modules.
+Collaborate with product teams on delivery.
+Experience with CSS, HTML, and JavaScript is required.
+Mentor engineers and communicate architecture decisions.
+Optimize performance and accessibility across web apps.`;
+    const output = await createProductionSkillsEngine().execute(
+      input(frontendJd, "CSS-KEEP"),
+    );
+    const names = new Set(output.skills.map((skill) => skill.name));
+
+    expect(output.status).toBe("approved");
+    expect(names.has("CSS")).toBe(true);
+    expect(names.has("Tailwind CSS")).toBe(true);
+    expect(names.has("CSS Modules")).toBe(true);
+    expect(output.validation.explicitSkillsCovered).toBe(true);
+  });
 });

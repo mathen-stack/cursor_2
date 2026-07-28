@@ -53,8 +53,12 @@ function isNameContainedBy(
 }
 
 function dropContainedSkills(candidates: SkillCandidate[]): SkillCandidate[] {
+  // Keep high/critical explicit JD skills even when a longer sibling name
+  // contains them (e.g. bare "CSS" beside "Tailwind CSS" / "CSS Modules").
+  // Dropping those here omits required skills and fails validation.
   return candidates.filter(
     (candidate) =>
+      isRequiredExplicit(candidate) ||
       !candidates.some(
         (other) =>
           other.key !== candidate.key &&
