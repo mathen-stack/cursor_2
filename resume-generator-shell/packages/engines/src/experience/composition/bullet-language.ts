@@ -426,14 +426,70 @@ export function ensureMaximumBulletWords(
     result = normalizeBulletSentence(capped);
   }
   if (bulletWordCount(result) > maximumWords) {
-    result = `${result
-      .replace(/[.!?]+$/g, "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, maximumWords)
-      .join(" ")}.`;
+    result = normalizeBulletSentence(
+      result
+        .replace(/[.!?]+$/g, "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, maximumWords)
+        .join(" "),
+    );
   }
   return result;
+}
+
+/**
+ * Closed finalizer for one bullet: scrub → uniqueify/diversify → communication
+ * signal → length bounds → opening verb. Call this as the last mutation before
+ * validation so later restore/repair steps cannot reintroduce the same failures.
+ */
+export function finalizeComposedBullet(input: {
+  finalBullet: string;
+  actionVerb: string;
+  bulletId: string;
+  usedScopeKeys: Set<string>;
+  minimumWords: number;
+  maximumWords: number;
+  communicationFocused?: boolean;
+  preserveKeywords?: readonly string[];
+}): string {
+  const preserve = input.preserveKeywords ?? [];
+  let text = repairBrokenBulletWording(input.finalBullet);
+  text = ensureUniqueActionScopeBullet({
+    finalBullet: text,
+    actionVerb: input.actionVerb,
+    bulletId: input.bulletId,
+    usedScopeKeys: input.usedScopeKeys,
+    minimumWords: input.minimumWords,
+  });
+  if (input.communicationFocused) {
+    text = ensureCompositionCommunicationSignal(text);
+  }
+  text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+  if (bulletWordCount(text) < input.minimumWords) {
+    text = ensureMinimumBulletWords(text, input.minimumWords, input.bulletId);
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+  }
+  text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+  text = normalizeBulletSentence(text);
+  if (
+    isBrokenBulletWording(text) ||
+    bulletWordCount(text) > input.maximumWords ||
+    bulletWordCount(text) < input.minimumWords
+  ) {
+    text = repairBrokenBulletWording(text);
+    if (bulletWordCount(text) < input.minimumWords) {
+      text = ensureMinimumBulletWords(text, input.minimumWords, input.bulletId);
+    }
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+    text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+    text = normalizeBulletSentence(text);
+  }
+  if (bulletWordCount(text) > input.maximumWords) {
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+    text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+  }
+  return text;
 }
 
 function escapeRegExpLiteral(value: string): string {
@@ -665,6 +721,42 @@ const HIGH_COLLISION_METHOD_ALTERNATES: ReadonlyArray<{
       "technical design sessions",
       "solution design reviews",
       "architecture design forums",
+    ],
+  },
+  {
+    phrase: "design reviews",
+    alternates: [
+      "solution reviews",
+      "architecture reviews",
+      "technical reviews",
+      "design walkthroughs",
+    ],
+  },
+  {
+    phrase: "solution design",
+    alternates: [
+      "service design",
+      "system design",
+      "platform design",
+      "interface design",
+    ],
+  },
+  {
+    phrase: "technical documentation",
+    alternates: [
+      "implementation notes",
+      "runbook documentation",
+      "delivery documentation",
+      "engineering documentation",
+    ],
+  },
+  {
+    phrase: "automated testing",
+    alternates: [
+      "regression testing",
+      "integration testing",
+      "release verification",
+      "quality automation",
     ],
   },
 ];

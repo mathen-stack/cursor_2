@@ -189,6 +189,12 @@ export function atsLanguageErrors(value: string): string[] {
     errors.push("Contains job-posting meta copy that does not belong on a resume.");
   }
   if (
+    /\b\d+\+?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(value) ||
+    /\byears? of experience\b/i.test(value)
+  ) {
+    errors.push("Contains job-posting years-of-experience wording instead of concrete work scope.");
+  }
+  if (
     /\b(?:and'?re|we're|we're in the middle|in the middle of a major)\b/i.test(value)
   ) {
     errors.push("Contains conversational placeholder language.");

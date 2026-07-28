@@ -8,6 +8,7 @@ import {
   ensureUniqueActionScopeBullet,
   extractActionObjectScope,
   ensureMaximumBulletWords,
+  finalizeComposedBullet,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   normalizeBulletSentence,
@@ -795,16 +796,46 @@ Lead technical strategy.`,
     ).toHaveLength(1);
   });
 
-  it("compresses bullets that exceed the scan-friendly word limit", () => {
-    const longBullet =
-      "Collaborated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and execution planning across multiple product surfaces and platform delivery lanes while coordinating release readiness checkpoints with partner engineering managers, reducing requirements rework by 25% and improving decision turnaround time for shared roadmap priorities across partner teams during quarterly planning cycles.";
-    expect(longBullet.split(/\s+/).filter(Boolean).length).toBeGreaterThan(46);
-    const compressed = ensureMaximumBulletWords(longBullet, 46, [
-      "cross-functional collaboration",
-      "25%",
-    ]);
-    expect(compressed.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
-    expect(compressed).toMatch(/25%/);
-    expect(compressed).toMatch(/^Collaborated\b/);
+  it("finalizeComposedBullet enforces scrub, uniqueness, and word limits in one pass", () => {
+    const used = new Set<string>();
+    const first = finalizeComposedBullet({
+      finalBullet:
+        "Implemented products through automated testing and delivery planning, reducing manual processing effort by 44% and improving integration reliability across many partner surfaces during extended release windows.",
+      actionVerb: "Implemented",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+      preserveKeywords: ["delivery planning", "44%"],
+    });
+    const second = finalizeComposedBullet({
+      finalBullet:
+        "Facilitated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and delivery planning, reducing requirements rework by 25%.",
+      actionVerb: "Facilitated",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+      communicationFocused: true,
+      preserveKeywords: ["cross-functional collaboration", "25%"],
+    });
+    const tenure = finalizeComposedBullet({
+      finalBullet:
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      actionVerb: "Collaborated",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+    });
+
+    expect(first.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    expect(second.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    expect(second.toLowerCase()).not.toMatch(/\bdelivery planning\b/);
+    expect(tenure).not.toMatch(/\b\d+\+?\s*years?(?:\s+of)?\s+experience\b/i);
+    expect(tenure).toMatch(/^Collaborated\b/);
+    expect(isBrokenBulletWording(first)).toBe(false);
+    expect(isBrokenBulletWording(second)).toBe(false);
+    expect(isBrokenBulletWording(tenure)).toBe(false);
   });
 });
