@@ -211,42 +211,47 @@ export default function ResumeGenerator() {
 
   return (
     <div className="workspace">
-      <section className="panel">
-        <header className="panel-intro">
-          <p className="panel-kicker">Compose</p>
-          <h2 className="panel-title">Job and profile</h2>
-          <p className="panel-note">
-            Same generation pipeline as before—just a calmer place to paste the role
-            and your background.
-          </p>
-        </header>
+      <aside className="compose-panel">
+        <section className="panel-surface">
+          <header className="panel-intro">
+            <p className="panel-kicker">Compose</p>
+            <h2 className="panel-title">Job and profile</h2>
+            <p className="panel-note">
+              Paste the role and your background. Generation stays the same—the
+              draft appears as a paper preview beside you.
+            </p>
+          </header>
 
-        <div className="stack">
-          <label className="field">
-            <span className="field-label">Job description</span>
-            <textarea
-              className="control"
-              value={jobDescriptionText}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                setJobDescriptionText(event.target.value)
-              }
-            />
-          </label>
-
-          <div>
-            <span className="field-label">Profile and contact</span>
-            <div className="grid-2" style={{ marginTop: 8 }}>
-              <input
+          <div className="stack">
+            <label className="field">
+              <span className="field-label">Job description</span>
+              <textarea
                 className="control"
-                aria-label="Profile ID"
-                placeholder="Profile ID"
-                value={profile.profileId}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setProfile((current) => ({ ...current, profileId: event.target.value }))
+                value={jobDescriptionText}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                  setJobDescriptionText(event.target.value)
                 }
               />
-              {(["fullName", "email", "phone", "location", "linkedin", "portfolio"] as const).map(
-                (field) => (
+            </label>
+
+            <div>
+              <span className="field-label">Profile and contact</span>
+              <div className="grid-2" style={{ marginTop: 8 }}>
+                <input
+                  className="control"
+                  aria-label="Profile ID"
+                  placeholder="Profile ID"
+                  value={profile.profileId}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setProfile((current) => ({
+                      ...current,
+                      profileId: event.target.value,
+                    }))
+                  }
+                />
+                {(
+                  ["fullName", "email", "phone", "location", "linkedin", "portfolio"] as const
+                ).map((field) => (
                   <input
                     key={field}
                     className="control"
@@ -257,106 +262,120 @@ export default function ResumeGenerator() {
                       updatePersonal(field, event.target.value)
                     }
                   />
-                ),
-              )}
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="row-head">
+                <span className="field-label">Career history</span>
+                <button className="btn-ghost" type="button" onClick={addCareer}>
+                  Add company
+                </button>
+              </div>
+              <div className="row-list">
+                {profile.careerHistory.map((entry, index) => (
+                  <div key={entry.experienceId} className="grid-career">
+                    <input
+                      className="control"
+                      placeholder="Company"
+                      value={entry.companyName}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(index, "companyName", event.target.value)
+                      }
+                    />
+                    <input
+                      className="control"
+                      placeholder="2022-01"
+                      value={entry.startDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(index, "startDate", event.target.value)
+                      }
+                    />
+                    <input
+                      className="control"
+                      placeholder="Present"
+                      value={entry.endDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareer(index, "endDate", event.target.value)
+                      }
+                    />
+                    <button
+                      className="btn-ghost"
+                      type="button"
+                      disabled={profile.careerHistory.length === 1}
+                      onClick={() => removeCareer(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="row-head">
+                <span className="field-label">Education</span>
+                <button className="btn-ghost" type="button" onClick={addEducation}>
+                  Add education
+                </button>
+              </div>
+              <div className="row-list">
+                {profile.education.map((entry, index) => (
+                  <div key={entry.educationId} className="grid-edu">
+                    {(["institution", "degree", "field", "graduationDate"] as const).map(
+                      (field) => (
+                        <input
+                          key={field}
+                          className="control"
+                          placeholder={field}
+                          value={entry[field] ?? ""}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateEducation(index, field, event.target.value)
+                          }
+                        />
+                      ),
+                    )}
+                    <button
+                      className="btn-ghost"
+                      type="button"
+                      onClick={() => removeEducation(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={!canGenerate || loading}
+              onClick={generate}
+            >
+              {loading ? "Generating complete resume…" : "Generate complete resume"}
+            </button>
+            {error ? <p className="alert-error">{error}</p> : null}
+          </div>
+        </section>
+      </aside>
+
+      <section className="result-panel" aria-live="polite">
+        {!resume ? (
+          <div className="empty-stage">
+            <div>
+              <p className="empty-stage-title">Your resume template appears here</p>
+              <p className="empty-stage-copy">
+                Generate once from the compose panel. The assembled draft opens as a
+                paper preview with export and readiness tools.
+              </p>
             </div>
           </div>
-
-          <div>
-            <div className="row-head">
-              <span className="field-label">Career history</span>
-              <button className="btn-ghost" type="button" onClick={addCareer}>
-                Add company
-              </button>
-            </div>
-            <div className="row-list">
-              {profile.careerHistory.map((entry, index) => (
-                <div key={entry.experienceId} className="grid-career">
-                  <input
-                    className="control"
-                    placeholder="Company"
-                    value={entry.companyName}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "companyName", event.target.value)
-                    }
-                  />
-                  <input
-                    className="control"
-                    placeholder="2022-01"
-                    value={entry.startDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "startDate", event.target.value)
-                    }
-                  />
-                  <input
-                    className="control"
-                    placeholder="Present"
-                    value={entry.endDate}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "endDate", event.target.value)
-                    }
-                  />
-                  <button
-                    className="btn-ghost"
-                    type="button"
-                    disabled={profile.careerHistory.length === 1}
-                    onClick={() => removeCareer(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="row-head">
-              <span className="field-label">Education</span>
-              <button className="btn-ghost" type="button" onClick={addEducation}>
-                Add education
-              </button>
-            </div>
-            <div className="row-list">
-              {profile.education.map((entry, index) => (
-                <div key={entry.educationId} className="grid-edu">
-                  {(["institution", "degree", "field", "graduationDate"] as const).map(
-                    (field) => (
-                      <input
-                        key={field}
-                        className="control"
-                        placeholder={field}
-                        value={entry[field] ?? ""}
-                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                          updateEducation(index, field, event.target.value)
-                        }
-                      />
-                    ),
-                  )}
-                  <button
-                    className="btn-ghost"
-                    type="button"
-                    onClick={() => removeEducation(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button
-            className="btn-primary"
-            type="button"
-            disabled={!canGenerate || loading}
-            onClick={generate}
-          >
-            {loading ? "Generating complete resume…" : "Generate complete resume"}
-          </button>
-          {error ? <p className="alert-error">{error}</p> : null}
-        </div>
+        ) : (
+          <ResumePreview resume={resume} />
+        )}
       </section>
-
-      {resume ? <ResumePreview resume={resume} /> : null}
     </div>
   );
 }
@@ -458,167 +477,176 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
   }
 
   return (
-    <section className="panel">
-      <header className="panel-intro">
-        <p className="panel-kicker">Result</p>
-        <div className="preview-meta">
-          <div>
-            <h2 className="panel-title">Final assembled resume</h2>
-            <code>{resume.context.generationId}</code>
-          </div>
-          <div className="meta-side">
-            <span className="status-pill">
-              {resume.assemblyValidation.overallStatus.toUpperCase()}
-            </span>
-            <div>{resume.orchestration.totalDurationMs} ms</div>
-            <div>{template.templateName}</div>
-          </div>
-        </div>
-      </header>
-
-      <div className="actions">
-        {(["docx", "pdf", "txt"] as const).map((format) => (
-          <button
-            key={format}
-            className="btn-secondary"
-            type="button"
-            disabled={exporting !== null}
-            onClick={() => exportResume(format)}
-          >
-            {exporting === format
-              ? `Exporting ${format.toUpperCase()}…`
-              : `Export ${format.toUpperCase()}`}
-          </button>
-        ))}
-      </div>
-      {exportError ? <p className="alert-error">{exportError}</p> : null}
-
-      {resume.readiness ? (
-        <section
-          className={`readiness ${
-            resume.readiness.readyForExternalTest ? "ready" : "needs-work"
-          }`}
-        >
-          <div className="readiness-banner">
-            <div className="readiness-head">
-              <div>
-                <h3>Resume Worded readiness</h3>
-                <p>
-                  Internal quality gate: {resume.readiness.targetInternalScore}+. External
-                  goal: 90+.
-                </p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="score">{resume.readiness.internalScore}</div>
-                <div className="score-caption">
-                  {resume.readiness.readyForExternalTest
-                    ? "Ready for external test"
-                    : "Needs targeted improvement"}
-                </div>
-              </div>
+    <div className="stack">
+      <section className="panel-surface">
+        <header className="panel-intro">
+          <p className="panel-kicker">Template preview</p>
+          <div className="preview-meta">
+            <div>
+              <h2 className="panel-title">Final assembled resume</h2>
+              <code>{resume.context.generationId}</code>
+            </div>
+            <div className="meta-side">
+              <span className="status-pill">
+                {resume.assemblyValidation.overallStatus.toUpperCase()}
+              </span>
+              <div>{resume.orchestration.totalDurationMs} ms</div>
+              <div>{template.templateName}</div>
             </div>
           </div>
+        </header>
 
-          <div className="score-grid">
-            {resume.readiness.categories.map((category) => (
-              <div key={category.categoryId} className="score-item">
-                <strong>{category.label}</strong>
-                <div>{category.score}/100</div>
-              </div>
-            ))}
-          </div>
-
-          {resume.readiness.issues.length > 0 ? (
-            <div className="findings">
-              <strong>Targeted findings</strong>
-              <ul>
-                {resume.readiness.issues.slice(0, 6).map((issue) => (
-                  <li key={issue.issueCode}>
-                    {issue.message} <em>Owner: {issue.owner}</em>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          <p className="disclaimer">{resume.readiness.disclaimer}</p>
-
-          <div className="calibration">
-            <strong>Record an external Resume Worded test</strong>
-            <div className="score-grid" style={{ marginTop: 8 }}>
-              <input
-                className="control"
-                inputMode="decimal"
-                placeholder="Overall score (0–100)"
-                value={externalOverallScore}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setExternalOverallScore(event.target.value)
-                }
-              />
-              <input
-                className="control"
-                inputMode="decimal"
-                placeholder="Relevancy score (optional)"
-                value={externalRelevancyScore}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  setExternalRelevancyScore(event.target.value)
-                }
-              />
-              <select
-                className="control"
-                value={feedbackCategory}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                  setFeedbackCategory(event.target.value as ExternalResumeFeedbackCategory)
-                }
-              >
-                {[
-                  "impact",
-                  "brevity",
-                  "style",
-                  "sections",
-                  "ats",
-                  "keyword-relevance",
-                  "leadership",
-                  "growth",
-                  "repetition",
-                  "formatting",
-                  "other",
-                ].map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <textarea
-              className="control"
-              style={{ minHeight: 76, marginTop: 8 }}
-              placeholder="Paste one feedback item from Resume Worded (optional)"
-              value={feedbackMessage}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                setFeedbackMessage(event.target.value)
-              }
-            />
+        <div className="actions">
+          {(["docx", "pdf", "txt"] as const).map((format) => (
             <button
+              key={format}
               className="btn-secondary"
               type="button"
-              disabled={calibrating || !externalOverallScore.trim()}
-              onClick={submitCalibration}
-              style={{ marginTop: 8 }}
+              disabled={exporting !== null}
+              onClick={() => exportResume(format)}
             >
-              {calibrating ? "Recording…" : "Record external test"}
+              {exporting === format
+                ? `Exporting ${format.toUpperCase()}…`
+                : `Export ${format.toUpperCase()}`}
             </button>
-            {calibrationError ? <p className="alert-error">{calibrationError}</p> : null}
-            {calibrationRecord ? (
-              <p className="calibration-note">
-                Recorded {calibrationRecord.externalOverallScore}/100 for this exact
-                resume. Internal-to-external delta:{" "}
-                {calibrationRecord.overallScoreDelta >= 0 ? "+" : ""}
-                {calibrationRecord.overallScoreDelta}.
-              </p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+          ))}
+        </div>
+        {exportError ? <p className="alert-error">{exportError}</p> : null}
+
+        {resume.readiness ? (
+          <details className="meta-details" open>
+            <summary>Readiness &amp; calibration</summary>
+            <section
+              className={`readiness ${
+                resume.readiness.readyForExternalTest ? "ready" : "needs-work"
+              }`}
+            >
+              <div className="readiness-banner">
+                <div className="readiness-head">
+                  <div>
+                    <h3>Resume Worded readiness</h3>
+                    <p>
+                      Internal quality gate: {resume.readiness.targetInternalScore}+.
+                      External goal: 90+.
+                    </p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="score">{resume.readiness.internalScore}</div>
+                    <div className="score-caption">
+                      {resume.readiness.readyForExternalTest
+                        ? "Ready for external test"
+                        : "Needs targeted improvement"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="score-grid">
+                {resume.readiness.categories.map((category) => (
+                  <div key={category.categoryId} className="score-item">
+                    <strong>{category.label}</strong>
+                    <div>{category.score}/100</div>
+                  </div>
+                ))}
+              </div>
+
+              {resume.readiness.issues.length > 0 ? (
+                <div className="findings">
+                  <strong>Targeted findings</strong>
+                  <ul>
+                    {resume.readiness.issues.slice(0, 6).map((issue) => (
+                      <li key={issue.issueCode}>
+                        {issue.message} <em>Owner: {issue.owner}</em>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <p className="disclaimer">{resume.readiness.disclaimer}</p>
+
+              <div className="calibration">
+                <strong>Record an external Resume Worded test</strong>
+                <div className="score-grid" style={{ marginTop: 8 }}>
+                  <input
+                    className="control"
+                    inputMode="decimal"
+                    placeholder="Overall score (0–100)"
+                    value={externalOverallScore}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setExternalOverallScore(event.target.value)
+                    }
+                  />
+                  <input
+                    className="control"
+                    inputMode="decimal"
+                    placeholder="Relevancy score (optional)"
+                    value={externalRelevancyScore}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setExternalRelevancyScore(event.target.value)
+                    }
+                  />
+                  <select
+                    className="control"
+                    value={feedbackCategory}
+                    onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                      setFeedbackCategory(
+                        event.target.value as ExternalResumeFeedbackCategory,
+                      )
+                    }
+                  >
+                    {[
+                      "impact",
+                      "brevity",
+                      "style",
+                      "sections",
+                      "ats",
+                      "keyword-relevance",
+                      "leadership",
+                      "growth",
+                      "repetition",
+                      "formatting",
+                      "other",
+                    ].map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  className="control"
+                  style={{ minHeight: 76, marginTop: 8 }}
+                  placeholder="Paste one feedback item from Resume Worded (optional)"
+                  value={feedbackMessage}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                    setFeedbackMessage(event.target.value)
+                  }
+                />
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  disabled={calibrating || !externalOverallScore.trim()}
+                  onClick={submitCalibration}
+                  style={{ marginTop: 8 }}
+                >
+                  {calibrating ? "Recording…" : "Record external test"}
+                </button>
+                {calibrationError ? (
+                  <p className="alert-error">{calibrationError}</p>
+                ) : null}
+                {calibrationRecord ? (
+                  <p className="calibration-note">
+                    Recorded {calibrationRecord.externalOverallScore}/100 for this exact
+                    resume. Internal-to-external delta:{" "}
+                    {calibrationRecord.overallScoreDelta >= 0 ? "+" : ""}
+                    {calibrationRecord.overallScoreDelta}.
+                  </p>
+                ) : null}
+              </div>
+            </section>
+          </details>
+        ) : null}
+      </section>
 
       <div
         className="resume-sheet"
@@ -700,6 +728,6 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
