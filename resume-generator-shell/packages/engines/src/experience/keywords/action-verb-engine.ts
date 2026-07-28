@@ -11,7 +11,19 @@ export interface ActionVerbSelection {
   actionVerb: string;
   canonicalKey: string;
   rationale: string;
+  controlledReuse?: boolean;
 }
+
+const COMMUNICATION_ACTION_VERBS = [
+  "Collaborated",
+  "Coordinated",
+  "Facilitated",
+  "Aligned",
+  "Partnered",
+  "Communicated",
+  "Presented",
+  "Led",
+] as const;
 
 const GLOBAL_FALLBACKS = [
   "Architected",
@@ -105,6 +117,7 @@ export class ActionVerbEngine {
       return {
         actionVerb,
         canonicalKey,
+        controlledReuse: false,
         rationale: [
           `Matches the ${effectiveDimension} achievement dimension.`,
           input.plan.leadershipFocused
@@ -112,6 +125,23 @@ export class ActionVerbEngine {
             : "Uses an ownership-focused verb appropriate to the assigned role.",
         ].join(" "),
       };
+    }
+
+    // Communication-focused bullets must not abort generation once the unique
+    // collaboration-verb inventory is exhausted across many roles.
+    if (input.plan.communicationFocused) {
+      for (const actionVerb of COMMUNICATION_ACTION_VERBS) {
+        if (!suitableForSeniority(actionVerb, input.assignment, input.plan)) {
+          continue;
+        }
+        return {
+          actionVerb,
+          canonicalKey: canonicalActionVerbKey(actionVerb),
+          controlledReuse: true,
+          rationale:
+            "Reused a collaboration action verb after document-wide uniqueness locks exhausted the unused inventory for communication-focused achievements.",
+        };
+      }
     }
 
     throw new Error(

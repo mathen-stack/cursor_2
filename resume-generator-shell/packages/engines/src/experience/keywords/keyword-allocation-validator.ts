@@ -6,10 +6,30 @@ import type {
 } from "../types/keyword-package";
 import type { JDRequirement } from "../types/requirement";
 import type { RoleAssignment } from "../types/role-assignment";
+import {
+  hasCommunicationAllocationSignal,
+  packageAllocationText,
+} from "./communication-allocation";
 import { canonicalKeywordKey } from "./keyword-normalizer";
 
 function duplicateValues(values: string[]): string[] {
   return [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
+}
+
+function isControlledReuse(
+  experienceId: string,
+  canonicalKey: string,
+  controlledReuse: readonly string[],
+): boolean {
+  return controlledReuse.some((item) => {
+    const separator = item.indexOf(":");
+    const itemExperienceId = separator >= 0 ? item.slice(0, separator) : "";
+    const value = separator >= 0 ? item.slice(separator + 1) : item;
+    return (
+      itemExperienceId === experienceId &&
+      canonicalKeywordKey(value) === canonicalKey
+    );
+  });
 }
 
 function repeatedWithinExperience(
@@ -40,14 +60,7 @@ function repeatedAcrossGeneration(
 }
 
 function packageText(keywordPackage: KeywordPackage): string {
-  return [
-    ...keywordPackage.directKeywords,
-    ...keywordPackage.supportingKeywords,
-    ...keywordPackage.outcomeKeywords,
-    keywordPackage.actionVerb,
-  ]
-    .join(" ")
-    .toLowerCase();
+  return packageAllocationText(keywordPackage);
 }
 
 export function validateKeywordAllocation(input: {
@@ -57,7 +70,13 @@ export function validateKeywordAllocation(input: {
   plans: BulletPlanItem[];
   packages: KeywordPackage[];
   controlledDirectKeywordReuse: string[];
+  controlledCommunicationSupportingReuse?: string[];
+  controlledCommunicationActionVerbReuse?: string[];
 }): KeywordAllocationValidation {
+  const controlledCommunicationSupportingReuse =
+    input.controlledCommunicationSupportingReuse ?? [];
+  const controlledCommunicationActionVerbReuse =
+    input.controlledCommunicationActionVerbReuse ?? [];
   const planIds = input.plans.map((plan) => plan.bulletId);
   const packageIds = input.packages.map((keywordPackage) => keywordPackage.bulletId);
   const duplicateBulletIds = duplicateValues(packageIds);
@@ -106,12 +125,34 @@ export function validateKeywordAllocation(input: {
   const repeatedActionVerbKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) => [keywordPackage.actionVerbCanonicalKey],
-  );
+  ).filter((canonicalKey) => {
+    return !input.packages.some(
+      (keywordPackage) =>
+        keywordPackage.actionVerbCanonicalKey === canonicalKey &&
+        isControlledReuse(
+          keywordPackage.experienceId,
+          canonicalKey,
+          controlledCommunicationActionVerbReuse,
+        ),
+    );
+  });
   const repeatedSupportingKeywordKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) =>
       keywordPackage.supportingKeywordDetails.map((detail) => detail.canonicalKey),
-  );
+  ).filter((canonicalKey) => {
+    return !input.packages.some(
+      (keywordPackage) =>
+        keywordPackage.supportingKeywordDetails.some(
+          (detail) => detail.canonicalKey === canonicalKey,
+        ) &&
+        isControlledReuse(
+          keywordPackage.experienceId,
+          canonicalKey,
+          controlledCommunicationSupportingReuse,
+        ),
+    );
+  });
   const repeatedOutcomeKeywordKeys = repeatedAcrossGeneration(
     input.packages,
     (keywordPackage) =>
@@ -127,12 +168,14 @@ export function validateKeywordAllocation(input: {
   ).filter((entry) => {
     const [experienceId, ...keyParts] = entry.split(":");
     const key = keyParts.join(":");
-    return !input.controlledDirectKeywordReuse.some((item) => {
-      const separator = item.indexOf(":");
-      const itemExperienceId = separator >= 0 ? item.slice(0, separator) : "";
-      const value = separator >= 0 ? item.slice(separator + 1) : item;
-      return itemExperienceId === experienceId && canonicalKeywordKey(value) === key;
-    });
+    return (
+      !isControlledReuse(experienceId, key, input.controlledDirectKeywordReuse) &&
+      !isControlledReuse(
+        experienceId,
+        key,
+        controlledCommunicationSupportingReuse,
+      )
+    );
   });
 
   const packageByBullet = new Map(
@@ -149,9 +192,7 @@ export function validateKeywordAllocation(input: {
     const text = packageText(keywordPackage);
     if (
       plan.communicationFocused &&
-      !/collaborat|communicat|stakeholder|requirements gathering|cross-functional|alignment|facilitat|coordinat|product partnership|architecture workshop/.test(
-        text,
-      )
+      !hasCommunicationAllocationSignal(text)
     ) {
       communicationPackageErrors.push(plan.bulletId);
     }
@@ -181,10 +222,20 @@ export function validateKeywordAllocation(input: {
   const communicationPackagesRelevant = communicationPackageErrors.length === 0;
   const leadershipPackagesRelevant = leadershipPackageErrors.length === 0;
 
-  const warnings = input.controlledDirectKeywordReuse.map(
-    (item) =>
-      `Controlled direct-JD keyword reuse was required because the planned role contained more bullets than distinct grounded phrases: ${item}.`,
-  );
+  const warnings = [
+    ...input.controlledDirectKeywordReuse.map(
+      (item) =>
+        `Controlled direct-JD keyword reuse was required because the planned role contained more bullets than distinct grounded phrases: ${item}.`,
+    ),
+    ...controlledCommunicationSupportingReuse.map(
+      (item) =>
+        `Controlled communication supporting-keyword reuse was required to preserve stakeholder or cross-functional evidence: ${item}.`,
+    ),
+    ...controlledCommunicationActionVerbReuse.map(
+      (item) =>
+        `Controlled communication action-verb reuse was required after the unique collaboration-verb inventory was exhausted: ${item}.`,
+    ),
+  ];
   const errors: string[] = [];
   if (!allPlansAllocated) {
     errors.push(`Missing keyword packages for: ${missingPlanBulletIds.join(", ")}.`);

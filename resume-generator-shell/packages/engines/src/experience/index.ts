@@ -31,6 +31,7 @@ export * from "./planning/real-bullet-planner";
 export * from "./planning/requirement-role-allocator";
 export * from "./create-milestone-5-experience-engine";
 export * from "./keywords/action-verb-engine";
+export * from "./keywords/communication-allocation";
 export * from "./keywords/direct-jd-keyword-engine";
 export * from "./keywords/keyword-allocation-validator";
 export * from "./keywords/keyword-normalizer";

@@ -106,17 +106,24 @@ describe("Real global keyword allocation", () => {
   it("keeps action verbs, supporting keywords, and outcomes unique across the whole generation", async () => {
     const { output } = await createRealAllocation();
 
-    expect(new Set(output.packages.map((item) => item.actionVerbCanonicalKey)).size).toBe(
-      output.packages.length,
-    );
-    expect(
-      new Set(
-        output.packages.flatMap((item) =>
-          item.supportingKeywordDetails.map((detail) => detail.canonicalKey),
+    const nonReusedActionVerbs = output.packages.filter(
+      (_item, index) =>
+        !output.locks?.some(
+          (lock) =>
+            lock.kind === "action-verb" &&
+            lock.bulletId === output.packages[index]?.bulletId &&
+            lock.controlledReuse,
         ),
-      ).size,
-    ).toBe(
-      output.packages.flatMap((item) => item.supportingKeywordDetails).length,
+    );
+    expect(new Set(nonReusedActionVerbs.map((item) => item.actionVerbCanonicalKey)).size).toBe(
+      nonReusedActionVerbs.length,
+    );
+
+    const nonReusedSupporting = output.packages.flatMap((item) =>
+      item.supportingKeywordDetails.filter((detail) => !detail.controlledReuse),
+    );
+    expect(new Set(nonReusedSupporting.map((detail) => detail.canonicalKey)).size).toBe(
+      nonReusedSupporting.length,
     );
     expect(
       new Set(
@@ -157,8 +164,11 @@ describe("Real global keyword allocation", () => {
           ...(keywordPackage?.directKeywords ?? []),
           ...(keywordPackage?.supportingKeywords ?? []),
           ...(keywordPackage?.outcomeKeywords ?? []),
+          keywordPackage?.actionVerb ?? "",
         ].join(" "),
-      ).toMatch(/stakeholder|collaborat|cross-functional|alignment|requirements gathering|architecture workshop/i);
+      ).toMatch(
+        /collaborat|communicat|stakeholder|requirements gathering|cross-functional|cross-team|align|facilitat|coordinat|partner|workshop|negotiat|product partnership|architecture workshop/i,
+      );
     }
 
     expect(output.validation?.communicationPackagesRelevant).toBe(true);
@@ -338,6 +348,89 @@ describe("direct keyword phrase integrity", () => {
         expect(/\s(?:in|to|and|with|of|for|the|a)$/i.test(keyword.trim())).toBe(false);
         expect(keyword.includes("polished user in")).toBe(false);
       }
+    }
+  });
+
+  it("preserves collaboration evidence on communication-focused packages under inventory pressure", async () => {
+    const jobDescription = createJobDescription(
+      "Senior Platform Engineer. Design scalable platform architecture. Deploy services with Kubernetes and Terraform. Monitor reliability with Prometheus. Optimize system performance. Collaborate with product and engineering stakeholders. Lead technical strategy and architecture decisions. Partner with cross-functional teams on delivery priorities.",
+    );
+    const context = createGenerationContext("PROFILE-COMM-PRESSURE", jobDescription);
+    const careerHistory = [
+      {
+        experienceId: "EXP-001",
+        companyName: "Company One",
+        startDate: "2023-01",
+        endDate: "Present",
+      },
+      {
+        experienceId: "EXP-002",
+        companyName: "Company Two",
+        startDate: "2020-01",
+        endDate: "2022-12",
+      },
+      {
+        experienceId: "EXP-003",
+        companyName: "Company Three",
+        startDate: "2017-01",
+        endDate: "2019-12",
+      },
+      {
+        experienceId: "EXP-004",
+        companyName: "Company Four",
+        startDate: "2014-01",
+        endDate: "2016-12",
+      },
+    ];
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const extracted = await extractor.execute({ context, jobDescription });
+    const roles = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute({
+      context,
+      jobDescription,
+      careerHistory,
+      requirements: extracted.requirements,
+    });
+    const plans = await new RealBulletPlanner().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      minimumBulletsPerRole: 5,
+    });
+
+    const output = await new RealKeywordAllocator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      plans: plans.plans,
+    });
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.validation?.communicationPackagesRelevant).toBe(true);
+
+    const packagesByBullet = new Map(
+      output.packages.map((keywordPackage) => [keywordPackage.bulletId, keywordPackage]),
+    );
+    const communicationPlans = plans.plans.filter((plan) => plan.communicationFocused);
+    expect(communicationPlans.length).toBeGreaterThan(1);
+    for (const plan of communicationPlans) {
+      const keywordPackage = packagesByBullet.get(plan.bulletId);
+      expect(keywordPackage).toBeDefined();
+      expect(
+        [
+          ...(keywordPackage?.directKeywords ?? []),
+          ...(keywordPackage?.supportingKeywords ?? []),
+          ...(keywordPackage?.outcomeKeywords ?? []),
+          keywordPackage?.actionVerb ?? "",
+        ].join(" "),
+      ).toMatch(
+        /collaborat|communicat|stakeholder|requirements gathering|cross-functional|cross-team|align|facilitat|coordinat|partner|workshop|negotiat/i,
+      );
     }
   });
 

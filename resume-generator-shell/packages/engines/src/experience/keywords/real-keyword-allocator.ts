@@ -4,9 +4,15 @@ import type {
   KeywordAllocatorOutput,
   KeywordLockRecord,
   KeywordPackage,
+  SupportingKeywordDetail,
 } from "../types/keyword-package";
 import type { RoleAssignment } from "../types/role-assignment";
 import { ActionVerbEngine } from "./action-verb-engine";
+import {
+  hasCommunicationAllocationSignal,
+  packageAllocationText,
+  pickCommunicationSupportingKeyword,
+} from "./communication-allocation";
 import { DirectJDKeywordEngine } from "./direct-jd-keyword-engine";
 import { validateKeywordAllocation } from "./keyword-allocation-validator";
 import {
@@ -154,6 +160,8 @@ export class RealKeywordAllocator implements KeywordAllocator {
     const packages: KeywordPackage[] = [];
     const locks: KeywordLockRecord[] = [];
     const controlledDirectKeywordReuse: string[] = [];
+    const controlledCommunicationSupportingReuse: string[] = [];
+    const controlledCommunicationActionVerbReuse: string[] = [];
 
     for (const reserved of input.reservedPackages ?? []) {
       seedRoleState(states, documentState, reserved, true);
@@ -211,7 +219,7 @@ export class RealKeywordAllocator implements KeywordAllocator {
       });
       const directKeys = new Set(direct.keywords.map(canonicalKeywordKey));
 
-      const supporting = this.supportingKeywordEngine.select({
+      let supporting = this.supportingKeywordEngine.select({
         jobDescription: input.jobDescription,
         plan,
         requirement,
@@ -234,6 +242,42 @@ export class RealKeywordAllocator implements KeywordAllocator {
         maximumKeywords: this.outcomeKeywordsPerBullet,
       });
 
+      // Last-resort: communication-focused packages must retain a collaboration
+      // signal even when uniqueness locks push allocation toward technical methods.
+      if (
+        plan.communicationFocused &&
+        !hasCommunicationAllocationSignal(
+          packageAllocationText({
+            directKeywords: direct.keywords,
+            supportingKeywords: supporting.map((detail) => detail.keyword),
+            outcomeKeywords: outcomes.map((detail) => detail.keyword),
+            actionVerb: action.actionVerb,
+          }),
+        )
+      ) {
+        const blocked = new Set([
+          ...directKeys,
+          ...outcomes.map((detail) => detail.canonicalKey),
+        ]);
+        const emergency = pickCommunicationSupportingKeyword(
+          documentState.usedGlobalKeywordKeys,
+          blocked,
+        );
+        const emergencyDetail: SupportingKeywordDetail = {
+          keyword: emergency.keyword,
+          canonicalKey: emergency.canonicalKey,
+          origin: "strongly-inferred",
+          rationale: emergency.controlledReuse
+            ? "Reused a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence."
+            : "Injected a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence.",
+          controlledReuse: emergency.controlledReuse,
+        };
+        supporting =
+          supporting.length > 0
+            ? [...supporting.slice(0, -1), emergencyDetail]
+            : [emergencyDetail];
+      }
+
       state.usedActionVerbKeys.add(action.canonicalKey);
       documentState.usedActionVerbKeys.add(action.canonicalKey);
       locks.push(
@@ -243,9 +287,14 @@ export class RealKeywordAllocator implements KeywordAllocator {
           "action-verb",
           action.actionVerb,
           action.canonicalKey,
-          false,
+          Boolean(action.controlledReuse),
         ),
       );
+      if (action.controlledReuse) {
+        controlledCommunicationActionVerbReuse.push(
+          `${plan.experienceId}:${action.actionVerb}`,
+        );
+      }
 
       for (const evidence of direct.evidence) {
         const canonicalKey = canonicalKeywordKey(evidence.keyword);
@@ -283,9 +332,14 @@ export class RealKeywordAllocator implements KeywordAllocator {
             "supporting-keyword",
             detail.keyword,
             detail.canonicalKey,
-            false,
+            Boolean(detail.controlledReuse),
           ),
         );
+        if (detail.controlledReuse) {
+          controlledCommunicationSupportingReuse.push(
+            `${plan.experienceId}:${detail.keyword}`,
+          );
+        }
       }
 
       for (const detail of outcomes) {
@@ -336,6 +390,12 @@ export class RealKeywordAllocator implements KeywordAllocator {
       packages,
       controlledDirectKeywordReuse: [
         ...new Set(controlledDirectKeywordReuse),
+      ],
+      controlledCommunicationSupportingReuse: [
+        ...new Set(controlledCommunicationSupportingReuse),
+      ],
+      controlledCommunicationActionVerbReuse: [
+        ...new Set(controlledCommunicationActionVerbReuse),
       ],
     });
 

@@ -22,6 +22,7 @@ export interface SupportingKeywordDetail {
   canonicalKey: string;
   origin: "explicit-jd-tool" | "strongly-inferred";
   rationale: string;
+  controlledReuse?: boolean;
 }
 
 export interface OutcomeKeywordDetail {

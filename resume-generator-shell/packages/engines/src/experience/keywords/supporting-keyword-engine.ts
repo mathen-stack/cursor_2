@@ -4,6 +4,10 @@ import type { SupportingKeywordDetail } from "../types/keyword-package";
 import type { JDRequirement, RequirementCategory } from "../types/requirement";
 import type { RoleAssignment } from "../types/role-assignment";
 import {
+  hasCommunicationAllocationSignal,
+  pickCommunicationSupportingKeyword,
+} from "./communication-allocation";
+import {
   EXPLICIT_TOOL_PATTERNS,
   SUPPORTING_BY_CATEGORY,
   SUPPORTING_BY_DIMENSION,
@@ -13,6 +17,7 @@ import { canonicalKeywordKey, containsCaseInsensitive } from "./keyword-normaliz
 
 interface SupportingCandidate extends SupportingKeywordDetail {
   score: number;
+  controlledReuse?: boolean;
 }
 
 const TOOL_CATEGORY_AFFINITY: Readonly<Record<string, readonly RequirementCategory[]>> = {
@@ -206,9 +211,19 @@ export class SupportingKeywordEngine {
     const unused = all.filter(
       (candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey),
     );
+    const signalUnused = unused.filter((candidate) =>
+      hasCommunicationAllocationSignal(candidate.keyword),
+    );
+    const otherUnused = unused.filter(
+      (candidate) => !hasCommunicationAllocationSignal(candidate.keyword),
+    );
+    const ordered =
+      input.plan.communicationFocused
+        ? [...signalUnused, ...otherUnused]
+        : unused;
 
     const selected: SupportingCandidate[] = [];
-    for (const candidate of unused) {
+    for (const candidate of ordered) {
       if (selected.length >= maximumKeywords) {
         break;
       }
@@ -216,6 +231,37 @@ export class SupportingKeywordEngine {
         continue;
       }
       selected.push(candidate);
+    }
+
+    if (
+      input.plan.communicationFocused &&
+      !selected.some((candidate) =>
+        hasCommunicationAllocationSignal(candidate.keyword),
+      )
+    ) {
+      const blocked = new Set([
+        ...input.directCanonicalKeys,
+        ...selected.map((item) => item.canonicalKey),
+      ]);
+      const emergency = pickCommunicationSupportingKeyword(
+        input.usedCanonicalKeys,
+        blocked,
+      );
+      const emergencyDetail: SupportingCandidate = {
+        keyword: emergency.keyword,
+        canonicalKey: emergency.canonicalKey,
+        origin: "strongly-inferred",
+        rationale: emergency.controlledReuse
+          ? "Reused a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence."
+          : "Injected a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence.",
+        score: 200,
+        controlledReuse: emergency.controlledReuse,
+      };
+      if (selected.length >= maximumKeywords) {
+        selected[selected.length - 1] = emergencyDetail;
+      } else {
+        selected.push(emergencyDetail);
+      }
     }
 
     // Prefer completing the bullet with one unique supporting method over failing
