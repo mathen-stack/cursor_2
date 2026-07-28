@@ -244,8 +244,9 @@ export class RealExperienceValidator implements ExperienceValidator {
           item.bullet.finalBullet,
           item.bullet.actionVerb,
         );
-        // Only lock multi-word action objects (3+ tokens) document-wide.
-        if (scope.split(/\s+/).filter(Boolean).length < 3) {
+        // Lock multi-word action objects (2+ tokens) document-wide so short
+        // clones like "security mindset" cannot repeat across roles.
+        if (scope.split(/\s+/).filter(Boolean).length < 2) {
           return `unique:${item.bullet.bulletId}`;
         }
         return `scope:${normalizeText(scope)}`;

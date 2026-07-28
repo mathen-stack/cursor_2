@@ -57,6 +57,46 @@ describe("repetition hardening", () => {
     expect(third).not.toBe(second);
   });
 
+  it("uniqueifies short two-word action scopes like security mindset", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Stabilized security mindset through least-privilege access, maintaining 99.94% availability.",
+      actionVerb: "Stabilized",
+      bulletId: "EXP-001-B-006",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Governed security mindset through penetration testing, increasing control coverage by 94%.",
+      actionVerb: "Governed",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Automated security mindset through remediation workflows, reducing manual effort by 43%.",
+      actionVerb: "Automated",
+      bulletId: "EXP-003-B-004",
+      usedScopeKeys: used,
+    });
+    const keys = [
+      actionScopeFingerprint(extractActionObjectScope(first, "Stabilized")),
+      actionScopeFingerprint(extractActionObjectScope(second, "Governed")),
+      actionScopeFingerprint(extractActionObjectScope(third, "Automated")),
+    ];
+    expect(new Set(keys).size).toBe(3);
+    expect(
+      [first, second, third].filter((bullet) => {
+        const scope = extractActionObjectScope(
+          bullet,
+          bullet.split(/\s+/)[0]!,
+        );
+        return /^security mindset$/i.test(scope);
+      }).length,
+    ).toBe(1);
+  });
+
   it("approves three-career Platform Engineer generation without action-scope or filler rejects", async () => {
     const jobDescription = createJobDescription(
       `Platform Engineer
@@ -118,7 +158,7 @@ Lead technical strategy.`,
             bullet.finalBullet,
             bullet.actionVerb,
           );
-          if (scope.split(/\s+/).filter(Boolean).length < 3) {
+          if (scope.split(/\s+/).filter(Boolean).length < 2) {
             return null;
           }
           return actionScopeFingerprint(scope);
@@ -126,6 +166,17 @@ Lead technical strategy.`,
         .filter((scope): scope is string => Boolean(scope)),
     );
     expect(new Set(scopes).size).toBe(scopes.length);
+
+    const exactSecurityMindset = result.experiences.flatMap((experience) =>
+      experience.bullets.filter((bullet) => {
+        const scope = extractActionObjectScope(
+          bullet.finalBullet,
+          bullet.actionVerb,
+        );
+        return /^security mindset$/i.test(scope);
+      }),
+    );
+    expect(exactSecurityMindset).toHaveLength(1);
   });
 
   it("removes within-bullet verb and measure echoes", () => {

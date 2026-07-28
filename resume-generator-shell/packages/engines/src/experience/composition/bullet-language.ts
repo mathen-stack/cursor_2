@@ -233,7 +233,8 @@ export function ensureUniqueActionScopeBullet(input: {
   const scrubbed = repairBrokenBulletWording(input.finalBullet);
   const scope = extractActionObjectScope(scrubbed, input.actionVerb);
   const tokenCount = scope.split(/\s+/).filter(Boolean).length;
-  if (tokenCount < 3) {
+  // Lock 2+ word scopes document-wide (e.g. "security mindset", "technical strategy").
+  if (tokenCount < 2) {
     return scrubbed;
   }
   const scopeKey = actionScopeFingerprint(scope);
