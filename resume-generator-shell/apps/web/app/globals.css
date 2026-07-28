@@ -257,6 +257,10 @@ textarea:focus {
   margin-top: 1rem;
 }
 
+.section-actions-end {
+  justify-content: flex-end;
+}
+
 .secondary-action,
 .retry-btn,
 .download-btn {

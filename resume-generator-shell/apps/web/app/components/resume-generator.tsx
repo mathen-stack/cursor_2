@@ -422,7 +422,7 @@ export default function ResumeGenerator() {
             </div>
           ))}
 
-          <div className="section-actions">
+          <div className="section-actions section-actions-end">
             <button type="button" className="secondary-action" onClick={addCareer}>
               Add Experience
             </button>
