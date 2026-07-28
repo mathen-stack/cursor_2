@@ -44,7 +44,39 @@ describe("repetition hardening", () => {
         "the mindrift platform connects specialists with AI projects",
       ),
     ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("✅ you'd rather have real ownership"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("bonus points if you've shipped production APIs"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("you'd report straight to the founder"),
+    ).toBe(true);
     expect(isJdMarketingOrMetaScope("machine learning models")).toBe(false);
+  });
+
+  it("scrubs emoji and hiring meta copy out of visible resume bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Improved ✅ you'd rather have real ownership effectiveness, reducing manual processing by 22%.",
+      ),
+    ).not.toMatch(/✅|you'd rather|real ownership effectiveness/i);
+    expect(
+      normalizeBulletSentence(
+        "Coordinated stakeholder communication covering you'd report straight to the four, reducing handoff delays by 18%.",
+      ),
+    ).not.toMatch(/you'd report|straight to the four/i);
+    expect(
+      normalizeBulletSentence(
+        "Standardized ✅ bonus points if you've reducing defect rate by 34%.",
+      ),
+    ).not.toMatch(/✅|bonus points|if you've/i);
+    expect(
+      normalizeBulletSentence(
+        "Standardized ✅ bonus points if you've reducing defect rate by 34%.",
+      ),
+    ).toMatch(/reducing defect rate by 34%/i);
   });
 
   it("rewrites soft-skill buzzphrases out of generated bullet text", () => {

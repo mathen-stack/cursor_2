@@ -177,7 +177,9 @@ export class RealBulletComposer implements BulletComposer {
           }
           return keyword;
         })
-        .filter(Boolean);
+        .filter(
+          (keyword) => Boolean(keyword) && !isJdMarketingOrMetaScope(keyword),
+        );
       const compositionPackage = {
         ...keywordPackage,
         directKeywords: visibleDirectKeywords,
@@ -248,7 +250,9 @@ export class RealBulletComposer implements BulletComposer {
       if (missingDirects.length > 0) {
         const coveringScopes = missingDirects
           .map((keyword) => substantiveKeyword(keyword))
-          .filter(Boolean);
+          .filter(
+            (scope) => Boolean(scope) && !isJdMarketingOrMetaScope(scope),
+          );
         if (coveringScopes.length > 0) {
           actionClause = `${actionClause.replace(/[.!?]+$/g, "")} covering ${coveringScopes.join(" and ")}`;
           composed = this.sentencePatternEngine.compose({

@@ -10,15 +10,24 @@ const STAR_OWNERSHIP_BOILERPLATE =
 
 /** Job-post marketing / meta copy that must never become a bullet action object. */
 export const JD_MARKETING_PROSE =
-  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'ll| will)\b|competitive salary|benefits package|join our team|about the (?:role|company|job))\b/i;
+  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'d|’d|'ll|’ll| will| are| have|ve)\b|you(?:'d|’d)\s+rather|bonus points?(?:\s+if)?|nice[- ]to[- ]have|a plus if|report(?:s|ing)? straight to|report(?:s|ing)? to the|what (?:we|you)(?:'re| are) looking for|about you|our (?:culture|mission|values)|competitive salary|benefits package|join our team|about the (?:role|company|job))\b/i;
+
+/** Emoji / dingbat markers common in informal JD preference lists. */
+const JD_META_MARKERS =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]|✅|✓|✔|☐|☑|■|□|●|○|★|☆/u;
 
 /** Finite-verb clauses that read as full JD sentences, not noun scopes. */
 const SCOPE_FINITE_VERB =
   /\b(?:connects|enables|helps|allows|provides|offers|supports|delivers|brings|makes|keeps|lets|ensures)\b/i;
 
+export function containsJdMetaMarker(value: string): boolean {
+  return JD_META_MARKERS.test(value);
+}
+
 export function isJdMarketingOrMetaScope(value: string): boolean {
   const cleaned = value.replace(/\s+/g, " ").trim();
   if (!cleaned) return false;
+  if (containsJdMetaMarker(cleaned)) return true;
   if (JD_MARKETING_PROSE.test(cleaned)) return true;
   if (SCOPE_FINITE_VERB.test(cleaned) && cleaned.split(/\s+/).length >= 5) {
     return true;
@@ -27,7 +36,38 @@ export function isJdMarketingOrMetaScope(value: string): boolean {
   if (/\b(?:ideal for|role for a|opportunity for)\b/i.test(cleaned)) {
     return true;
   }
+  // Second-person hiring fragments that survive partial extraction.
+  if (
+    /\b(?:you'?d|you’ll|you'll|you will|you are|you have|you’ve|you've)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
+  if (/\bbonus points?\b/i.test(cleaned) || /\brather have\b/i.test(cleaned)) {
+    return true;
+  }
   return false;
+}
+
+/** Strip emoji / hiring meta crumbs left in composed bullet text. */
+export function scrubJdMetaFromVisibleText(value: string): string {
+  return value
+    .replace(JD_META_MARKERS, " ")
+    // Prefer short, local removals so metrics and concrete work survive.
+    .replace(/\bbonus points?(?:\s+if(?:\s+you(?:'ve|’ve| have)?)?)?\b/gi, " ")
+    .replace(/\byou(?:'d|’d)\s+rather(?:\s+have)?(?:\s+\w+){0,4}\b/gi, " ")
+    .replace(
+      /\b(?:you(?:'d|’d|'ll|’ll| will)\s+)?report(?:s|ing)?(?:\s+straight)?\s+to(?:\s+the)?(?:\s+\w+){0,4}\b/gi,
+      " ",
+    )
+    .replace(/\bcovering\s+(?=,|\s*$)/gi, " ")
+    .replace(/\byou(?:'d|’d|'ll|’ll| will| are| have|ve|’ve)\b(?:\s+\w+){0,6}/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .replace(/\s+(?=[,.])/g, "")
+    .trim();
 }
 
 const COMMUNICATION_SCOPE_VARIANTS = [
@@ -233,29 +273,35 @@ export function stripFirstPersonPronouns(value: string): string {
 
 export function normalizeBulletSentence(value: string): string {
   const normalized = stripFirstPersonPronouns(
-    value
-      .replace(WEAK_FILLER, "")
-      // Resume Worded flags bare soft-skill buzzphrases; swap for concrete signal.
-      .replace(
-        /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
-        "stakeholder communication",
-      )
-      .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
-      .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
-      // Never leave internal plan identifiers in visible resume text.
-      .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
-      .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
-      .replace(/\s+,/g, ",")
-      .replace(/,\s*,+/g, ", ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/[.!?]+$/g, ""),
+    scrubJdMetaFromVisibleText(
+      value
+        .replace(WEAK_FILLER, "")
+        // Resume Worded flags bare soft-skill buzzphrases; swap for concrete signal.
+        .replace(
+          /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
+          "stakeholder communication",
+        )
+        .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
+        .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
+        // Never leave internal plan identifiers in visible resume text.
+        .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
+        .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
+        .replace(/\s+,/g, ",")
+        .replace(/,\s*,+/g, ", ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[.!?]+$/g, ""),
+    ),
   );
   if (!normalized) {
     return "";
   }
   const withoutEcho = stripIntraBulletRepetition(normalized);
-  return `${withoutEcho.charAt(0).toUpperCase()}${withoutEcho.slice(1)}.`;
+  const cleaned = withoutEcho.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "";
+  }
+  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}.`;
 }
 
 /** Morphological stem used to catch Coordinated/coordination style echoes. */

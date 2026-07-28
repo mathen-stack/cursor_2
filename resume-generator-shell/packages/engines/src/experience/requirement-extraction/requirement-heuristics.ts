@@ -495,6 +495,15 @@ function isNonActionableSegment(sourceText: string): boolean {
   ) {
     return true;
   }
+  // Emoji preference lists and second-person hiring meta.
+  if (
+    /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|✅|✓|✔/u.test(cleaned) ||
+    /\b(?:bonus points?(?:\s+if)?|you(?:'d|’d)\s+rather|report(?:s|ing)? straight to|you(?:'d|’d|'ll|’ll| will)\b)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 

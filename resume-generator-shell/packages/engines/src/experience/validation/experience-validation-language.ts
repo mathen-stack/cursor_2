@@ -131,6 +131,14 @@ export function atsLanguageErrors(value: string): string[] {
   if (/\bexp-\d+-b-\d+\b/i.test(value)) {
     errors.push("Contains an internal bullet identifier instead of concrete work scope.");
   }
+  if (
+    /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|✅|✓|✔/u.test(value) ||
+    /\b(?:bonus points?|you(?:'d|’d)\s+rather|report(?:s|ing)? straight to|you(?:'d|’d|'ll|’ll| will)\b)/i.test(
+      value,
+    )
+  ) {
+    errors.push("Contains job-posting meta copy that does not belong on a resume.");
+  }
   if (!/^[A-Z][A-Za-z-]+\s/.test(value)) errors.push("Does not begin with a clear action verb.");
   if (!value.endsWith(".")) errors.push("Does not end with a period.");
   if (/[;!?]/.test(value)) errors.push("Uses punctuation that weakens ATS scanability.");
