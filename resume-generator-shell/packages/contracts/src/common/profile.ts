@@ -28,7 +28,7 @@ export const UserProfileSchema = z.object({
   profileId: z.string().min(1),
   personalInformation: PersonalInformationSchema,
   careerHistory: z.array(CareerEntrySchema).min(1),
-  education: z.array(EducationEntrySchema).default([]),
+  education: z.array(EducationEntrySchema).min(1),
 });
 
 export type CareerEntry = z.infer<typeof CareerEntrySchema>;

@@ -92,6 +92,11 @@ export default function ResumeGenerator() {
       profile.careerHistory.every(
         (entry) =>
           entry.companyName.trim() && entry.startDate.trim() && entry.endDate.trim(),
+      ) &&
+      profile.education.length > 0 &&
+      profile.education.every(
+        (entry) =>
+          entry.institution.trim() && entry.degree.trim() && entry.field.trim(),
       )
     );
   }, [jobDescriptionText, profile]);
@@ -393,6 +398,7 @@ export default function ResumeGenerator() {
           <div className="section-head">
             <div>
               <h2>Education</h2>
+              <p className="hint">Required. Add at least one school, degree, and field of study.</p>
             </div>
           </div>
 
@@ -403,6 +409,7 @@ export default function ResumeGenerator() {
                 <button
                   type="button"
                   className="secondary-action entry-remove"
+                  disabled={profile.education.length === 1}
                   onClick={() => removeEducation(index)}
                 >
                   Remove
@@ -506,7 +513,7 @@ export default function ResumeGenerator() {
             <p className="inline-status">
               {loading
                 ? "Running JD-isolated resume pipeline…"
-                : "Ready when profile, career history, and JD are filled in."}
+                : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
           {error ? <p className="error">{error}</p> : null}

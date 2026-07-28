@@ -36,7 +36,15 @@ function profile(profileId: string): UserProfile {
         endDate: "Present",
       },
     ],
-    education: [],
+    education: [
+      {
+        educationId: "EDU-001",
+        institution: "Example University",
+        degree: "Bachelor of Science",
+        field: "Computer Science",
+        graduationDate: "2018",
+      },
+    ],
   };
 }
 
