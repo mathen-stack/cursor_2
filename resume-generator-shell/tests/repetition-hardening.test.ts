@@ -7,6 +7,7 @@ import {
   ensureMinimumBulletWords,
   ensureUniqueActionScopeBullet,
   extractActionObjectScope,
+  ensureMaximumBulletWords,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   normalizeBulletSentence,
@@ -792,5 +793,18 @@ Lead technical strategy.`,
         /and delivery planning,\s*reducing/i.test(bullet),
       ),
     ).toHaveLength(1);
+  });
+
+  it("compresses bullets that exceed the scan-friendly word limit", () => {
+    const longBullet =
+      "Collaborated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and execution planning across multiple product surfaces and platform delivery lanes while coordinating release readiness checkpoints with partner engineering managers, reducing requirements rework by 25% and improving decision turnaround time for shared roadmap priorities across partner teams during quarterly planning cycles.";
+    expect(longBullet.split(/\s+/).filter(Boolean).length).toBeGreaterThan(46);
+    const compressed = ensureMaximumBulletWords(longBullet, 46, [
+      "cross-functional collaboration",
+      "25%",
+    ]);
+    expect(compressed.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    expect(compressed).toMatch(/25%/);
+    expect(compressed).toMatch(/^Collaborated\b/);
   });
 });

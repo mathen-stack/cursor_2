@@ -11,6 +11,7 @@ import {
   ensureCompositionCommunicationSignal,
   ensureUniqueActionScopeBullet,
   ensureMinimumBulletWords,
+  ensureMaximumBulletWords,
   ensureAllocatedOpeningVerb,
   containsVagueBuzzwords,
   isBrokenBulletWording,
@@ -419,6 +420,33 @@ export class RealBulletComposer implements BulletComposer {
       };
     };
 
+    // Document-wide: rewrite colliding multi-word action scopes before validation.
+    const usedActionScopeKeys = new Set<string>();
+    const minimumWords = this.sentenceQualityValidator.minimumWords;
+    const maximumWords = this.sentenceQualityValidator.maximumWords;
+    const clampBulletLength = (draft: ExperienceBullet): ExperienceBullet => {
+      const preserve = [
+        ...draft.directKeywords,
+        ...draft.supportingKeywords,
+        ...draft.outcomeKeywords,
+      ];
+      return {
+        ...draft,
+        finalBullet: ensureAllocatedOpeningVerb(
+          ensureMaximumBulletWords(
+            ensureMinimumBulletWords(
+              draft.finalBullet,
+              minimumWords,
+              draft.bulletId,
+            ),
+            maximumWords,
+            preserve,
+          ),
+          draft.actionVerb,
+        ),
+      };
+    };
+
     const restoreMissingSupport = (
       draft: ExperienceBullet,
     ): ExperienceBullet => {
@@ -457,48 +485,49 @@ export class RealBulletComposer implements BulletComposer {
       return {
         ...draft,
         finalBullet: ensureAllocatedOpeningVerb(
-          ensureMinimumBulletWords(finalBullet, minimumWords, draft.bulletId),
+          finalBullet,
           draft.actionVerb,
         ),
       };
     };
 
-    // Document-wide: rewrite colliding multi-word action scopes before validation.
-    const usedActionScopeKeys = new Set<string>();
-    const minimumWords = this.sentenceQualityValidator.minimumWords;
     for (let index = 0; index < drafts.length; index += 1) {
       const draft = drafts[index]!;
-      drafts[index] = restoreMissingSupport({
-        ...draft,
-        finalBullet: ensureAllocatedOpeningVerb(
-          ensureUniqueActionScopeBullet({
-            finalBullet: draft.finalBullet,
-            actionVerb: draft.actionVerb,
-            bulletId: draft.bulletId,
-            usedScopeKeys: usedActionScopeKeys,
-            minimumWords,
-          }),
-          draft.actionVerb,
-        ),
-      });
+      drafts[index] = clampBulletLength(
+        restoreMissingSupport({
+          ...draft,
+          finalBullet: ensureAllocatedOpeningVerb(
+            ensureUniqueActionScopeBullet({
+              finalBullet: draft.finalBullet,
+              actionVerb: draft.actionVerb,
+              bulletId: draft.bulletId,
+              usedScopeKeys: usedActionScopeKeys,
+              minimumWords,
+            }),
+            draft.actionVerb,
+          ),
+        }),
+      );
     }
     // Re-uniqueify after support restore, then claim only keywords still present.
     const finalizedScopeKeys = new Set<string>();
     for (let index = 0; index < drafts.length; index += 1) {
       const draft = drafts[index]!;
-      drafts[index] = syncClaimedKeywords({
-        ...draft,
-        finalBullet: ensureAllocatedOpeningVerb(
-          ensureUniqueActionScopeBullet({
-            finalBullet: draft.finalBullet,
-            actionVerb: draft.actionVerb,
-            bulletId: draft.bulletId,
-            usedScopeKeys: finalizedScopeKeys,
-            minimumWords,
-          }),
-          draft.actionVerb,
-        ),
-      });
+      drafts[index] = syncClaimedKeywords(
+        clampBulletLength({
+          ...draft,
+          finalBullet: ensureAllocatedOpeningVerb(
+            ensureUniqueActionScopeBullet({
+              finalBullet: draft.finalBullet,
+              actionVerb: draft.actionVerb,
+              bulletId: draft.bulletId,
+              usedScopeKeys: finalizedScopeKeys,
+              minimumWords,
+            }),
+            draft.actionVerb,
+          ),
+        }),
+      );
     }
 
     let validation = validateBulletComposition({
@@ -527,7 +556,7 @@ export class RealBulletComposer implements BulletComposer {
         validation.diagnostics
           .filter((item) =>
             item.errors.some((error) =>
-              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language|personal pronoun|first-person|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|word limit|too long|scan-friendly|exceeds|buzzword|filler|weak language|personal pronoun|first-person|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
                 error,
               ),
             ),
@@ -539,6 +568,11 @@ export class RealBulletComposer implements BulletComposer {
         for (let index = 0; index < drafts.length; index += 1) {
           const draft = drafts[index]!;
           let finalBullet = draft.finalBullet;
+          const preserve = [
+            ...draft.directKeywords,
+            ...draft.supportingKeywords,
+            ...draft.outcomeKeywords,
+          ];
           if (failingIds.has(draft.bulletId)) {
             finalBullet = repairBrokenBulletWording(finalBullet);
             finalBullet = ensureMinimumBulletWords(
@@ -546,15 +580,24 @@ export class RealBulletComposer implements BulletComposer {
               minimumWords,
               draft.bulletId,
             );
+            finalBullet = ensureMaximumBulletWords(
+              finalBullet,
+              maximumWords,
+              preserve,
+            );
           }
           finalBullet = ensureAllocatedOpeningVerb(
-            ensureUniqueActionScopeBullet({
-              finalBullet,
-              actionVerb: draft.actionVerb,
-              bulletId: draft.bulletId,
-              usedScopeKeys: repairedScopeKeys,
-              minimumWords,
-            }),
+            ensureMaximumBulletWords(
+              ensureUniqueActionScopeBullet({
+                finalBullet,
+                actionVerb: draft.actionVerb,
+                bulletId: draft.bulletId,
+                usedScopeKeys: repairedScopeKeys,
+                minimumWords,
+              }),
+              maximumWords,
+              preserve,
+            ),
             draft.actionVerb,
           );
           drafts[index] = syncClaimedKeywords({
@@ -601,6 +644,11 @@ export class RealBulletComposer implements BulletComposer {
         for (let index = 0; index < drafts.length; index += 1) {
           const draft = drafts[index]!;
           let finalBullet = draft.finalBullet;
+          const preserve = [
+            ...draft.directKeywords,
+            ...draft.supportingKeywords,
+            ...draft.outcomeKeywords,
+          ];
           if (verbFailingIds.has(draft.bulletId)) {
             finalBullet = ensureAllocatedOpeningVerb(
               finalBullet,
@@ -608,19 +656,81 @@ export class RealBulletComposer implements BulletComposer {
             );
           }
           finalBullet = ensureAllocatedOpeningVerb(
-            ensureUniqueActionScopeBullet({
-              finalBullet,
-              actionVerb: draft.actionVerb,
-              bulletId: draft.bulletId,
-              usedScopeKeys: verbScopeKeys,
-              minimumWords,
-            }),
+            ensureMaximumBulletWords(
+              ensureUniqueActionScopeBullet({
+                finalBullet,
+                actionVerb: draft.actionVerb,
+                bulletId: draft.bulletId,
+                usedScopeKeys: verbScopeKeys,
+                minimumWords,
+              }),
+              maximumWords,
+              preserve,
+            ),
             draft.actionVerb,
           );
           drafts[index] = syncClaimedKeywords({
             ...draft,
             finalBullet,
           });
+        }
+        validation = validateBulletComposition({
+          plans: input.plans,
+          keywordPackages: drafts.map((bullet) => {
+            const original = packagesByBullet.get(bullet.bulletId);
+            if (!original) {
+              throw new Error(`Missing keyword package for composed bullet ${bullet.bulletId}.`);
+            }
+            return {
+              ...original,
+              directKeywords: bullet.directKeywords,
+              supportingKeywords: bullet.supportingKeywords,
+              outcomeKeywords: bullet.outcomeKeywords,
+            };
+          }),
+          stories: input.stories,
+          bullets: drafts,
+          patternsByBullet,
+          sentenceQualityValidator: this.sentenceQualityValidator,
+        });
+      }
+    }
+
+    // Final length clamp for any residual over-limit bullets before throwing.
+    if (validation.overallStatus !== "approved") {
+      const lengthFailingIds = new Set(
+        validation.diagnostics
+          .filter((item) =>
+            item.errors.some((error) =>
+              /word limit|too long|scan-friendly|exceeds/i.test(error),
+            ),
+          )
+          .map((item) => item.bulletId),
+      );
+      if (lengthFailingIds.size > 0) {
+        for (let index = 0; index < drafts.length; index += 1) {
+          const draft = drafts[index]!;
+          if (!lengthFailingIds.has(draft.bulletId)) {
+            continue;
+          }
+          const preserve = [
+            ...draft.directKeywords,
+            ...draft.supportingKeywords,
+            ...draft.outcomeKeywords,
+          ];
+          drafts[index] = syncClaimedKeywords(
+            clampBulletLength({
+              ...draft,
+              finalBullet: ensureAllocatedOpeningVerb(
+                ensureMaximumBulletWords(
+                  draft.finalBullet,
+                  maximumWords,
+                  preserve,
+                ),
+                draft.actionVerb,
+              ),
+            }),
+          );
         }
         validation = validateBulletComposition({
           plans: input.plans,

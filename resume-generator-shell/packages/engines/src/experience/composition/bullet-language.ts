@@ -329,6 +329,92 @@ export function ensureMinimumBulletWords(
   );
 }
 
+function containsPhraseCaseInsensitive(text: string, phrase: string): boolean {
+  return text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase());
+}
+
+function shortenClauseToWordBudget(
+  clause: string,
+  maximumWords: number,
+  preserve: readonly string[] = [],
+): string {
+  const tokens = stripFirstPersonPronouns(clause).split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return tokens.join(" ");
+  }
+
+  let shortened = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhraseCaseInsensitive(shortened, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    if (phraseTokens.length === 0 || phraseTokens.length >= maximumWords) {
+      continue;
+    }
+    const keep = Math.max(4, maximumWords - phraseTokens.length - 1);
+    shortened = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  return shortened;
+}
+
+/**
+ * Compresses a bullet to the scan-friendly maximum while preferring to keep the
+ * trailing metric/result clause and any required keyword phrases.
+ */
+export function ensureMaximumBulletWords(
+  text: string,
+  maximumWords: number,
+  preserve: readonly string[] = [],
+): string {
+  const cleaned = stripFirstPersonPronouns(text.replace(/[.!?]+$/g, "").trim());
+  if (!cleaned) {
+    return "";
+  }
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return normalizeBulletSentence(cleaned);
+  }
+
+  // Keep the trailing metric/result clause intact when possible.
+  const segments = cleaned.split(/,\s+/);
+  if (segments.length >= 2) {
+    const tail = segments.slice(-2).join(", ");
+    const headBudget = Math.max(8, maximumWords - bulletWordCount(tail) - 1);
+    const head = shortenClauseToWordBudget(
+      segments.slice(0, -2).join(", ") || segments[0] || "",
+      headBudget,
+      preserve,
+    );
+    const rebuilt = normalizeBulletSentence(
+      [head, ...segments.slice(-2)].filter(Boolean).join(", "),
+    );
+    if (
+      bulletWordCount(rebuilt) <= maximumWords &&
+      preserve.every(
+        (phrase) => !phrase || containsPhraseCaseInsensitive(rebuilt, phrase),
+      )
+    ) {
+      return rebuilt;
+    }
+  }
+
+  let compressed = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhraseCaseInsensitive(compressed, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    const keep = Math.max(6, maximumWords - phraseTokens.length - 1);
+    compressed = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  return normalizeBulletSentence(compressed);
+}
+
 function escapeRegExpLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
