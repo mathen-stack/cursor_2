@@ -1,0 +1,8 @@
+nxd_data_product[spec]
+snowflake-connector-python[pandas]==3.14.0
+databricks-sql-connector[pyarrow]
+boto3
+azure-storage-file-datalake
+azure-identity
+requests
+pandas
