@@ -511,10 +511,7 @@ export class RealExperienceValidator implements ExperienceValidator {
         companyName: entry.companyName,
         startDate: entry.startDate,
         endDate: entry.endDate,
-        assignedRole:
-          entry.roleTitle?.trim() ||
-          assignment?.assignedRole ||
-          "Software Engineer",
+        assignedRole: assignment?.assignedRole ?? "Software Engineer",
         bullets,
       };
     });

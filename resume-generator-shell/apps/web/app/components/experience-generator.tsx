@@ -41,14 +41,12 @@ export default function ExperienceGenerator() {
   const [careerHistory, setCareerHistory] = useState<CareerEntry[]>([
     {
       experienceId: "EXP-001",
-      roleTitle: "Staff Software Engineer",
       companyName: "Example AI Company",
       startDate: "2022-01",
       endDate: "Present",
     },
     {
       experienceId: "EXP-002",
-      roleTitle: "Software Engineer",
       companyName: "Example Software Company",
       startDate: "2018-03",
       endDate: "2021-12",
@@ -65,7 +63,6 @@ export default function ExperienceGenerator() {
       careerHistory.length > 0 &&
       careerHistory.every(
         (entry) =>
-          entry.roleTitle?.trim() &&
           entry.companyName.trim() &&
           entry.startDate.trim() &&
           entry.endDate.trim(),
@@ -79,16 +76,9 @@ export default function ExperienceGenerator() {
     value: string,
   ) {
     setCareerHistory((current) =>
-      current.map((entry, entryIndex) => {
-        if (entryIndex !== index) return entry;
-        if (field === "roleTitle") {
-          const updated = { ...entry };
-          if (value.trim()) updated.roleTitle = value;
-          else delete updated.roleTitle;
-          return updated;
-        }
-        return { ...entry, [field]: value };
-      }),
+      current.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, [field]: value } : entry,
+      ),
     );
   }
 
@@ -176,7 +166,7 @@ export default function ExperienceGenerator() {
                   key={entry.experienceId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1.4fr 1.6fr 1fr 1fr auto",
+                    gridTemplateColumns: "2fr 1fr 1fr auto",
                     gap: 8,
                     alignItems: "end",
                   }}
@@ -188,17 +178,6 @@ export default function ExperienceGenerator() {
                       value={entry.companyName}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateCareerEntry(index, "companyName", event.target.value)
-                      }
-                    />
-                  </label>
-                  <label>
-                    <small>Role</small>
-                    <input
-                      style={inputStyle}
-                      placeholder="Senior Software Engineer"
-                      value={entry.roleTitle ?? ""}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareerEntry(index, "roleTitle", event.target.value)
                       }
                     />
                   </label>

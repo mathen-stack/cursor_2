@@ -66,14 +66,12 @@ export default function ResumeGenerator() {
     careerHistory: [
       {
         experienceId: "EXP-001",
-        roleTitle: "Staff Software Engineer",
         companyName: "Example AI Company",
         startDate: "2022-01",
         endDate: "Present",
       },
       {
         experienceId: "EXP-002",
-        roleTitle: "Software Engineer",
         companyName: "Example Software Company",
         startDate: "2018-03",
         endDate: "2021-12",
@@ -106,7 +104,6 @@ export default function ResumeGenerator() {
       profile.careerHistory.length > 0 &&
       profile.careerHistory.every(
         (entry) =>
-          entry.roleTitle?.trim() &&
           entry.companyName.trim() &&
           entry.startDate.trim() &&
           entry.endDate.trim(),
@@ -142,16 +139,9 @@ export default function ResumeGenerator() {
   function updateCareer(index: number, field: keyof CareerEntry, value: string) {
     setProfile((current) => ({
       ...current,
-      careerHistory: current.careerHistory.map((entry, entryIndex) => {
-        if (entryIndex !== index) return entry;
-        if (field === "roleTitle") {
-          const updated = { ...entry };
-          if (value.trim()) updated.roleTitle = value;
-          else delete updated.roleTitle;
-          return updated;
-        }
-        return { ...entry, [field]: value };
-      }),
+      careerHistory: current.careerHistory.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, [field]: value } : entry,
+      ),
     }));
   }
 
@@ -346,8 +336,8 @@ export default function ResumeGenerator() {
             <div>
               <h2>Career History</h2>
               <p className="hint">
-                Add your role and company for each position. Role titles appear on the
-                generated resume.
+                Add company and dates for each position. Role titles are assigned from
+                the JD during generation.
               </p>
             </div>
           </div>
@@ -375,19 +365,6 @@ export default function ResumeGenerator() {
                     value={entry.companyName}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCareer(index, "companyName", event.target.value)
-                    }
-                  />
-                </label>
-
-                <label className="profile-field">
-                  <span>Role</span>
-                  <input
-                    type="text"
-                    name={`roleTitle-${entry.experienceId}`}
-                    placeholder="Senior Software Engineer"
-                    value={entry.roleTitle ?? ""}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateCareer(index, "roleTitle", event.target.value)
                     }
                   />
                 </label>

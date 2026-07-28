@@ -11,7 +11,6 @@ export const PersonalInformationSchema = z.object({
 
 export const CareerEntrySchema = z.object({
   experienceId: z.string().min(1),
-  roleTitle: z.string().min(1).optional(),
   companyName: z.string().min(1),
   startDate: z.string().min(4),
   endDate: z.string().min(4),

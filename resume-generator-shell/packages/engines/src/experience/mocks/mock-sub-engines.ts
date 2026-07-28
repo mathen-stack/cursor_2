@@ -402,9 +402,7 @@ export const mockExperienceValidator: ExperienceValidator = {
       startDate: entry.startDate,
       endDate: entry.endDate,
       assignedRole:
-        entry.roleTitle?.trim() ||
-        roleByExperience.get(entry.experienceId) ||
-        "Software Engineer",
+        roleByExperience.get(entry.experienceId) ?? "Software Engineer",
       bullets: grouped.get(entry.experienceId) ?? [],
     }));
 
