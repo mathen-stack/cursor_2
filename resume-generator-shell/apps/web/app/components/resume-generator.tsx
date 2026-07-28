@@ -336,7 +336,7 @@ export default function ResumeGenerator() {
                   disabled={profile.careerHistory.length === 1}
                   onClick={() => removeCareer(index)}
                 >
-                  Remove Experience
+                  Remove
                 </button>
               </div>
               <div className="profile-grid">
@@ -405,7 +405,7 @@ export default function ResumeGenerator() {
                   className="secondary-action entry-remove"
                   onClick={() => removeEducation(index)}
                 >
-                  Remove Education
+                  Remove
                 </button>
               </div>
               <div className="profile-grid">
