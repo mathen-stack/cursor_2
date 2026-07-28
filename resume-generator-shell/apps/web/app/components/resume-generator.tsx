@@ -504,7 +504,7 @@ export default function ResumeGenerator() {
                         updateEducation(index, "startDate", event.target.value)
                       }
                     />
-                    <span className="period-separator">to</span>
+                    <span className="period-separator">-</span>
                     <input
                       type="text"
                       name={`educationEndDate-${entry.educationId}`}
