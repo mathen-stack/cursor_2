@@ -3,6 +3,7 @@ import { createGenerationContext, createJobDescription } from "@resume/core";
 import {
   actionScopeFingerprint,
   createProductionExperienceEngine,
+  ensureMinimumBulletWords,
   ensureUniqueActionScopeBullet,
   extractActionObjectScope,
   isBrokenBulletWording,
@@ -22,6 +23,42 @@ describe("repetition hardening", () => {
         "Successfully delivered various platform upgrades very effectively, reducing incidents by 24%.",
       ),
     ).not.toMatch(/\b(?:successfully|various|very|effectively|really|numerous)\b/i);
+  });
+
+  it("pads bullets that become too short after covering-clause repair", () => {
+    const repaired = repairBrokenBulletWording(
+      "Mentored engineers covering capability building, increasing supported workload scale by 22%.",
+    );
+    expect(repaired.split(/\s+/).length).toBeLessThan(16);
+    const padded = ensureMinimumBulletWords(repaired, 16, "EXP-003-B-001");
+    expect(padded.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(padded).not.toMatch(/\b(?:successfully|effectively|various|covering)\b/i);
+    expect(isBrokenBulletWording(padded)).toBe(false);
+  });
+
+  it("uniqueify preserves minimum length while rewriting cloned scopes", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Stabilized security mindset through least-privilege access, maintaining 99.94% availability.",
+      actionVerb: "Stabilized",
+      bulletId: "EXP-001-B-006",
+      usedScopeKeys: used,
+      minimumWords: 16,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Governed security mindset through penetration testing, increasing control coverage by 94%.",
+      actionVerb: "Governed",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+    });
+    expect(first.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(second.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(
+      actionScopeFingerprint(extractActionObjectScope(first, "Stabilized")),
+    ).not.toBe(actionScopeFingerprint(extractActionObjectScope(second, "Governed")));
   });
 
   it("rewrites cloned multi-word action scopes to unique fingerprints", () => {

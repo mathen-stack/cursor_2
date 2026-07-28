@@ -10,6 +10,7 @@ import {
   directKeywordRepresented,
   ensureCompositionCommunicationSignal,
   ensureUniqueActionScopeBullet,
+  ensureMinimumBulletWords,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   metricAsGerund,
@@ -381,6 +382,7 @@ export class RealBulletComposer implements BulletComposer {
 
     // Document-wide: rewrite colliding multi-word action scopes before validation.
     const usedActionScopeKeys = new Set<string>();
+    const minimumWords = this.sentenceQualityValidator.minimumWords;
     for (let index = 0; index < drafts.length; index += 1) {
       const draft = drafts[index]!;
       drafts[index] = {
@@ -390,6 +392,7 @@ export class RealBulletComposer implements BulletComposer {
           actionVerb: draft.actionVerb,
           bulletId: draft.bulletId,
           usedScopeKeys: usedActionScopeKeys,
+          minimumWords,
         }),
       };
     }
@@ -414,13 +417,13 @@ export class RealBulletComposer implements BulletComposer {
       sentenceQualityValidator: this.sentenceQualityValidator,
     });
 
-    // One repair pass for bullets that still fail on wording diagnostics.
+    // Repair wording/length failures, then re-assert document-wide scope uniqueness.
     if (validation.overallStatus !== "approved") {
       const failingIds = new Set(
         validation.diagnostics
           .filter((item) =>
             item.errors.some((error) =>
-              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment/i.test(
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short/i.test(
                 error,
               ),
             ),
@@ -431,14 +434,21 @@ export class RealBulletComposer implements BulletComposer {
         const repairedScopeKeys = new Set<string>();
         for (let index = 0; index < drafts.length; index += 1) {
           const draft = drafts[index]!;
-          let finalBullet = failingIds.has(draft.bulletId)
-            ? repairBrokenBulletWording(draft.finalBullet)
-            : draft.finalBullet;
+          let finalBullet = draft.finalBullet;
+          if (failingIds.has(draft.bulletId)) {
+            finalBullet = repairBrokenBulletWording(finalBullet);
+            finalBullet = ensureMinimumBulletWords(
+              finalBullet,
+              minimumWords,
+              draft.bulletId,
+            );
+          }
           finalBullet = ensureUniqueActionScopeBullet({
             finalBullet,
             actionVerb: draft.actionVerb,
             bulletId: draft.bulletId,
             usedScopeKeys: repairedScopeKeys,
+            minimumWords,
           });
           drafts[index] = {
             ...draft,

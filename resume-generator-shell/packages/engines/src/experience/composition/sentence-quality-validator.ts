@@ -139,9 +139,7 @@ export class SentenceQualityValidator {
     if (!quantifiedImpactPresent) errors.push("Bullet has no quantified impact.");
     if (!activeVoice) errors.push("Bullet is not consistently written in active voice.");
     if (!firstPersonFree) errors.push("Bullet contains a first-person pronoun.");
-    if (!weakLanguageFree) {
-      warnings.push("Bullet still shows residual weak or filler language after scrubbing.");
-    }
+    if (!weakLanguageFree) errors.push("Bullet contains weak or filler language.");
     if (!punctuationValid) errors.push("Bullet must be one clean sentence with one terminal period.");
     if (!communicationSignalPresent) errors.push("Communication-focused bullet lost its stakeholder or collaboration signal.");
     if (!leadershipSignalPresent) errors.push("Leadership-focused bullet lost its technical direction signal.");
