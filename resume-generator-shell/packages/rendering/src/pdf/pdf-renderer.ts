@@ -296,7 +296,8 @@ function renderDocument(data: FinalResumeData): {
     if (section.id === "education") {
       for (const education of section.content) {
         const degree = `${education.degree} in ${education.field}`;
-        const text = [degree, education.institution, education.graduationDate]
+        const period = `${education.startDate} – ${education.endDate}`;
+        const text = [degree, education.institution, period]
           .filter((value): value is string => Boolean(value?.trim()))
           .join(" | ");
         addText(context, text, { after: template.spacing.paragraphGapPt });
@@ -304,7 +305,8 @@ function renderDocument(data: FinalResumeData): {
           education.degree,
           education.field,
           education.institution,
-          ...(education.graduationDate ? [education.graduationDate] : []),
+          education.startDate,
+          education.endDate,
         );
       }
     }

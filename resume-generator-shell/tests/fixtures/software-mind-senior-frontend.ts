@@ -108,7 +108,8 @@ export function softwareMindCareerProfile(profileId: string): UserProfile {
         institution: "State University",
         degree: "Bachelor of Science",
         field: "Computer Science",
-        graduationDate: "2015",
+        startDate: "2011-09",
+        endDate: "2015-06",
       },
     ],
   };

@@ -49,8 +49,8 @@ export class AtsHtmlRenderer implements ResumeFormatRenderer {
       }
       if (section.id === "education") {
         for (const education of section.content) {
-          const date = education.graduationDate ? ` | ${escapeHtml(education.graduationDate)}` : "";
-          content.push(`<p><strong>${escapeHtml(education.degree)} in ${escapeHtml(education.field)}</strong> | ${escapeHtml(education.institution)}${date}</p>`);
+          const period = `${education.startDate} – ${education.endDate}`;
+          content.push(`<p><strong>${escapeHtml(education.degree)} in ${escapeHtml(education.field)}</strong> | ${escapeHtml(education.institution)} | ${escapeHtml(period)}</p>`);
         }
       }
       sections.push(`<section><h2>${escapeHtml(heading)}</h2>${content.join("")}</section>`);

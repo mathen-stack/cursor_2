@@ -31,7 +31,19 @@ function newEducationEntry(index: number): UserProfile["education"][number] {
     institution: "",
     degree: "",
     field: "",
+    startDate: "",
+    endDate: "",
   };
+}
+
+function formatEducationPeriod(entry: {
+  startDate?: string;
+  endDate?: string;
+}): string {
+  const start = entry.startDate?.trim() ?? "";
+  const end = entry.endDate?.trim() ?? "";
+  if (start && end) return `${start} – ${end}`;
+  return start || end;
 }
 
 function atsScoreClass(score: number): string {
@@ -73,7 +85,8 @@ export default function ResumeGenerator() {
         institution: "Example University",
         degree: "Bachelor of Science",
         field: "Computer Science",
-        graduationDate: "2018",
+        startDate: "2014-09",
+        endDate: "2018-06",
       },
     ],
   });
@@ -101,7 +114,11 @@ export default function ResumeGenerator() {
       profile.education.length > 0 &&
       profile.education.every(
         (entry) =>
-          entry.institution.trim() && entry.degree.trim() && entry.field.trim(),
+          entry.institution.trim() &&
+          entry.degree.trim() &&
+          entry.field.trim() &&
+          entry.startDate.trim() &&
+          entry.endDate.trim(),
       )
     );
   }, [jobDescriptionText, profile]);
@@ -167,17 +184,9 @@ export default function ResumeGenerator() {
   ) {
     setProfile((current) => ({
       ...current,
-      education: current.education.map((entry, entryIndex) => {
-        if (entryIndex !== index) return entry;
-        const updated = { ...entry };
-        if (field === "graduationDate") {
-          if (value) updated.graduationDate = value;
-          else delete updated.graduationDate;
-        } else {
-          updated[field] = value;
-        }
-        return updated;
-      }),
+      education: current.education.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, [field]: value } : entry,
+      ),
     }));
   }
 
@@ -423,7 +432,9 @@ export default function ResumeGenerator() {
           <div className="section-head">
             <div>
               <h2>Education</h2>
-              <p className="hint">Required. Add at least one school, degree, and field of study.</p>
+              <p className="hint">
+                Required. Add school, degree, field, and the study period.
+              </p>
             </div>
           </div>
 
@@ -480,18 +491,32 @@ export default function ResumeGenerator() {
                   />
                 </label>
 
-                <label className="profile-field">
-                  <span>Graduation</span>
-                  <input
-                    type="text"
-                    name={`graduationDate-${entry.educationId}`}
-                    placeholder="2018"
-                    value={entry.graduationDate ?? ""}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateEducation(index, "graduationDate", event.target.value)
-                    }
-                  />
-                </label>
+                <div className="profile-field">
+                  <span>Period</span>
+                  <div className="period-inputs">
+                    <input
+                      type="text"
+                      name={`educationStartDate-${entry.educationId}`}
+                      aria-label="Education start date"
+                      placeholder="2014-09"
+                      value={entry.startDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateEducation(index, "startDate", event.target.value)
+                      }
+                    />
+                    <span className="period-separator">to</span>
+                    <input
+                      type="text"
+                      name={`educationEndDate-${entry.educationId}`}
+                      aria-label="Education end date"
+                      placeholder="2018-06"
+                      value={entry.endDate}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateEducation(index, "endDate", event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           ))}
@@ -899,7 +924,9 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
                           {entry.degree} in {entry.field}
                         </strong>
                         , {entry.institution}
-                        {entry.graduationDate ? ` | ${entry.graduationDate}` : ""}
+                        {formatEducationPeriod(entry)
+                          ? ` | ${formatEducationPeriod(entry)}`
+                          : ""}
                       </div>
                     ))
                   : null}

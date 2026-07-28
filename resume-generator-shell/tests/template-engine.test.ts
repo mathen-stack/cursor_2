@@ -39,7 +39,8 @@ function profile(
       institution: `University ${index + 1}`,
       degree: "Bachelor of Science",
       field: "Computer Science",
-      graduationDate: `${2018 - index}`,
+      startDate: `${2014 - index}-09`,
+      endDate: `${2018 - index}-06`,
     })),
   };
 }

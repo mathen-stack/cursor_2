@@ -127,14 +127,16 @@ function appendEducation(
   appendLine(lines, section.id, "section-heading", section.heading, [section.heading]);
   for (const education of section.content) {
     const degree = `${education.degree} in ${education.field}`;
-    const text = [degree, education.institution, education.graduationDate]
+    const period = `${education.startDate} – ${education.endDate}`;
+    const text = [degree, education.institution, period]
       .filter((value): value is string => Boolean(cleanToken(value)))
       .join(" | ");
     const tokens = [
       education.degree,
       education.field,
       education.institution,
-      education.graduationDate,
+      education.startDate,
+      education.endDate,
     ].map(cleanToken).filter((value): value is string => Boolean(value));
     appendLine(lines, section.id, "education", text, tokens);
   }

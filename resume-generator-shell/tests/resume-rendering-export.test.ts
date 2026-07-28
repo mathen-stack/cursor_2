@@ -48,7 +48,8 @@ function profile(profileId: string): UserProfile {
         institution: "Example University",
         degree: "Bachelor of Science",
         field: "Computer Science",
-        graduationDate: "2018",
+        startDate: "2014-09",
+        endDate: "2018-06",
       },
     ],
   };

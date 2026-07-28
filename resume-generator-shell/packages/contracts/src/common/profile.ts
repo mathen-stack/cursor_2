@@ -22,7 +22,8 @@ export const EducationEntrySchema = z.object({
   institution: z.string().min(1),
   degree: z.string().min(1),
   field: z.string().min(1),
-  graduationDate: z.string().min(4).optional(),
+  startDate: z.string().min(4),
+  endDate: z.string().min(4),
 });
 
 export const UserProfileSchema = z.object({

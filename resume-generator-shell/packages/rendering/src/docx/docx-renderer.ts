@@ -183,7 +183,8 @@ function documentXml(data: FinalResumeData): { xml: string; emittedTokens: strin
     if (section.id === "education") {
       for (const education of section.content) {
         const degree = `${education.degree} in ${education.field}`;
-        const suffix = [education.institution, education.graduationDate]
+        const period = `${education.startDate} – ${education.endDate}`;
+        const suffix = [education.institution, period]
           .filter((value): value is string => Boolean(value?.trim()))
           .join(" | ");
         body.push(
@@ -200,7 +201,8 @@ function documentXml(data: FinalResumeData): { xml: string; emittedTokens: strin
           education.degree,
           education.field,
           education.institution,
-          ...(education.graduationDate ? [education.graduationDate] : []),
+          education.startDate,
+          education.endDate,
         );
       }
     }
