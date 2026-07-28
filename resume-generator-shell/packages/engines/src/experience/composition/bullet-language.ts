@@ -1,0 +1,2078 @@
+import type { BulletPlanItem } from "../types/bullet-plan";
+import type { KeywordPackage } from "../types/keyword-package";
+import type { StarMetric, StarStory } from "../types/star-story";
+import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
+import { cleanScope } from "../star/star-language";
+import { joinNatural, lowerFirst } from "../star/star-utils";
+import { VAGUE_BUZZWORDS } from "../validation/experience-validation-language";
+
+/** Document-wide action-scope key — must match real-experience-validator normalizeText. */
+export function actionScopeFingerprint(scope: string): string {
+  return canonicalKeywordKey(scope)
+    .replace(/\b\d+(?:\.\d+)?\b/g, "#")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Replace Resume Worded vague buzzphrases with concrete wording so bullets can
+ * pass ats-language checks without weakening the validator.
+ */
+export function scrubVagueBuzzwords(value: string): string {
+  return value
+    .replace(/\bproven track record\b/gi, "demonstrated delivery outcomes")
+    .replace(/\bresults[- ]driven\b/gi, "outcome-focused")
+    .replace(/\bdetail[- ]oriented\b/gi, "precision-focused")
+    .replace(/\bself[- ]starter\b/gi, "independent contributor")
+    .replace(/\bgo[- ]getter\b/gi, "accountable owner")
+    .replace(/\bhard[- ]working\b/gi, "reliable")
+    .replace(/\bteam player\b/gi, "cross-functional collaborator")
+    .replace(/\binnovative thinker\b/gi, "practical problem solving")
+    .replace(/\bstrategic thinker\b/gi, "strategic planning")
+    .replace(/\bdynamic problem solver\b/gi, "scalable solution design")
+    .replace(
+      /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
+      "stakeholder communication",
+    )
+    .replace(
+      /\b(?:verbal and written\s+)?communication skills\b/gi,
+      "stakeholder communication",
+    )
+    .replace(
+      /\b(?:soft skills|interpersonal skills|people skills)\b/gi,
+      "cross-functional collaboration",
+    )
+    .replace(/\b(?:passionate|motivated|seasoned|synergistic|proactive)\b/gi, " ")
+    .replace(/\bdynamic\b/gi, "scalable")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .trim();
+}
+
+export function containsVagueBuzzwords(value: string): boolean {
+  return VAGUE_BUZZWORDS.test(value);
+}
+
+const STAR_OWNERSHIP_BOILERPLATE =
+  /\b(?:effort to|responsibility to|owned the|took responsibility|delivery planning required|collaboration and delivery planning|collaborative delivery planning|cross-functional collaboration and delivery planning|cross-team product partnership|stakeholder communication loops|requirements discovery with partners|technical direction and cross-team execution)\b/i;
+
+/** Job-post marketing / meta copy that must never become a bullet action object. */
+export const JD_MARKETING_PROSE =
+  /\b(?:this is a|this (?:role|position|opportunity|part[- ]time)|freelance(?:\s+role)?|part[- ]time(?:\s+remote)?(?:\s+opportunity)?|opportunity opportunity|is ideal for|looking for|we(?:'re| are)\s+(?:looking|hiring|seeking)|you(?:'d|’d|'ll|’ll| will| are| have|ve)\b|you(?:'d|’d)\s+rather|bonus points?(?:\s+if)?|nice[- ]to[- ]have|a plus if|report(?:s|ing)? straight to|report(?:s|ing)? to the|what (?:we|you)(?:'re| are) looking for|about you|our (?:culture|mission|values)|competitive salary|benefits package|join our team|about the (?:role|company|job))\b/i;
+
+/** Emoji / dingbat markers common in informal JD preference lists. */
+const JD_META_MARKERS =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]|✅|✓|✔|☐|☑|■|□|●|○|★|☆/u;
+
+/** Finite-verb clauses that read as full JD sentences, not noun scopes. */
+const SCOPE_FINITE_VERB =
+  /\b(?:connects|enables|helps|allows|provides|offers|supports|delivers|brings|makes|keeps|lets|ensures)\b/i;
+
+export function containsJdMetaMarker(value: string): boolean {
+  return JD_META_MARKERS.test(value);
+}
+
+export function isJdMarketingOrMetaScope(value: string): boolean {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) return false;
+  if (containsJdMetaMarker(cleaned)) return true;
+  if (JD_MARKETING_PROSE.test(cleaned)) return true;
+  if (containsVagueBuzzwords(cleaned)) return true;
+  if (SCOPE_FINITE_VERB.test(cleaned) && cleaned.split(/\s+/).length >= 5) {
+    return true;
+  }
+  // Truncated hiring copy often ends mid-phrase on "for technical/product/..."
+  if (/\b(?:ideal for|role for a|opportunity for)\b/i.test(cleaned)) {
+    return true;
+  }
+  // Second-person hiring fragments that survive partial extraction.
+  if (
+    /\b(?:you'?d|you’ll|you'll|you will|you are|you have|you’ve|you've)\b/i.test(
+      cleaned,
+    )
+  ) {
+    return true;
+  }
+  if (/\bbonus points?\b/i.test(cleaned) || /\brather have\b/i.test(cleaned)) {
+    return true;
+  }
+  // Years-of-experience hiring lines must never become the action object.
+  if (
+    /\b\d+\+?\s*(?:-\s*\d+\+?\s*)?years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(
+      cleaned,
+    ) ||
+    /^years? of experience\b/i.test(cleaned)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Strip emoji / hiring meta crumbs left in composed bullet text. */
+export function scrubJdMetaFromVisibleText(value: string): string {
+  return value
+    .replace(JD_META_MARKERS, " ")
+    // Prefer short, local removals so metrics and concrete work survive.
+    .replace(/\bbonus points?(?:\s+if(?:\s+you(?:'ve|’ve| have)?)?)?\b/gi, " ")
+    .replace(/\byou(?:'d|’d)\s+rather(?:\s+have)?(?:\s+\w+){0,4}\b/gi, " ")
+    .replace(
+      /\b(?:you(?:'d|’d|'ll|’ll| will)\s+)?report(?:s|ing)?(?:\s+straight)?\s+to(?:\s+the)?(?:\s+\w+){0,4}\b/gi,
+      " ",
+    )
+    .replace(/\bcovering\s+(?=,|\s*$)/gi, " ")
+    .replace(/\byou(?:'d|’d|'ll|’ll| will| are| have|ve|’ve)\b(?:\s+\w+){0,6}/gi, " ")
+    // JD tenure lines ("10+ years of experience") are requirements, not work scope.
+    .replace(
+      /\b\d+\+?\s*(?:-\s*\d+\+?\s*)?years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/gi,
+      "delivery outcomes",
+    )
+    .replace(/\byears? of experience\b/gi, "delivery outcomes")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .replace(/\s+(?=[,.])/g, "")
+    .trim();
+}
+
+const COMMUNICATION_SCOPE_VARIANTS = [
+  "cross-functional collaboration with product and engineering stakeholders",
+  "product and engineering partnership on delivery priorities",
+  "stakeholder communication across product and platform teams",
+  "requirements alignment with product and business partners",
+  "cross-team execution planning with product stakeholders",
+  "architecture workshops with product and engineering stakeholders",
+] as const;
+
+/**
+ * Evidence that a communication-focused bullet still carries stakeholder or
+ * collaboration wording after composition/compression.
+ */
+export const COMPOSITION_COMMUNICATION_SIGNAL =
+  /stakeholder|cross-functional|cross-team|product|business|alignment|requirements|team|collaborat|communicat|partner|facilitat|coordinat|\balign(?:ed|ing|s)?\b/i;
+
+const COMMUNICATION_SIGNAL_PHRASE =
+  "with product and engineering stakeholders";
+
+export function hasCompositionCommunicationSignal(text: string): boolean {
+  return COMPOSITION_COMMUNICATION_SIGNAL.test(text);
+}
+
+/**
+ * Re-injects a compact collaboration phrase when shortening, Align/coordination
+ * echo rewrites, or scope uniqueness would otherwise leave a communication
+ * bullet without stakeholder/collaboration evidence.
+ */
+export function ensureCompositionCommunicationSignal(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed || hasCompositionCommunicationSignal(trimmed)) {
+    return trimmed;
+  }
+  const endsWithPeriod = /[.!?]$/.test(trimmed);
+  const body = trimmed.replace(/[.!?]+$/g, "").trim();
+  let repaired = body;
+  if (/\b(?:using|through)\b/i.test(body)) {
+    repaired = body.replace(
+      /\b(using|through)\b/i,
+      `${COMMUNICATION_SIGNAL_PHRASE} $1`,
+    );
+  } else if (/,/.test(body)) {
+    repaired = body.replace(",", ` ${COMMUNICATION_SIGNAL_PHRASE},`);
+  } else {
+    repaired = `${body} ${COMMUNICATION_SIGNAL_PHRASE}`;
+  }
+  repaired = repaired.replace(/\s+/g, " ").trim();
+  return endsWithPeriod ? `${repaired}.` : repaired;
+}
+
+/** Residual wording that must not ship after normalization. */
+export function isBrokenBulletWording(text: string): boolean {
+  const value = text.replace(/\s+/g, " ").trim();
+  if (!value) return true;
+  if (/[–—]/.test(value)) return true;
+  if (
+    /\b(?:using go through|go through|can to|so new markets?|experience with|and'?re in the middle|in the middle of a major)\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:Implemented|Secured|Stabilized|Accelerated|Orchestrated)\s+(?:standardize|harden|orchestrate|accelerate|implement|secure|build)\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  // Alias twins / tautologies / intra-bullet content-noun echoes.
+  if (
+    /\bREST(?:ful)?\s+APIs?\s+and\s+REST(?:ful)?\s+APIs?\b/i.test(value) ||
+    /\b(?:Directed|Directs|Directing)\s+technical\s+direction\b/i.test(value) ||
+    /\bcross-functional\b[\s\S]*\bcross-functional\b/i.test(value) ||
+    /\bdistributed\b[\s\S]*\bdistributed\b/i.test(value) ||
+    /\bsecurity\b[\s\S]*\bsecurity\b/i.test(value) ||
+    /\bcost\b[\s\S]*\bcost\b/i.test(value) ||
+    /\b\d+\+?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(value) ||
+    /\byears? of experience\b/i.test(value)
+  ) {
+    return true;
+  }
+  // Import locally-shaped checks via repeated-phrase detection in strip path.
+  return hasRepeatedFourWordPhrase(value);
+}
+
+function hasRepeatedFourWordPhrase(value: string): boolean {
+  const words = value
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9+.#/\s-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
+    const seen = new Map<string, number>();
+    for (let start = 0; start + length <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ");
+      const previous = seen.get(phrase);
+      if (previous !== undefined && start >= previous + length) {
+        return true;
+      }
+      if (previous === undefined) {
+        seen.set(phrase, start);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Aggressive repair for residual repetition / JD-fragment damage. Prefer this
+ * over failing generation so the UI receives a clean bullet.
+ */
+export function repairBrokenBulletWording(text: string): string {
+  let repaired = normalizeBulletSentence(text);
+  // Drop covering clauses entirely when they still collide with earlier scope.
+  repaired = repaired.replace(/\bcovering\s+[^,]+(?=,|\s+(?:to|using|through)\b|$)/gi, "");
+  // Collapse duplicated collaboration anchors.
+  repaired = repaired.replace(
+    /\b(with product and engineering stakeholders)\b(?:[^,]*?\b\1\b)+/gi,
+    "$1",
+  );
+  repaired = repaired.replace(
+    /\b(product and engineering stakeholders)\b(?:[^,]*?\b\1\b)+/gi,
+    "$1",
+  );
+  repaired = repaired.replace(/\band increased\b/gi, "and increasing");
+  repaired = repaired.replace(/\band reduced\b/gi, "and reducing");
+  repaired = repaired.replace(/\s+/g, " ").replace(/\s+,/g, ",").trim();
+  repaired = normalizeBulletSentence(repaired);
+  // Second pass of phrase dedupe after covering removal.
+  if (isBrokenBulletWording(repaired)) {
+    const words = repaired.replace(/[.!?]+$/g, "").split(/\s+/).filter(Boolean);
+    const deduped = dedupeRepeatedPhrases(words.join(" "));
+    repaired = normalizeBulletSentence(deduped);
+  }
+  return repaired;
+}
+
+function bulletWordCount(text: string): number {
+  return text
+    .replace(/[.!?]+$/g, "")
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+const LENGTH_PAD_CLAUSES = [
+  "improving delivery predictability for engineering partners",
+  "reducing operational risk across production workloads",
+  "strengthening release confidence for customer workloads",
+  "raising service reliability during peak demand",
+  "improving integration reliability across platform services",
+  "reducing coordination overhead for platform delivery",
+  "strengthening compliance readiness across critical services",
+  "improving engineering velocity for shared delivery goals",
+] as const;
+
+/**
+ * Pads a scrubbed/uniqueified bullet back up to the sentence-quality minimum
+ * without reintroducing filler or JD-fragment wording.
+ */
+export function ensureMinimumBulletWords(
+  text: string,
+  minimumWords: number,
+  seed = "",
+): string {
+  let current = normalizeBulletSentence(text);
+  if (!current || bulletWordCount(current) >= minimumWords) {
+    return current;
+  }
+
+  const seedIndex = hashSeed(seed || current);
+  for (let offset = 0; offset < LENGTH_PAD_CLAUSES.length; offset += 1) {
+    const pad = LENGTH_PAD_CLAUSES[(seedIndex + offset) % LENGTH_PAD_CLAUSES.length]!;
+    const base = current.replace(/[.!?]+$/g, "").trim();
+    const candidate = /,\s*(?:increasing|reducing|maintaining|improving|delivering|accelerating|shortening|while|that improved|enabling)\b/i.test(
+      base,
+    )
+      ? normalizeBulletSentence(`${base} and ${pad}`)
+      : normalizeBulletSentence(`${base}, ${pad}`);
+    if (
+      bulletWordCount(candidate) >= minimumWords &&
+      !isBrokenBulletWording(candidate)
+    ) {
+      return candidate;
+    }
+    current = candidate;
+  }
+
+  // Deterministic last resort — still avoids filler words and internal IDs.
+  return normalizeBulletSentence(
+    `${current.replace(/[.!?]+$/g, "")} and improving delivery predictability for engineering partners`,
+  );
+}
+
+function containsPhraseCaseInsensitive(text: string, phrase: string): boolean {
+  return text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase());
+}
+
+function shortenClauseToWordBudget(
+  clause: string,
+  maximumWords: number,
+  preserve: readonly string[] = [],
+): string {
+  const tokens = stripFirstPersonPronouns(clause).split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return tokens.join(" ");
+  }
+
+  let shortened = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhraseCaseInsensitive(shortened, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    if (phraseTokens.length === 0 || phraseTokens.length >= maximumWords) {
+      continue;
+    }
+    const keep = Math.max(4, maximumWords - phraseTokens.length - 1);
+    shortened = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  return shortened;
+}
+
+/**
+ * Compresses a bullet to the scan-friendly maximum while preferring to keep the
+ * trailing metric/result clause and any required keyword phrases.
+ */
+export function ensureMaximumBulletWords(
+  text: string,
+  maximumWords: number,
+  preserve: readonly string[] = [],
+): string {
+  const cleaned = stripFirstPersonPronouns(text.replace(/[.!?]+$/g, "").trim());
+  if (!cleaned) {
+    return "";
+  }
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (tokens.length <= maximumWords) {
+    return normalizeBulletSentence(cleaned);
+  }
+
+  // Keep the trailing metric/result clause intact when possible.
+  const segments = cleaned.split(/,\s+/);
+  if (segments.length >= 2) {
+    const tailSegments =
+      segments.length >= 3 ? segments.slice(-2) : segments.slice(-1);
+    const headSource = segments
+      .slice(0, segments.length - tailSegments.length)
+      .join(", ");
+    const tail = tailSegments.join(", ");
+    const headBudget = Math.max(8, maximumWords - bulletWordCount(tail) - 1);
+    const head = shortenClauseToWordBudget(headSource, headBudget, preserve);
+    const rebuilt = normalizeBulletSentence(
+      [head, ...tailSegments].filter(Boolean).join(", "),
+    );
+    if (
+      bulletWordCount(rebuilt) <= maximumWords &&
+      preserve.every(
+        (phrase) => !phrase || containsPhraseCaseInsensitive(rebuilt, phrase),
+      )
+    ) {
+      return rebuilt;
+    }
+  }
+
+  let compressed = tokens.slice(0, maximumWords).join(" ");
+  for (const phrase of preserve) {
+    if (!phrase || containsPhraseCaseInsensitive(compressed, phrase)) {
+      continue;
+    }
+    const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+    const keep = Math.max(6, maximumWords - phraseTokens.length - 1);
+    compressed = [...tokens.slice(0, keep), ...phraseTokens]
+      .slice(0, maximumWords)
+      .join(" ");
+  }
+  let result = normalizeBulletSentence(compressed);
+  // normalizeBulletSentence / metric-clause rebuilds can slip one token over;
+  // hard-cap so sentence-strength validation cannot fail closed on length.
+  if (bulletWordCount(result) > maximumWords) {
+    const capped = result
+      .replace(/[.!?]+$/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, maximumWords)
+      .join(" ");
+    result = normalizeBulletSentence(capped);
+  }
+  if (bulletWordCount(result) > maximumWords) {
+    result = normalizeBulletSentence(
+      result
+        .replace(/[.!?]+$/g, "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, maximumWords)
+        .join(" "),
+    );
+  }
+  return result;
+}
+
+/**
+ * Closed finalizer for one bullet: scrub → uniqueify/diversify → communication
+ * signal → length bounds → opening verb. Call this as the last mutation before
+ * validation so later restore/repair steps cannot reintroduce the same failures.
+ */
+export function finalizeComposedBullet(input: {
+  finalBullet: string;
+  actionVerb: string;
+  bulletId: string;
+  usedScopeKeys: Set<string>;
+  minimumWords: number;
+  maximumWords: number;
+  communicationFocused?: boolean;
+  preserveKeywords?: readonly string[];
+}): string {
+  const preserve = input.preserveKeywords ?? [];
+  let text = repairBrokenBulletWording(input.finalBullet);
+  text = ensureUniqueActionScopeBullet({
+    finalBullet: text,
+    actionVerb: input.actionVerb,
+    bulletId: input.bulletId,
+    usedScopeKeys: input.usedScopeKeys,
+    minimumWords: input.minimumWords,
+  });
+  if (input.communicationFocused) {
+    text = ensureCompositionCommunicationSignal(text);
+  }
+  text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+  if (bulletWordCount(text) < input.minimumWords) {
+    text = ensureMinimumBulletWords(text, input.minimumWords, input.bulletId);
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+  }
+  text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+  text = normalizeBulletSentence(text);
+  if (
+    isBrokenBulletWording(text) ||
+    bulletWordCount(text) > input.maximumWords ||
+    bulletWordCount(text) < input.minimumWords
+  ) {
+    text = repairBrokenBulletWording(text);
+    if (bulletWordCount(text) < input.minimumWords) {
+      text = ensureMinimumBulletWords(text, input.minimumWords, input.bulletId);
+    }
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+    text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+    text = normalizeBulletSentence(text);
+  }
+  if (bulletWordCount(text) > input.maximumWords) {
+    text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
+    text = ensureAllocatedOpeningVerb(text, input.actionVerb);
+  }
+  return text;
+}
+
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function openingVerbPrefix(actionVerb: string): string {
+  return `${actionVerb.replace(/\s+/g, " ").trim().toLocaleLowerCase()} `;
+}
+
+function startsWithAllocatedOpeningVerb(
+  text: string,
+  actionVerb: string,
+): boolean {
+  const verb = actionVerb.replace(/\s+/g, " ").trim();
+  if (!verb) {
+    return true;
+  }
+  return text.toLocaleLowerCase().startsWith(openingVerbPrefix(verb));
+}
+
+/**
+ * Forces the bullet to start with its allocated action verb + a concrete object.
+ * Uniqueify/repair/support-restore/normalize can otherwise leave a comma-led or
+ * verb-less opening that fails sentence-strength validation.
+ */
+export function ensureAllocatedOpeningVerb(
+  text: string,
+  actionVerb: string,
+): string {
+  const verb = actionVerb.replace(/\s+/g, " ").trim();
+  if (!verb) {
+    return normalizeBulletSentence(text);
+  }
+  let body = text.replace(/\s+/g, " ").trim().replace(/[.!?]+$/g, "");
+  if (!body) {
+    return normalizeBulletSentence(`${verb} production delivery outcomes`);
+  }
+
+  const verbPattern = new RegExp(`^${escapeRegExpLiteral(verb)}\\s*`, "i");
+  if (verbPattern.test(body)) {
+    body = body.replace(verbPattern, "").trim();
+  } else {
+    // Drop a different leading verb/token so we can reattach the allocated one.
+    body = body.replace(/^[A-Za-z][A-Za-z-]*\s*/, "").trim();
+  }
+
+  if (!body || /^[,;:]/.test(body)) {
+    body = `production delivery outcomes${body}`;
+  }
+
+  let result = normalizeBulletSentence(`${verb} ${body}`);
+  // normalizeBulletSentence may strip/rewrite the opening; re-assert once.
+  if (!startsWithAllocatedOpeningVerb(result, verb)) {
+    const remainder = result
+      .replace(/^[A-Za-z][A-Za-z-]*\s*/, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    const fallbackBody =
+      remainder && !/^[,;:]/.test(remainder)
+        ? remainder
+        : "production delivery outcomes";
+    result = normalizeBulletSentence(`${verb} ${fallbackBody}`);
+  }
+  if (!startsWithAllocatedOpeningVerb(result, verb)) {
+    const capitalized = `${verb.charAt(0).toUpperCase()}${verb.slice(1)}`;
+    const remainder = result
+      .replace(/^[A-Za-z][A-Za-z-]*\s*/, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    const fallbackBody =
+      remainder && !/^[,;:]/.test(remainder)
+        ? remainder
+        : "production delivery outcomes";
+    return `${capitalized} ${fallbackBody}.`;
+  }
+  return result;
+}
+
+/**
+ * Short uniqueness replacements — used when a long JD stem would otherwise be
+ * cloned with only an "across …" suffix. Prefer content-heavy phrases so
+ * validator keys stay distinct after normalizeText / stemming.
+ */
+export const UNIQUE_SCOPE_QUALIFIERS = [
+  "production systems",
+  "platform delivery lanes",
+  "release workflows",
+  "critical services",
+  "customer workloads",
+  "peak demand windows",
+  "platform services",
+  "operational readiness gates",
+] as const;
+
+/** Full replacement scopes when a 4+ word action-object stem collides. */
+export const UNIQUE_SCOPE_REPLACEMENTS = [
+  "production systems reliability",
+  "platform delivery outcomes",
+  "release workflow automation",
+  "critical service readiness",
+  "customer workload performance",
+  "peak demand capacity planning",
+  "service operations excellence",
+  "operational readiness gates",
+  "model serving throughput",
+  "inference delivery pathways",
+  "training pipeline stability",
+  "deployment rollout quality",
+  "observability incident response",
+  "runtime performance tuning",
+  "containerized service delivery",
+  "capacity planning workflows",
+] as const;
+
+function orderedScopeTokens(scope: string): string[] {
+  return scope
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9+.#/\s-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** High-collision 2-word stems that must stay unique across the resume. */
+const SIGNIFICANT_TWO_WORD_STEMS = new Set([
+  "distributed systems",
+  "distributed system",
+  "distributed services",
+  "distributed processing",
+  "rest apis",
+  "restful apis",
+  "security posture",
+  "cross functional",
+]);
+
+/** Ordered 4–8 word phrases used to detect cloned stems after qualifier appends. */
+export function actionScopePhraseKeys(
+  scope: string,
+  minimumWords = 4,
+): string[] {
+  const stem = scope.replace(/\s+across\s+[\s\S]+$/i, "").trim();
+  const keys = new Set<string>();
+  for (const sequence of [orderedScopeTokens(scope), orderedScopeTokens(stem)]) {
+    if (sequence.length >= 2) {
+      for (let start = 0; start + 2 <= sequence.length; start += 1) {
+        const phrase = sequence.slice(start, start + 2).join(" ");
+        if (SIGNIFICANT_TWO_WORD_STEMS.has(phrase)) {
+          keys.add(`ng:${phrase}`);
+        }
+      }
+    }
+    if (sequence.length < minimumWords) {
+      continue;
+    }
+    for (
+      let length = Math.min(8, sequence.length);
+      length >= minimumWords;
+      length -= 1
+    ) {
+      for (let start = 0; start + length <= sequence.length; start += 1) {
+        keys.add(`ng:${sequence.slice(start, start + length).join(" ")}`);
+      }
+    }
+  }
+  return [...keys];
+}
+
+/** Document-wide single-token locks for words that read as clones when reused. */
+const HIGH_COLLISION_CONTENT_ALTERNATES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  distributed: ["resilient", "scalable", "multi-node", "platform-scale"],
+};
+
+/**
+ * Keeps the first document occurrence of high-collision content tokens and
+ * rewrites later bullets so "distributed" is not highlighted across the page.
+ */
+export function diversifyHighCollisionContentTokens(
+  text: string,
+  usedScopeKeys: Set<string>,
+  seed = "",
+): string {
+  let result = text;
+  const seedIndex = hashSeed(seed || text);
+  for (const [token, alternates] of Object.entries(
+    HIGH_COLLISION_CONTENT_ALTERNATES,
+  )) {
+    const claimKey = `cw:${token}`;
+    const alreadyClaimed = usedScopeKeys.has(claimKey);
+    let keptFirstInBullet = false;
+    let altOffset = 0;
+    result = result.replace(new RegExp(`\\b${token}\\b`, "gi"), (match) => {
+      if (!alreadyClaimed && !keptFirstInBullet) {
+        keptFirstInBullet = true;
+        usedScopeKeys.add(claimKey);
+        return match;
+      }
+      const alternate =
+        alternates[(seedIndex + altOffset) % alternates.length]!;
+      altOffset += 1;
+      if (/^[A-Z]/.test(match)) {
+        return `${alternate.charAt(0).toUpperCase()}${alternate.slice(1)}`;
+      }
+      return alternate;
+    });
+  }
+  return result;
+}
+
+/** Through-clause method phrases that clone across roles when left unchanged. */
+const HIGH_COLLISION_METHOD_ALTERNATES: ReadonlyArray<{
+  phrase: string;
+  alternates: readonly string[];
+}> = [
+  {
+    phrase: "delivery planning",
+    alternates: [
+      "execution planning",
+      "release planning",
+      "roadmap planning",
+      "rollout planning",
+    ],
+  },
+  {
+    phrase: "architecture workshops",
+    alternates: [
+      "design workshops",
+      "technical design sessions",
+      "solution design reviews",
+      "architecture design forums",
+    ],
+  },
+  {
+    phrase: "design reviews",
+    alternates: [
+      "solution reviews",
+      "architecture reviews",
+      "technical reviews",
+      "design walkthroughs",
+    ],
+  },
+  {
+    phrase: "solution design",
+    alternates: [
+      "service design",
+      "system design",
+      "platform design",
+      "interface design",
+    ],
+  },
+  {
+    phrase: "technical documentation",
+    alternates: [
+      "implementation notes",
+      "runbook documentation",
+      "delivery documentation",
+      "engineering documentation",
+    ],
+  },
+  {
+    phrase: "automated testing",
+    alternates: [
+      "regression testing",
+      "integration testing",
+      "release verification",
+      "quality automation",
+    ],
+  },
+];
+
+/**
+ * Keeps the first document occurrence of high-collision method phrases
+ * (e.g. "delivery planning") and rewrites later bullets.
+ */
+export function diversifyHighCollisionMethodPhrases(
+  text: string,
+  usedScopeKeys: Set<string>,
+  seed = "",
+): string {
+  let result = text;
+  const seedIndex = hashSeed(seed || text);
+  for (const { phrase, alternates } of HIGH_COLLISION_METHOD_ALTERNATES) {
+    const claimKey = `mp:${phrase}`;
+    const alreadyClaimed = usedScopeKeys.has(claimKey);
+    let keptFirstInBullet = false;
+    let altOffset = 0;
+    const pattern = new RegExp(
+      `\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "gi",
+    );
+    result = result.replace(pattern, (match) => {
+      if (!alreadyClaimed && !keptFirstInBullet) {
+        keptFirstInBullet = true;
+        usedScopeKeys.add(claimKey);
+        return match;
+      }
+      const alternate =
+        alternates[(seedIndex + altOffset) % alternates.length]!;
+      altOffset += 1;
+      if (/^[A-Z]/.test(match)) {
+        return `${alternate.charAt(0).toUpperCase()}${alternate.slice(1)}`;
+      }
+      return alternate;
+    });
+  }
+  return result;
+}
+
+/** True when a diversified alternate already covers a high-collision method keyword. */
+export function highCollisionMethodRepresented(
+  text: string,
+  keyword: string,
+): boolean {
+  const lowerKeyword = keyword.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  const lowerText = text.toLocaleLowerCase();
+  for (const { phrase, alternates } of HIGH_COLLISION_METHOD_ALTERNATES) {
+    if (lowerKeyword !== phrase) {
+      continue;
+    }
+    if (new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(lowerText)) {
+      return true;
+    }
+    return alternates.some((alternate) =>
+      new RegExp(
+        `\\b${alternate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "i",
+      ).test(lowerText),
+    );
+  }
+  return false;
+}
+
+function claimActionScopeKeys(
+  scope: string,
+  usedScopeKeys: Set<string>,
+): void {
+  const fingerprint = actionScopeFingerprint(scope);
+  if (fingerprint) {
+    usedScopeKeys.add(fingerprint);
+  }
+  for (const phraseKey of actionScopePhraseKeys(scope)) {
+    usedScopeKeys.add(phraseKey);
+  }
+}
+
+function actionScopeCollides(
+  scope: string,
+  usedScopeKeys: ReadonlySet<string>,
+): boolean {
+  const fingerprint = actionScopeFingerprint(scope);
+  if (fingerprint && usedScopeKeys.has(fingerprint)) {
+    return true;
+  }
+  return actionScopePhraseKeys(scope).some((phraseKey) =>
+    usedScopeKeys.has(phraseKey),
+  );
+}
+
+/**
+ * Rewrites a bullet when its multi-word action object collides with a scope
+ * already used earlier in the generation. Keys use the same normalizeText
+ * fingerprint as action-scope-repetition validation, plus 4+ word phrase locks
+ * so "… across release workflows" cannot keep a cloned JD stem.
+ */
+export function ensureUniqueActionScopeBullet(input: {
+  finalBullet: string;
+  actionVerb: string;
+  bulletId: string;
+  usedScopeKeys: Set<string>;
+  minimumWords?: number;
+}): string {
+  const minimumWords = input.minimumWords ?? 16;
+  // Only run aggressive repair when wording is already broken — unconditional
+  // repair can strip covering clauses and drop bullets under the min length.
+  const scrubbed = isBrokenBulletWording(input.finalBullet)
+    ? repairBrokenBulletWording(input.finalBullet)
+    : normalizeBulletSentence(input.finalBullet);
+  const scoped = (() => {
+    const scope = extractActionObjectScope(scrubbed, input.actionVerb);
+    const tokenCount = scope.split(/\s+/).filter(Boolean).length;
+    // Lock 2+ word scopes document-wide (e.g. "security mindset", "technical strategy").
+    if (tokenCount < 2) {
+      return scrubbed;
+    }
+    if (!actionScopeCollides(scope, input.usedScopeKeys)) {
+      claimActionScopeKeys(scope, input.usedScopeKeys);
+      return scrubbed;
+    }
+
+    const verb = input.actionVerb;
+    const rest = scrubbed
+      .replace(/[.!?]+$/g, "")
+      .replace(new RegExp(`^${verb}\\s+`, "i"), "")
+      .trim();
+    const tailMatch = rest.match(/\s+(?:using|through|,)\s+[\s\S]*$/i);
+    const tail = tailMatch?.[0] ?? "";
+    const seed = hashSeed(input.bulletId);
+
+    // Replace the colliding stem entirely — appending "across …" still leaves
+    // the same 4+ word JD phrase visible across bullets.
+    for (let offset = 0; offset < UNIQUE_SCOPE_REPLACEMENTS.length; offset += 1) {
+      const replacement =
+        UNIQUE_SCOPE_REPLACEMENTS[
+          (seed + offset) % UNIQUE_SCOPE_REPLACEMENTS.length
+        ]!;
+      if (actionScopeCollides(replacement, input.usedScopeKeys)) {
+        continue;
+      }
+      claimActionScopeKeys(replacement, input.usedScopeKeys);
+      return repairBrokenBulletWording(`${verb} ${replacement}${tail}`);
+    }
+
+    for (let offset = 0; offset < UNIQUE_SCOPE_QUALIFIERS.length; offset += 1) {
+      const qualifier =
+        UNIQUE_SCOPE_QUALIFIERS[(seed + offset) % UNIQUE_SCOPE_QUALIFIERS.length]!;
+      const candidateScope = `${qualifier} delivery outcomes`
+        .replace(/\s+/g, " ")
+        .trim();
+      if (actionScopeCollides(candidateScope, input.usedScopeKeys)) {
+        continue;
+      }
+      claimActionScopeKeys(candidateScope, input.usedScopeKeys);
+      return repairBrokenBulletWording(`${verb} ${candidateScope}${tail}`);
+    }
+
+    // Last resort: mutate with a distinct content noun drawn from the bullet id hash.
+    // Never leak internal bullet identifiers into visible resume text.
+    const laneNouns = [
+      "automation",
+      "observability",
+      "throughput",
+      "resilience",
+      "governance",
+      "provisioning",
+      "orchestration",
+      "compliance",
+    ] as const;
+    for (let offset = 0; offset < laneNouns.length; offset += 1) {
+      const lane = laneNouns[(seed + offset) % laneNouns.length]!;
+      const lastResort = `production ${lane} outcomes`
+        .replace(/\s+/g, " ")
+        .trim();
+      if (actionScopeCollides(lastResort, input.usedScopeKeys)) {
+        continue;
+      }
+      claimActionScopeKeys(lastResort, input.usedScopeKeys);
+      return repairBrokenBulletWording(`${verb} ${lastResort}${tail}`);
+    }
+    const forced = `production ${laneNouns[seed % laneNouns.length]} outcomes`;
+    claimActionScopeKeys(forced, input.usedScopeKeys);
+    return repairBrokenBulletWording(`${verb} ${forced}${tail}`);
+  })();
+
+  const diversified = diversifyHighCollisionMethodPhrases(
+    diversifyHighCollisionContentTokens(
+      scoped,
+      input.usedScopeKeys,
+      input.bulletId,
+    ),
+    input.usedScopeKeys,
+    input.bulletId,
+  );
+
+  return ensureAllocatedOpeningVerb(
+    ensureMinimumBulletWords(diversified, minimumWords, input.bulletId),
+    input.actionVerb,
+  );
+}
+
+function hashSeed(seed: string): number {
+  return Math.abs(
+    [...seed].reduce((hash, char) => hash + char.charCodeAt(0), 0),
+  );
+}
+
+function isUsedScope(scope: string, usedScopeKeys?: ReadonlySet<string>): boolean {
+  if (!usedScopeKeys || usedScopeKeys.size === 0) {
+    return false;
+  }
+  const key = canonicalKeywordKey(substantiveKeyword(scope));
+  if (key && usedScopeKeys.has(key)) {
+    return true;
+  }
+  const words = scope.split(/\s+/).filter(Boolean);
+  for (let index = 0; index < words.length - 2; index += 1) {
+    const windowKey = canonicalKeywordKey(
+      substantiveKeyword(words.slice(index, index + 3).join(" ")),
+    );
+    if (windowKey && usedScopeKeys.has(windowKey)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function uniqueScopedPhrase(
+  base: string,
+  seed: string,
+  usedScopeKeys?: ReadonlySet<string>,
+): string {
+  const cleanedBase =
+    base.replace(/\s+/g, " ").trim() || "production delivery outcomes";
+  const candidates = [
+    cleanedBase,
+    ...UNIQUE_SCOPE_QUALIFIERS.map(
+      (qualifier) => `${cleanedBase} ${qualifier}`,
+    ),
+  ];
+  const unused = candidates.find(
+    (candidate) => !isUsedScope(candidate, usedScopeKeys),
+  );
+  if (unused) {
+    return unused;
+  }
+  const index = hashSeed(seed) % UNIQUE_SCOPE_QUALIFIERS.length;
+  // Keep the last-resort phrase compact so supporting methods remain representable.
+  return `${cleanedBase} ${UNIQUE_SCOPE_QUALIFIERS[index]}`;
+}
+
+function pickUnusedCommunicationScope(
+  preferred: string | undefined,
+  usedScopeKeys: ReadonlySet<string> | undefined,
+  seed: string,
+): string {
+  const candidates = [
+    preferred,
+    ...COMMUNICATION_SCOPE_VARIANTS,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  const unused = candidates.find((candidate) => !isUsedScope(candidate, usedScopeKeys));
+  if (unused) {
+    return unused;
+  }
+  // Deterministic last-resort variant so concurrent roles never share one clone.
+  // Never append internal identifiers such as exp-001-b-004 into visible text.
+  const index = hashSeed(seed) % COMMUNICATION_SCOPE_VARIANTS.length;
+  return uniqueScopedPhrase(
+    COMMUNICATION_SCOPE_VARIANTS[index]!,
+    seed,
+    usedScopeKeys,
+  );
+}
+
+/** Visible action-object text used for document-wide scope uniqueness. */
+export function extractActionObjectScope(bulletText: string, actionVerb?: string): string {
+  let text = stripFirstPersonPronouns(bulletText).replace(/[.!?]+$/g, "").trim();
+  if (actionVerb) {
+    text = text.replace(new RegExp(`^${actionVerb}\\s+`, "i"), "").trim();
+  } else {
+    text = text.replace(/^[A-Za-z-]+\s+/, "").trim();
+  }
+  return text
+    .replace(/\s+(?:using|through|,)\s+.+$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const TERMINAL_PUNCTUATION = /[.!?;:,]+$/g;
+const LEADING_CONNECTOR = /^(?:which|that|and|while|thereby|resulting in)\s+/i;
+const WEAK_FILLER =
+  /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various|multiple tasks|multiple different|numerous various|successfully|effectively|very|really|numerous)\b/gi;
+
+const PRESERVED_TOKEN_CASE: Readonly<Record<string, string>> = {
+  docker: "Docker",
+  kubernetes: "Kubernetes",
+  mlflow: "MLflow",
+  prometheus: "Prometheus",
+  grafana: "Grafana",
+  airflow: "Airflow",
+  spark: "Spark",
+  snowflake: "Snowflake",
+  databricks: "Databricks",
+  terraform: "Terraform",
+  jenkins: "Jenkins",
+  pytorch: "PyTorch",
+  tensorflow: "TensorFlow",
+  langchain: "LangChain",
+  llamaindex: "LlamaIndex",
+  postgresql: "PostgreSQL",
+  mongodb: "MongoDB",
+  redis: "Redis",
+  fastapi: "FastAPI",
+  flask: "Flask",
+  django: "Django",
+  react: "React",
+  "react.js": "React.js",
+  "next.js": "Next.js",
+  // Keep single-token replacements only. Expanding "tailwind" into
+  // "Tailwind CSS" would duplicate the following CSS token.
+  tailwind: "Tailwind",
+  daisyui: "DaisyUI",
+  websockets: "WebSockets",
+  websocket: "WebSocket",
+  vitest: "Vitest",
+  cypress: "Cypress",
+  jira: "Jira",
+  confluence: "Confluence",
+  git: "Git",
+  typescript: "TypeScript",
+  javascript: "JavaScript",
+  kafka: "Kafka",
+  aws: "AWS",
+  azure: "Azure",
+  gcp: "GCP",
+  sql: "SQL",
+  css: "CSS",
+  dbt: "dbt",
+};
+
+const PRESERVED_PHRASES: ReadonlyArray<readonly [string, string]> = [
+  ["tailwind css", "Tailwind CSS"],
+  ["css modules", "CSS Modules"],
+  ["react.js", "React.js"],
+  ["next.js", "Next.js"],
+  ["restful apis", "RESTful APIs"],
+  ["rest apis", "REST APIs"],
+];
+
+const PRESERVED_PHRASE_TOKENS = new Set(
+  PRESERVED_PHRASES.flatMap(([, replacement]) => replacement.split(/\s+/)),
+);
+
+function applyPreservedPhrases(value: string): string {
+  let result = value;
+  for (const [needle, replacement] of PRESERVED_PHRASES) {
+    result = result.replace(
+      new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"),
+      replacement,
+    );
+  }
+  return result;
+}
+
+export function stripTerminal(value: string): string {
+  return value.replace(/\s+/g, " ").trim().replace(TERMINAL_PUNCTUATION, "");
+}
+
+/**
+ * Resume bullets must stay third-person. JD wording often contains "our/we/us"
+ * and second-person "you/your"; strip those pronouns so composed text stays
+ * Resume Worded / ATS clean.
+ */
+export function stripFirstPersonPronouns(value: string): string {
+  return value
+    .replace(
+      /\b(?:I|me|my|mine|we|us|our|ours|you|your|yours|you(?:'re|’re|re)|you(?:'d|’d|d)|you(?:'ll|’ll|ll)|you(?:'ve|’ve|ve))\b/gi,
+      " ",
+    )
+    .replace(/\s+'/g, "'")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function normalizeBulletSentence(value: string): string {
+  const normalized = stripFirstPersonPronouns(
+    scrubJdMetaFromVisibleText(
+      scrubVagueBuzzwords(
+        value
+          .replace(WEAK_FILLER, "")
+          // Never leave internal plan identifiers in visible resume text.
+          .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
+          .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
+          // JD scopes sometimes arrive with a terminal period mid-clause.
+          .replace(/\.(?=\s+(?:through|using|with|,|and|while|that)\b)/gi, "")
+          .replace(/\s+,/g, ",")
+          .replace(/,\s*,+/g, ", ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/[.!?]+$/g, ""),
+      ),
+    ),
+  );
+  if (!normalized) {
+    return "";
+  }
+  const withoutEcho = stripIntraBulletRepetition(normalized);
+  const cleaned = withoutEcho.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "";
+  }
+  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}.`;
+}
+
+/** Morphological stem used to catch Coordinated/coordination style echoes. */
+export function actionVerbStem(verb: string): string {
+  return verb
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/(?:iated|ated|ized|ised|yed|ied|ed|ing|es|s)$/i, "")
+    .replace(/i$/i, "y");
+}
+
+/**
+ * Removes only clear verb/object tautologies and duplicated measure nouns.
+ * Avoid broad stem deletion so allocated supporting methods remain representable.
+ */
+export function stripIntraBulletRepetition(sentence: string): string {
+  let text = sentence.replace(/[.!?]+$/g, "").trim();
+
+  // Alias twins: "RESTful APIs and REST APIs" → keep the more specific form.
+  text = text.replace(
+    /\bRESTful\s+APIs?\s+and\s+REST\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+  text = text.replace(
+    /\bREST\s+APIs?\s+and\s+RESTful\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+  text = text.replace(/\bREST\s+APIs?\s+and\s+REST\s+APIs?\b/gi, "REST APIs");
+  text = text.replace(
+    /\bRESTful\s+APIs?\s+and\s+RESTful\s+APIs?\b/gi,
+    "RESTful APIs",
+  );
+
+  // Verb/object tautologies: "Directed technical direction for …".
+  text = text.replace(
+    /\b(Direct(?:ed|s|ing)|Lead(?:s|ing)?|Led)\s+technical\s+direction(?:\s+for)?\b/gi,
+    "$1",
+  );
+
+  // Repeated cross-functional markers inside one bullet.
+  {
+    let crossFunctionalSeen = false;
+    text = text.replace(
+      /\bcross-functional(\s+[A-Za-z][\w-]*)?\b/gi,
+      (full, rest = "") => {
+        if (!crossFunctionalSeen) {
+          crossFunctionalSeen = true;
+          return full;
+        }
+        if (/^\s+planning$/i.test(rest)) {
+          return "execution planning";
+        }
+        if (/^\s+collaboration$/i.test(rest)) {
+          return "stakeholder collaboration";
+        }
+        return `shared${rest}`;
+      },
+    );
+  }
+
+  // Repeated "distributed" markers inside one bullet.
+  {
+    let distributedSeen = false;
+    text = text.replace(/\bdistributed(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!distributedSeen) {
+        distributedSeen = true;
+        return full;
+      }
+      if (/^\s+systems?$/i.test(rest)) {
+        return "platform services";
+      }
+      if (/^\s+processing$/i.test(rest)) {
+        return "parallel processing";
+      }
+      return `scalable${rest}`;
+    });
+  }
+
+  // Outcome-clause content-noun echoes.
+  text = text.replace(
+    /\breducing security findings by (\d+(?:\.\d+)?(?:%|x))\s+and improving security posture\b/gi,
+    "reducing security findings by $1 and improving control coverage",
+  );
+  text = text.replace(
+    /\breducing infrastructure cost by (\d+(?:\.\d+)?(?:%|x))\s+while strengthening cloud cost efficiency\b/gi,
+    "reducing infrastructure cost by $1 while strengthening cloud efficiency",
+  );
+  text = text.replace(
+    /\brelease failures\b([^,.]*?)\band strengthening release reliability\b/gi,
+    "release failures$1 and strengthening deployment reliability",
+  );
+
+  // Repeated "security" markers inside one bullet (posture + findings, etc.).
+  {
+    let securitySeen = false;
+    text = text.replace(/\bsecurity(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!securitySeen) {
+        securitySeen = true;
+        return full;
+      }
+      if (/^\s+findings?$/i.test(rest)) {
+        return "control findings";
+      }
+      if (/^\s+posture$/i.test(rest)) {
+        return "control coverage";
+      }
+      return `control${rest}`;
+    });
+  }
+
+  // Repeated "cost" markers inside one bullet.
+  {
+    let costSeen = false;
+    text = text.replace(/\bcost(\s+[A-Za-z][\w-]*)?\b/gi, (full, rest = "") => {
+      if (!costSeen) {
+        costSeen = true;
+        return full;
+      }
+      if (/^\s+efficiency$/i.test(rest)) {
+        return "efficiency";
+      }
+      return `spend${rest}`;
+    });
+  }
+
+  // Coordinated/Aligned/Automated ... delivery coordination → keep a collaboration signal.
+  text = text.replace(
+    /\b(Coordinat(?:e|es|ed|ing)|Align(?:s|ed|ing)?|Automat(?:e|es|ed|ing))\b([^]*?)\b(?:stakeholder\s+)?(?:alignment and\s+)?delivery\s+coordination\b/i,
+    "$1$2 cross-functional delivery priorities",
+  );
+  text = text.replace(
+    /\b(Coordinat(?:e|es|ed|ing))\b([^]*?)\bdependency\s+coordination\b/gi,
+    "$1$2 dependency planning",
+  );
+  text = text.replace(
+    /\b(Coordinat(?:e|es|ed|ing))\b([^]*?)\bcoordination\b/gi,
+    "$1$2 collaboration",
+  );
+  text = text.replace(
+    /\b(Align(?:s|ed|ing)?)\b([^]*?)\balignment\b/gi,
+    "$1$2 cross-functional priorities",
+  );
+  text = text.replace(
+    /\b(Mentor(?:s|ed|ing)?)\b([^]*?)\bmentoring\b/gi,
+    "$1$2 capability building",
+  );
+  text = text.replace(
+    /\b(Collaborat(?:e|es|ed|ing))\b([^]*?)\bcross-functional collaboration\b/gi,
+    "$1$2 cross-functional delivery priorities",
+  );
+  text = text.replace(
+    /\b(Collaborat(?:e|es|ed|ing))\b([^]*?)\bcollaboration\b/gi,
+    "$1$2 stakeholder alignment",
+  );
+
+  // Past-tense verb + same-stem / related infinitive object.
+  // e.g. "Accelerated accelerate inference" or "Secured harden security".
+  text = text.replace(
+    /^([A-Za-z][A-Za-z-]*)\s+([a-z][a-z-]*)\b/,
+    (match, verb: string, next: string) => {
+      const verbStem = actionVerbStem(verb);
+      const nextStem = actionVerbStem(next);
+      if (verbStem && nextStem && verbStem === nextStem) {
+        return verb;
+      }
+      if (
+        /^(?:secur|harden)$/i.test(verbStem) &&
+        /^(?:secur|harden)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:implement|standard|build)$/i.test(verbStem) &&
+        /^(?:implement|standard|build)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:stabil|orchestr)$/i.test(verbStem) &&
+        /^(?:stabil|orchestr)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:direct|lead)$/i.test(verbStem) &&
+        /^(?:direct|lead)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      return match;
+    },
+  );
+
+  // Strip leftover leading infinitives after the allocated past-tense verb.
+  // Keep ambiguous noun/verb tokens like "design reviews" / "solution design".
+  text = text.replace(
+    /^([A-Z][A-Za-z-]*)\s+(?:standardize|harden|orchestrate|accelerate|instrument|implement|secure|automate|launch|consolidate|stabilize|establish|validate|streamline|strengthen|transform|modernize)\b/i,
+    "$1",
+  );
+  text = text.replace(
+    /^([A-Z][A-Za-z-]*)\s+(?:build|design|develop|deploy|optimize|monitor|reduce|improve|create)\b(?=\s*(?:through|using|,|$))/i,
+    "$1",
+  );
+  text = text.replace(
+    /\band\s+(?:standardize|harden|orchestrate|accelerate|implement|secure)\b(?=\s*(?:through|using|,|$))/gi,
+    "",
+  );
+  // Parallel JD imperatives glued into one scope: "performance and reduce latency".
+  text = text.replace(
+    /\band\s+(?:reduce|improve|increase|decrease|enhance)\s+[A-Za-z][\w.+#/-]*(?:\s+[A-Za-z][\w.+#/-]*){0,3}(?=\s*(?:through|using|,|$))/gi,
+    "",
+  );
+
+  // "security posture with cloud security posture" → "cloud security posture"
+  text = text.replace(
+    /\b((?:[A-Za-z][\w.+#/-]*\s+){0,3}[A-Za-z][\w.+#/-]*)\s+with\s+((?:[A-Za-z][\w.+#/-]*\s+){0,2})\1\b/gi,
+    "$2$1",
+  );
+
+  // Em-dash JD glue and "experience with" remnants.
+  text = text.replace(/\s*[–—]\s+(?:build|design|develop|secure|experience|orchestrate|implement)\b[^,]*/gi, "");
+  text = text.replace(/\bexperience with\b/gi, "");
+  text = text.replace(/\bbest through\b/gi, "through");
+  text = text.replace(/\busing go through\b/gi, "through");
+  text = text.replace(/\bgo through\b/gi, "");
+  text = text.replace(/\bcan to\b/gi, "to");
+  text = text.replace(/\bso new(?:\s+markets?(?:\s+can)?)?\b/gi, "");
+  text = text.replace(/\bmarkets?\s+can\b/gi, "");
+
+  // Drop a covering clause that restates text already present earlier.
+  text = text.replace(
+    /\bcovering\s+([^,]+?)(?=,|\s+(?:to|using|through)\b|$)/gi,
+    (full, covered: string) => {
+      const idx = text.toLocaleLowerCase().indexOf(full.toLocaleLowerCase());
+      const before = idx >= 0 ? text.slice(0, idx) : "";
+      return before.toLocaleLowerCase().includes(covered.toLocaleLowerCase().trim())
+        ? ""
+        : full;
+    },
+  );
+
+  // Remove the first duplicate of any 4+ word phrase within the bullet.
+  text = dedupeRepeatedPhrases(text);
+
+  // "increasing throughput by 2.6x and improving request throughput"
+  text = text.replace(
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+([^,]+?)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/gi,
+    "$1 $2 by $3",
+  );
+  text = text.replace(
+    /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+(\w+)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+\w+\s+\2\b/gi,
+    "$1 $2 by $3",
+  );
+
+  return text.replace(/\s+/g, " ").replace(/\s+,/g, ",").replace(/,\s*,+/g, ", ").trim();
+}
+
+function dedupeRepeatedPhrases(sentence: string): string {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length < 8) {
+    return sentence;
+  }
+  for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
+    for (let start = 0; start + length * 2 <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ").toLocaleLowerCase();
+      if (phrase.split(/\s+/).length < 4) {
+        continue;
+      }
+      for (
+        let next = start + length;
+        next + length <= words.length;
+        next += 1
+      ) {
+        const other = words.slice(next, next + length).join(" ").toLocaleLowerCase();
+        if (other === phrase) {
+          words.splice(next, length);
+          return dedupeRepeatedPhrases(words.join(" "));
+        }
+      }
+    }
+  }
+  return words.join(" ");
+}
+
+export function substantiveKeyword(keyword: string): string {
+  if (/^mentor(?:ed|ing|s)?\s+engineers?\b/i.test(keyword.trim())) {
+    return "engineer mentoring";
+  }
+  const cleaned = cleanScope(stripFirstPersonPronouns(keyword))
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  // Convert leftover imperative openings into noun scopes when cleanScope kept
+  // the original phrase (e.g. short remnants).
+  const asNounScope = cleaned
+    .replace(/^(?:collaborate|collaborating)\s+with\b/i, "collaboration with")
+    .replace(
+      /^(?:communicate|communicating)\s+(?:with|to|across)\b/i,
+      "communication with",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutSeniority = asNounScope
+    .replace(/^(?:entry[- ]level|junior|mid[- ]level|senior|lead|staff|principal|chief)\s+/i, "")
+    .replace(/\s+(?:engineer|developer|scientist|architect|manager|specialist|analyst)$/i, "")
+    .trim();
+  const phrase = withoutSeniority || asNounScope || cleaned || stripTerminal(keyword);
+  const withoutWeakFiller = phrase
+    .replace(WEAK_FILLER, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return applyPreservedPhrases(withoutWeakFiller)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => {
+      if (PRESERVED_PHRASE_TOKENS.has(token)) {
+        return token;
+      }
+      const preserved = PRESERVED_TOKEN_CASE[token.toLocaleLowerCase()];
+      if (preserved) {
+        return preserved;
+      }
+      return /(?:[./]|\d)/.test(token) || /^[A-Z]{2,}[a-z]?$/.test(token)
+        ? token
+        : token.toLocaleLowerCase();
+    })
+    .join(" ");
+}
+
+function uniquePhrases(values: readonly string[]): string[] {
+  const byKey = new Map<string, string>();
+  const order: string[] = [];
+  for (const value of values) {
+    const cleaned = stripTerminal(value);
+    const key = canonicalKeywordKey(cleaned);
+    if (!cleaned || !key) {
+      continue;
+    }
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, cleaned);
+      order.push(key);
+      continue;
+    }
+    // Prefer the longer / more specific surface form (RESTful APIs > REST APIs).
+    if (cleaned.length > existing.length) {
+      byKey.set(key, cleaned);
+    }
+  }
+  return order.map((key) => byKey.get(key)!);
+}
+
+function removeContainedPhrases(values: readonly string[]): string[] {
+  const ordered = uniquePhrases(values).sort((left, right) => right.length - left.length);
+  return ordered.filter((value, index) => {
+    const lower = value.toLocaleLowerCase();
+    const compact = lower.replace(/\s+/g, " ").trim();
+    return !ordered.some((other, otherIndex) => {
+      if (otherIndex === index || other.length <= value.length) {
+        return false;
+      }
+      const otherLower = other.toLocaleLowerCase();
+      if (otherLower.includes(lower)) {
+        return true;
+      }
+      // Treat "CSS" as contained by "CSS Modules" / "Tailwind CSS" even when
+      // token boundaries differ only by separators.
+      const otherTokens = new Set(otherLower.split(/[^a-z0-9+#.]+/).filter(Boolean));
+      const valueTokens = compact.split(/[^a-z0-9+#.]+/).filter(Boolean);
+      return (
+        valueTokens.length > 0 &&
+        valueTokens.every((token) => otherTokens.has(token))
+      );
+    });
+  });
+}
+
+export function buildActionClause(input: {
+  plan: BulletPlanItem;
+  keywordPackage: KeywordPackage;
+  story: StarStory;
+  usedScopeKeys?: ReadonlySet<string>;
+}): string {
+  const directScopes = removeContainedPhrases(
+    input.keywordPackage.directKeywords.map(substantiveKeyword),
+  );
+  const joinedDirectScope = joinNatural(directScopes);
+  const themeScope = cleanScope(
+    stripFirstPersonPronouns(input.plan.achievementTheme || ""),
+  );
+  const focusScope = cleanScope(
+    stripFirstPersonPronouns(input.plan.roleFocusArea || ""),
+  );
+  const compactFocusRaw =
+    focusScope.split(/\s+/).filter(Boolean).length > 0 &&
+    focusScope.split(/\s+/).length <= 8 &&
+    !/,| and | through /i.test(focusScope)
+      ? focusScope
+      : "";
+  const compactFocusSanitized = compactFocusRaw
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(/[.]+$/g, "")
+    .trim();
+  const compactFocus =
+    compactFocusSanitized && !isJdMarketingOrMetaScope(compactFocusSanitized)
+      ? compactFocusSanitized
+      : "";
+  const compactThemeRaw =
+    themeScope.split(/\s+/).filter(Boolean).length > 0 &&
+    themeScope.split(/\s+/).length <= 6
+      ? themeScope
+      : "";
+  const compactThemeSanitized = compactThemeRaw
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(
+      /^production implementation and delivery for\s+/i,
+      "",
+    )
+    .replace(/[.]+$/g, "")
+    .trim();
+  const compactTheme =
+    compactThemeSanitized &&
+    compactThemeSanitized.split(/\s+/).length <= 8 &&
+    !isJdMarketingOrMetaScope(compactThemeSanitized) &&
+    !/^experience with\b/i.test(compactThemeSanitized)
+      ? compactThemeSanitized
+      : "";
+  const compactTaskRaw = substantiveKeyword(input.story.task)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(" ")
+    .replace(/\brequired\b$/i, "")
+    .trim();
+  // STAR ownership boilerplate is not a usable action object.
+  const compactTask =
+    compactTaskRaw &&
+    !STAR_OWNERSHIP_BOILERPLATE.test(compactTaskRaw) &&
+    !isJdMarketingOrMetaScope(compactTaskRaw)
+      ? compactTaskRaw
+      : "";
+  // Never fall back to bare achievement-dimension labels such as
+  // "cross functional alignment" or "reliability observability" — those clone
+  // across roles whenever the same dimension is reused.
+  const shortFallback =
+    compactFocus ||
+    compactTheme ||
+    compactTask ||
+    "production delivery outcomes";
+  const cleanFallback = (() => {
+    const toolScope = joinNatural(
+      input.keywordPackage.supportingKeywords
+        .map(stripFirstPersonPronouns)
+        .filter(Boolean)
+        .slice(0, 2),
+    );
+    if (toolScope) return toolScope;
+    if (compactFocus) return compactFocus;
+    if (compactTheme) return compactTheme;
+    return "production delivery outcomes";
+  })();
+  const directScope =
+    joinedDirectScope.split(/\s+/).filter(Boolean).length >= 2 &&
+    !isJdMarketingOrMetaScope(joinedDirectScope)
+      ? joinedDirectScope
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 14)
+          .join(" ")
+      : shortFallback;
+  const supportValues = removeContainedPhrases(
+    input.keywordPackage.supportingKeywords
+      .map(stripFirstPersonPronouns)
+      .filter(
+        (keyword) =>
+          Boolean(keyword) &&
+          !directScope.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()),
+      ),
+  );
+  const explicitTools = supportValues.filter((keyword) =>
+    input.keywordPackage.supportingKeywordDetails.some(
+      (detail) =>
+        stripFirstPersonPronouns(detail.keyword).toLocaleLowerCase() ===
+          keyword.toLocaleLowerCase() &&
+        detail.origin === "explicit-jd-tool",
+    ),
+  );
+  const inferredMethods = supportValues.filter(
+    (keyword) => !explicitTools.includes(keyword),
+  );
+  const verb = stripTerminal(input.keywordPackage.actionVerb);
+  let normalizedDirectScope =
+    /mentor|coach/i.test(verb) && /^(?:engineer mentoring|mentoring)$/i.test(directScope)
+      ? "engineers on architecture decisions and delivery practices"
+      : directScope;
+
+  // Soft-skill prose and truncated JD fragments make ungrammatical bullets when
+  // used as the action object. Replace them with ATS-safe collaboration or
+  // delivery scopes grounded in the role focus.
+  if (
+    /^(?:strong|excellent|good|proven)?\s*verbal and written communication skills\b/i.test(
+      normalizedDirectScope,
+    ) ||
+    /^(?:communication skills)\b/i.test(normalizedDirectScope)
+  ) {
+    normalizedDirectScope =
+      compactFocus ||
+      "cross-functional collaboration with product and engineering stakeholders";
+  }
+  if (
+    /\b\d+\+?\s*years?(?:\s+of)?(?:\s+relevant)?\s+experience\b/i.test(
+      normalizedDirectScope,
+    ) ||
+    /^years? of experience\b/i.test(normalizedDirectScope)
+  ) {
+    normalizedDirectScope =
+      joinNatural(explicitTools.slice(0, 2)) ||
+      compactFocus ||
+      compactTheme ||
+      cleanFallback;
+  }
+  if (
+    /\bperformance and enhance\b/i.test(normalizedDirectScope) ||
+    /\bthe effort to deliver\b/i.test(normalizedDirectScope) ||
+    /^production(?:\s+\w+)?\s+delivery outcomes$/i.test(normalizedDirectScope) ||
+    STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope) ||
+    isJdMarketingOrMetaScope(normalizedDirectScope)
+  ) {
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    const methodScope = joinNatural(inferredMethods.slice(0, 2));
+    const methodLooksLikeProcessOnly =
+      /^(?:solution design|design reviews|technical documentation|delivery planning|architecture workshops)\b/i.test(
+        methodScope,
+      ) || (/ and /i.test(methodScope) && !/[A-Z]/.test(methodScope));
+    // Keep this fallback domain-neutral. A React/TypeScript hardcode leaks
+    // frontend stack into unrelated concurrent generations (e.g. ML resumes).
+    // Never reintroduce STAR task boilerplate via shortFallback.
+    normalizedDirectScope =
+      toolScope ||
+      (!methodLooksLikeProcessOnly ? methodScope : "") ||
+      compactFocus ||
+      compactTheme ||
+      cleanFallback;
+  }
+  if (/^experience with\b/i.test(normalizedDirectScope)) {
+    const withoutPrefix = normalizedDirectScope
+      .replace(/^experience with\s+/i, "")
+      .replace(/[.]+$/g, "")
+      .trim();
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    // Never fall back to compactFocus/theme here — those may still carry the
+    // "Experience with …" requirement label and reintroduce it.
+    normalizedDirectScope =
+      withoutPrefix ||
+      toolScope ||
+      cleanFallback ||
+      "production delivery outcomes";
+  }
+  if (/\b(?:the effort to|took responsibility to)\b/i.test(normalizedDirectScope)) {
+    normalizedDirectScope = cleanFallback;
+  }
+  // Avoid "Coordinated/Aligned/Automated ... delivery coordination" tautologies.
+  if (/^(?:coordinat|align|automat)/i.test(verb)) {
+    normalizedDirectScope = normalizedDirectScope
+      .replace(
+        /\bstakeholder alignment and delivery coordination\b/gi,
+        "cross-functional delivery priorities",
+      )
+      .replace(/\bdelivery coordination\b/gi, "delivery priorities")
+      .replace(/\bcoordination\b/gi, "collaboration");
+  }
+  if (/^align/i.test(verb)) {
+    normalizedDirectScope = normalizedDirectScope
+      .replace(/\bstakeholder alignment\b/gi, "cross-functional priorities")
+      .replace(/\balignment\b/gi, "cross-functional priorities");
+  }
+  const filteredMethods = inferredMethods.map((keyword) => {
+    if (/^(?:coordinat|automat)/i.test(verb) && /\bcoordination\b/i.test(keyword)) {
+      return keyword.replace(/\bcoordination\b/gi, "planning");
+    }
+    if (/^align/i.test(verb) && /\balignment\b/i.test(keyword)) {
+      const rewritten = keyword.replace(/\balignment\b/gi, "planning");
+      return hasCompositionCommunicationSignal(rewritten)
+        ? rewritten
+        : "cross-functional planning";
+    }
+    return keyword;
+  });
+  const buildSupportClause = (scopeText: string): string => {
+    const lowerScope = scopeText.toLocaleLowerCase();
+    const remainingTools = explicitTools.filter(
+      (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
+    );
+    const remainingMethods = filteredMethods.filter(
+      (keyword) => !lowerScope.includes(keyword.toLocaleLowerCase()),
+    );
+    return [
+      remainingTools.length > 0 ? ` using ${joinNatural(remainingTools)}` : "",
+      remainingMethods.length > 0 ? ` through ${joinNatural(remainingMethods)}` : "",
+    ].join("");
+  };
+  if (/\bdelivery coordination required\b/i.test(normalizedDirectScope)) {
+    normalizedDirectScope = normalizedDirectScope.replace(
+      /\bdelivery coordination required\b/gi,
+      "delivery coordination",
+    );
+  }
+  if (/^(?:stakeholder alignment)\b/i.test(normalizedDirectScope) && /^align/i.test(verb)) {
+    normalizedDirectScope =
+      "cross-functional priorities with product and engineering stakeholders";
+  }
+  if (/^(?:real-time communication)\b/i.test(normalizedDirectScope) && /^communicat/i.test(verb)) {
+    normalizedDirectScope = "WebSocket-based realtime product updates";
+  }
+
+  if (input.plan.communicationFocused) {
+    const looksLikeGenericAlignment =
+      /^(?:cross[- ]functional alignment|stakeholder alignment|collaboration|cross-functional delivery priorities|delivery priorities)\b/i.test(
+        normalizedDirectScope,
+      ) ||
+      /\bstakeholder alignment and delivery (?:coordination|priorities)\b/i.test(
+        normalizedDirectScope,
+      ) ||
+      STAR_OWNERSHIP_BOILERPLATE.test(normalizedDirectScope) ||
+      isUsedScope(normalizedDirectScope, input.usedScopeKeys);
+    const looksLikeSoftSkillProse =
+      /^(?:strong|excellent|good|proven)\b/i.test(normalizedDirectScope) ||
+      /communication skills/i.test(normalizedDirectScope);
+    // Supporting methods must stay in the "through" clause — never promote them
+    // to the action object for communication bullets, or they disappear when the
+    // scope is replaced with a collaboration variant.
+    const looksLikeSupportingAsScope =
+      filteredMethods.length > 0 &&
+      filteredMethods.every((keyword) =>
+        normalizedDirectScope.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()),
+      );
+    const preferredScope =
+      !looksLikeGenericAlignment &&
+      !looksLikeSoftSkillProse &&
+      !looksLikeSupportingAsScope &&
+      /stakeholder|collaborat|product|business|requirements|team|cross-functional|cross-team/i.test(
+        normalizedDirectScope,
+      )
+        ? normalizedDirectScope
+        : undefined;
+    const communicationScope = pickUnusedCommunicationScope(
+      preferredScope,
+      input.usedScopeKeys,
+      input.plan.bulletId,
+    );
+    return ensureCompositionCommunicationSignal(
+      stripTerminal(
+        `${verb} ${communicationScope}${buildSupportClause(communicationScope)}`,
+      ),
+    );
+  }
+
+  if (input.plan.leadershipFocused) {
+    const leadershipScope = /strategy|direction|leadership|architecture decision|roadmap/i.test(
+      normalizedDirectScope,
+    )
+      ? normalizedDirectScope
+      : `technical direction for ${normalizedDirectScope}`;
+    return stripTerminal(
+      `${verb} ${leadershipScope}${buildSupportClause(leadershipScope)}`,
+    );
+  }
+
+  if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
+    let mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
+      ? normalizedDirectScope
+      : `engineering capability around ${normalizedDirectScope}`;
+    if (/^mentor/i.test(verb) && /\bmentoring\b/i.test(mentoringScope)) {
+      mentoringScope = mentoringScope
+        .replace(/\bmentoring\b/gi, "capability building")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    return stripTerminal(
+      `${verb} ${mentoringScope}${buildSupportClause(mentoringScope)}`,
+    );
+  }
+
+  // Non-communication bullets also avoid cloning a previously used action object.
+  if (isUsedScope(normalizedDirectScope, input.usedScopeKeys)) {
+    const methodScope = joinNatural(filteredMethods.slice(0, 2));
+    const toolScope = joinNatural(explicitTools.slice(0, 2));
+    normalizedDirectScope =
+      [toolScope, compactFocus]
+        .find(
+          (candidate) =>
+            Boolean(candidate) && !isUsedScope(candidate, input.usedScopeKeys),
+        ) ||
+      uniqueScopedPhrase(
+        cleanFallback,
+        input.plan.bulletId,
+        input.usedScopeKeys,
+      );
+    // Prefer not to consume methods as the object when we can keep them in "through".
+    if (methodScope && normalizedDirectScope === methodScope) {
+      normalizedDirectScope =
+        compactFocus ||
+        toolScope ||
+        uniqueScopedPhrase(
+          cleanFallback,
+          input.plan.bulletId,
+          input.usedScopeKeys,
+        );
+    }
+  }
+
+  return stripTerminal(
+    `${verb} ${normalizedDirectScope}${buildSupportClause(normalizedDirectScope)}`,
+  );
+}
+
+export function metricAsGerund(metric: StarMetric): string {
+  const text = stripTerminal(metric.displayText);
+  return text
+    .replace(/^increased\b/i, "increasing")
+    .replace(/^reduced\b/i, "reducing")
+    .replace(/^maintained\b/i, "maintaining")
+    .replace(/^improved\b/i, "improving")
+    .replace(/^accelerated\b/i, "accelerating")
+    .replace(/^shortened\b/i, "shortening");
+}
+
+export function metricAsFinite(metric: StarMetric): string {
+  return lowerFirst(stripTerminal(metric.displayText));
+}
+
+export function metricAsNoun(metric: StarMetric): string {
+  if (metric.direction === "maintain") {
+    return `${metric.value}${metric.unit} ${metric.measure}`;
+  }
+  const noun = metric.direction === "increase" ? "increase" : "reduction";
+  return `a ${metric.value}${metric.unit} ${noun} in ${metric.measure}`;
+}
+
+function isNearDuplicateMeasurePhrase(keyword: string, measure: string): boolean {
+  const keywordLower = keyword.toLocaleLowerCase().trim();
+  const measureLower = measure.toLocaleLowerCase().trim();
+  if (!keywordLower || !measureLower) {
+    return false;
+  }
+  if (keywordLower === measureLower) {
+    return true;
+  }
+  // "request throughput" restates measure "throughput"; keep "deployment speed"
+  // when the measure is the related but distinct "deployment cycle time".
+  if (measureLower.includes(keywordLower) || keywordLower.includes(measureLower)) {
+    return true;
+  }
+  const keywordTokens = keywordLower
+    .split(/[^a-z0-9+#.]+/)
+    .filter((token) => token.length > 2);
+  const measureTokens = new Set(
+    measureLower.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2),
+  );
+  if (keywordTokens.length === 0 || measureTokens.size === 0) {
+    return false;
+  }
+  if (keywordTokens.every((token) => measureTokens.has(token)) && keywordTokens.length >= 2) {
+    return true;
+  }
+  // Shared primary nouns like "velocity" / "throughput" still read as restatement
+  // ("team delivery velocity" + "engineering velocity").
+  const primaryNouns = [
+    "velocity",
+    "throughput",
+    "adoption",
+    "latency",
+    "reliability",
+    "availability",
+    "predictability",
+  ];
+  return primaryNouns.some(
+    (noun) => keywordTokens.includes(noun) && measureTokens.has(noun),
+  );
+}
+
+export function uncoveredOutcomeKeywords(input: {
+  actionClause: string;
+  metrics: readonly StarMetric[];
+  keywordPackage: KeywordPackage;
+}): string[] {
+  const measures = input.metrics.map((metric) => metric.measure);
+  const coveredText = stripFirstPersonPronouns(
+    `${input.actionClause} ${input.metrics
+      .map((metric) => `${metric.displayText} ${metric.measure}`)
+      .join(" ")}`,
+  ).toLocaleLowerCase();
+  return uniquePhrases(
+    input.keywordPackage.outcomeKeywords.map(stripFirstPersonPronouns),
+  ).filter((keyword) => {
+    if (!keyword) return false;
+    const lower = keyword.toLocaleLowerCase();
+    if (coveredText.includes(lower)) return false;
+    if (measures.some((measure) => isNearDuplicateMeasurePhrase(keyword, measure))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function compactBusinessImpact(story: StarStory, maximumWords = 9): string {
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact)).trim();
+  const object = cleaned
+    .replace(/^improved\s+/i, "better ")
+    .replace(/^increased\s+/i, "greater ")
+    .replace(/^accelerated\s+/i, "faster ")
+    .replace(/^lowered\s+/i, "lower ")
+    .replace(/^reduced\s+/i, "lower ")
+    .replace(/^shortened\s+/i, "shorter ")
+    .replace(/^expanded\s+/i, "expanded ")
+    .replace(/^supported\s+/i, "support for ")
+    .trim();
+  return lowerFirst(object.split(/\s+/).slice(0, maximumWords).join(" "));
+}
+
+export function businessImpactAsGerund(story: StarStory, maximumWords = 11): string {
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact))
+    .replace(/^improved\b/i, "improving")
+    .replace(/^increased\b/i, "increasing")
+    .replace(/^accelerated\b/i, "accelerating")
+    .replace(/^lowered\b/i, "lowering")
+    .replace(/^reduced\b/i, "reducing")
+    .replace(/^shortened\b/i, "shortening")
+    .replace(/^made\b/i, "making")
+    .replace(/^enabled\b/i, "enabling")
+    .replace(/^supported\b/i, "supporting")
+    .replace(/^expanded\b/i, "expanding")
+    .replace(/^cut\b/i, "cutting")
+    .trim();
+  return lowerFirst(cleaned.split(/\s+/).slice(0, maximumWords).join(" "));
+}
+
+export function businessImpactAsInfinitive(story: StarStory, maximumWords = 11): string {
+  const cleaned = stripFirstPersonPronouns(stripTerminal(story.businessImpact))
+    .replace(/^improved\b/i, "improve")
+    .replace(/^increased\b/i, "increase")
+    .replace(/^accelerated\b/i, "accelerate")
+    .replace(/^lowered\b/i, "lower")
+    .replace(/^reduced\b/i, "reduce")
+    .replace(/^shortened\b/i, "shorten")
+    .replace(/^expanded\b/i, "expand")
+    .replace(/^supported\b/i, "support")
+    .trim();
+  return lowerFirst(cleaned.split(/\s+/).slice(0, maximumWords).join(" "));
+}
+
+
+export function wordCount(value: string): number {
+  return value
+    .replace(/[•]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+export function sentenceCount(value: string): number {
+  const withoutDecimals = value.replace(/(?<=\d)\.(?=\d)/g, "");
+  const matches = withoutDecimals.match(/[.!?](?:\s|$)/g);
+  return matches?.length ?? 0;
+}
+
+export function containsPhraseConcept(text: string, phrase: string): boolean {
+  const haystack = canonicalKeywordKey(text).split("|").filter(Boolean);
+  const needle = canonicalKeywordKey(phrase).split("|").filter(Boolean);
+  if (needle.length === 0) {
+    return true;
+  }
+  const haystackSet = new Set(haystack);
+  return needle.every((token) => haystackSet.has(token));
+}
+
+export function directKeywordRepresented(text: string, keyword: string): boolean {
+  const normalizedText = stripFirstPersonPronouns(text);
+  const normalizedKeyword = stripFirstPersonPronouns(keyword).replace(/[,:;]+$/g, "");
+  const exact = normalizedText
+    .toLocaleLowerCase()
+    .includes(normalizedKeyword.toLocaleLowerCase());
+  if (exact) {
+    return true;
+  }
+  const substantive = substantiveKeyword(normalizedKeyword);
+  if (!substantive) {
+    return true;
+  }
+  return (
+    normalizedText.toLocaleLowerCase().includes(substantive.toLocaleLowerCase()) ||
+    containsPhraseConcept(normalizedText, substantive)
+  );
+}
