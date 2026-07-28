@@ -11,6 +11,7 @@ import {
   inferNecessity,
   inferPriority,
   containsTool,
+  splitSourceSegments,
   TOOL_NAMES,
 } from "./requirement-heuristics";
 
@@ -99,6 +100,8 @@ const TOKEN_SYNONYMS: Record<string, string> = {
   designing: "design",
   machine: "ml",
   learning: "ml",
+  k8s: "kubernetes",
+  kube: "kubernetes",
 };
 
 function normalizeToken(token: string): string {
@@ -106,6 +109,10 @@ function normalizeToken(token: string): string {
   const mapped = TOKEN_SYNONYMS[lower];
   if (mapped) {
     return mapped;
+  }
+  // Keep catalog tool spellings intact (Kubernetes must not become "kubernete").
+  if (TOOL_NAMES.some((tool) => tool.toLowerCase() === lower)) {
+    return lower;
   }
   if (lower.endsWith("ies") && lower.length > 4) {
     return `${lower.slice(0, -3)}y`;
@@ -242,6 +249,63 @@ function assertNormalizedTextGrounded(candidate: RequirementCandidate): void {
   }
 }
 
+function isNormalizedTextGrounded(candidate: RequirementCandidate): boolean {
+  const normalizedTokens = lexicalTokens(candidate.normalizedText);
+  if (normalizedTokens.size === 0) {
+    return false;
+  }
+  return (
+    tokensOverlap(normalizedTokens, lexicalTokens(candidate.sourceText)).length >
+    0
+  );
+}
+
+/**
+ * Retarget sourceText to a verbatim JD span that lexically grounds the
+ * interpretation. Structured models sometimes attach "Experience with
+ * Kubernetes." to an unrelated sentence that still appears in the JD.
+ */
+function repairCandidateGrounding(
+  candidate: RequirementCandidate,
+  jobDescription: string,
+): RequirementCandidate | null {
+  const sourceInJd = jobDescription.includes(candidate.sourceText);
+  if (sourceInJd && isNormalizedTextGrounded(candidate)) {
+    return candidate;
+  }
+
+  const normalizedTokens = lexicalTokens(candidate.normalizedText);
+  if (normalizedTokens.size === 0) {
+    return null;
+  }
+
+  let bestSource: string | null = null;
+  let bestOverlap = 0;
+  for (const segment of splitSourceSegments(jobDescription)) {
+    if (!jobDescription.includes(segment.sourceText)) {
+      continue;
+    }
+    const overlap = tokensOverlap(
+      normalizedTokens,
+      lexicalTokens(segment.sourceText),
+    ).length;
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      bestSource = segment.sourceText;
+    }
+  }
+
+  if (!bestSource || bestOverlap === 0) {
+    return null;
+  }
+
+  const repaired: RequirementCandidate = {
+    ...candidate,
+    sourceText: bestSource,
+  };
+  return isNormalizedTextGrounded(repaired) ? repaired : null;
+}
+
 function hasMeaningfulNormalizedText(candidate: RequirementCandidate): boolean {
   return lexicalTokens(candidate.normalizedText).size > 0;
 }
@@ -307,11 +371,28 @@ export function postProcessRequirementCandidates(
       continue;
     }
 
-    const evidence = findEvidence(originalJobDescription, candidate.sourceText);
+    // Reject JD-unsupported catalog tools before evidence retargeting so
+    // hallucinated technologies still fail closed.
     assertNoHallucinatedKnownTools(originalJobDescription, candidate);
-    assertNormalizedTextGrounded(candidate);
 
-    for (const atomic of atomizeCandidate(candidate)) {
+    // Structured models can attach a valid tool interpretation to the wrong
+    // JD sentence. Retarget evidence when possible; otherwise skip the
+    // candidate while keeping the lexical-grounding guard for accepted ones.
+    const groundedCandidate = repairCandidateGrounding(
+      candidate,
+      originalJobDescription,
+    );
+    if (!groundedCandidate) {
+      continue;
+    }
+
+    const evidence = findEvidence(
+      originalJobDescription,
+      groundedCandidate.sourceText,
+    );
+    assertNormalizedTextGrounded(groundedCandidate);
+
+    for (const atomic of atomizeCandidate(groundedCandidate)) {
       if (!hasMeaningfulNormalizedText(atomic)) {
         continue;
       }

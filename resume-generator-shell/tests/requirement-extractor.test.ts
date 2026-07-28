@@ -104,7 +104,7 @@ describe("Real JD Requirement Extraction Engine", () => {
     );
   });
 
-  it("rejects evidence that is not present verbatim in the JD", async () => {
+  it("retargets evidence when model sourceText is missing but interpretation is grounded", async () => {
     const jd = "Senior data role requiring SQL pipeline development, data quality monitoring, stakeholder collaboration, and cloud platform experience.";
     const input = createExtractorInput(jd);
     const extractor = new RealRequirementExtractor({
@@ -121,9 +121,41 @@ describe("Real JD Requirement Extraction Engine", () => {
       }),
     });
 
-    await expect(extractor.execute(input)).rejects.toThrow(
-      /not present verbatim/i,
-    );
+    const result = await extractor.execute(input);
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]?.normalizedText).toMatch(/sql pipeline/i);
+    expect(jd).toContain(result.requirements[0]?.sourceText ?? "");
+    expect(result.requirements[0]?.evidence.length).toBeGreaterThan(0);
+  });
+
+  it("skips interpretations that cannot be grounded in any JD span", async () => {
+    const jd =
+      "Collaborate with product stakeholders and communicate architecture decisions to engineering teams while delivering production services.";
+    const input = createExtractorInput(jd);
+    const extractor = new RealRequirementExtractor({
+      model: new StaticStructuredModel({
+        requirements: [
+          {
+            sourceText: "This sentence is not in the JD.",
+            normalizedText: "Operate quantum flux capacitors in orbit.",
+            category: "other",
+            priority: "high",
+            necessity: "implied",
+          },
+          {
+            sourceText: jd,
+            normalizedText: "Collaborate with product stakeholders.",
+            category: "collaboration",
+            priority: "high",
+            necessity: "implied",
+          },
+        ],
+      }),
+    });
+
+    const result = await extractor.execute(input);
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]?.normalizedText).toMatch(/collaborate/i);
   });
 
   it("removes conservative semantic duplicates and preserves evidence", async () => {
@@ -280,6 +312,50 @@ describe("Real JD Requirement Extraction Engine", () => {
         /^Experience with React\.$/i.test(item.normalizedText),
       ),
     ).toBe(false);
+  });
+
+  it("repairs mis-attached Experience with Kubernetes grounding instead of aborting", async () => {
+    const jd = [
+      "Senior Backend Engineer.",
+      "Build scalable services on AWS.",
+      "Experience with Python, Docker, Kubernetes, and AWS is required.",
+      "Collaborate with product and engineering stakeholders on delivery quality.",
+      "Lead technical design reviews for platform services.",
+    ].join("\n");
+    const input = createExtractorInput(jd);
+    const extractor = new RealRequirementExtractor({
+      model: new StaticStructuredModel({
+        requirements: [
+          {
+            // Valid interpretation attached to the wrong JD sentence.
+            sourceText: "Collaborate with product and engineering stakeholders on delivery quality.",
+            normalizedText: "Experience with Kubernetes.",
+            category: "technical-skill",
+            priority: "high",
+            necessity: "required",
+          },
+          {
+            sourceText: "Collaborate with product and engineering stakeholders on delivery quality.",
+            normalizedText: "Collaborate with product and engineering stakeholders on delivery quality.",
+            category: "collaboration",
+            priority: "high",
+            necessity: "implied",
+          },
+        ],
+      }),
+    });
+
+    const result = await extractor.execute(input);
+    const kubernetes = result.requirements.find((item) =>
+      /kubernetes/i.test(item.normalizedText),
+    );
+    expect(kubernetes).toBeDefined();
+    expect(kubernetes?.normalizedText).toMatch(/^Experience with Kubernetes\.?$/i);
+    expect(kubernetes?.sourceText).toMatch(/Kubernetes/i);
+    expect(kubernetes?.evidence.length).toBeGreaterThan(0);
+    expect(
+      result.requirements.some((item) => /collaborate/i.test(item.normalizedText)),
+    ).toBe(true);
   });
 
   it("grounds Terraform requirements when the JD uses terraform.io product forms", async () => {
