@@ -25,6 +25,76 @@ describe("repetition hardening", () => {
     ).not.toMatch(/\b(?:successfully|various|very|effectively|really|numerous)\b/i);
   });
 
+  it("scrubs vague resume buzzwords into concrete evidence wording", () => {
+    expect(
+      normalizeBulletSentence(
+        "Delivered dynamic problem solver and strategic thinker through adapter development, reducing cycle time by 31%.",
+      ),
+    ).not.toMatch(
+      /\b(?:dynamic|strategic thinker|passionate|motivated|communication skills|team player|proven track record)\b/i,
+    );
+    expect(
+      normalizeBulletSentence(
+        "Led proven track record and soft skills with product partners, increasing alignment by 18%.",
+      ),
+    ).toMatch(/demonstrated delivery outcomes|cross-functional collaboration|stakeholder communication/i);
+  });
+
+  it("approves buzzword-heavy JDs without ats-language buzzword rejects", async () => {
+    const jobDescription = createJobDescription(
+      `Senior Software Engineer
+We need a passionate, motivated, proactive engineer with a proven track record.
+Be a team player with strong communication skills and soft skills.
+Dynamic problem solver and strategic thinker.
+Build scalable backend services with Node.js.
+Collaborate with product stakeholders.
+Lead technical design.
+Mentor engineers.
+Optimize system performance.
+Deploy with Kubernetes.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-BUZZWORD-JD", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example AI Company",
+          startDate: "2022-01",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Prior Labs",
+          startDate: "2015-01",
+          endDate: "2017-07",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    expect(
+      result.validation.diagnostics.filter((item) =>
+        item.errors.some((error) => /buzzword/i.test(error)),
+      ),
+    ).toEqual([]);
+    for (const experience of result.experiences) {
+      for (const bullet of experience.bullets) {
+        expect(bullet.finalBullet).not.toMatch(
+          /\b(?:dynamic|proactive|passionate|motivated|strategic thinker|team player|communication skills|proven track record|soft skills)\b/i,
+        );
+      }
+    }
+  });
+
   it("pads bullets that become too short after covering-clause repair", () => {
     const repaired = repairBrokenBulletWording(
       "Mentored engineers covering capability building, increasing supported workload scale by 22%.",

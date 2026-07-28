@@ -4,6 +4,7 @@ import type { StarMetric, StarStory } from "../types/star-story";
 import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
 import { cleanScope } from "../star/star-language";
 import { joinNatural, lowerFirst } from "../star/star-utils";
+import { VAGUE_BUZZWORDS } from "../validation/experience-validation-language";
 
 /** Document-wide action-scope key — must match real-experience-validator normalizeText. */
 export function actionScopeFingerprint(scope: string): string {
@@ -11,6 +12,46 @@ export function actionScopeFingerprint(scope: string): string {
     .replace(/\b\d+(?:\.\d+)?\b/g, "#")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Replace Resume Worded vague buzzphrases with concrete wording so bullets can
+ * pass ats-language checks without weakening the validator.
+ */
+export function scrubVagueBuzzwords(value: string): string {
+  return value
+    .replace(/\bproven track record\b/gi, "demonstrated delivery outcomes")
+    .replace(/\bresults[- ]driven\b/gi, "outcome-focused")
+    .replace(/\bdetail[- ]oriented\b/gi, "precision-focused")
+    .replace(/\bself[- ]starter\b/gi, "independent contributor")
+    .replace(/\bgo[- ]getter\b/gi, "accountable owner")
+    .replace(/\bhard[- ]working\b/gi, "reliable")
+    .replace(/\bteam player\b/gi, "cross-functional collaborator")
+    .replace(/\binnovative thinker\b/gi, "practical problem solving")
+    .replace(/\bstrategic thinker\b/gi, "strategic planning")
+    .replace(/\bdynamic problem solver\b/gi, "scalable solution design")
+    .replace(
+      /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
+      "stakeholder communication",
+    )
+    .replace(
+      /\b(?:verbal and written\s+)?communication skills\b/gi,
+      "stakeholder communication",
+    )
+    .replace(
+      /\b(?:soft skills|interpersonal skills|people skills)\b/gi,
+      "cross-functional collaboration",
+    )
+    .replace(/\b(?:passionate|motivated|seasoned|synergistic|proactive)\b/gi, " ")
+    .replace(/\bdynamic\b/gi, "scalable")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,+/g, ", ")
+    .trim();
+}
+
+export function containsVagueBuzzwords(value: string): boolean {
+  return VAGUE_BUZZWORDS.test(value);
 }
 
 const STAR_OWNERSHIP_BOILERPLATE =
@@ -37,6 +78,7 @@ export function isJdMarketingOrMetaScope(value: string): boolean {
   if (!cleaned) return false;
   if (containsJdMetaMarker(cleaned)) return true;
   if (JD_MARKETING_PROSE.test(cleaned)) return true;
+  if (containsVagueBuzzwords(cleaned)) return true;
   if (SCOPE_FINITE_VERB.test(cleaned) && cleaned.split(/\s+/).length >= 5) {
     return true;
   }
@@ -547,23 +589,18 @@ export function stripFirstPersonPronouns(value: string): string {
 export function normalizeBulletSentence(value: string): string {
   const normalized = stripFirstPersonPronouns(
     scrubJdMetaFromVisibleText(
-      value
-        .replace(WEAK_FILLER, "")
-        // Resume Worded flags bare soft-skill buzzphrases; swap for concrete signal.
-        .replace(
-          /\b(?:strong|excellent|good|proven)\s+(?:verbal and written\s+)?communication skills\b/gi,
-          "stakeholder communication",
-        )
-        .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
-        .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
-        // Never leave internal plan identifiers in visible resume text.
-        .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
-        .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
-        .replace(/\s+,/g, ",")
-        .replace(/,\s*,+/g, ", ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/[.!?]+$/g, ""),
+      scrubVagueBuzzwords(
+        value
+          .replace(WEAK_FILLER, "")
+          // Never leave internal plan identifiers in visible resume text.
+          .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
+          .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
+          .replace(/\s+,/g, ",")
+          .replace(/,\s*,+/g, ", ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/[.!?]+$/g, ""),
+      ),
     ),
   );
   if (!normalized) {

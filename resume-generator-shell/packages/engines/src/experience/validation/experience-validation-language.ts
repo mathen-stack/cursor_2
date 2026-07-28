@@ -9,7 +9,8 @@ const STOP_WORDS = new Set([
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_OPENING = /^(?:Responsible for|Worked on|Helped with|Assisted with|Participated in|Involved in)\b/i;
 const FILLER = /\b(?:successfully|effectively|various|multiple different|numerous various|very|really)\b/i;
-const VAGUE_BUZZWORDS =
+/** Resume Worded-style soft/vague phrases that must not appear in bullets. */
+export const VAGUE_BUZZWORDS =
   /\b(?:dynamic|proactive|synergistic|go[- ]getter|hard[- ]working|team player|results[- ]driven|proven track record|seasoned|passionate|motivated|detail[- ]oriented|self[- ]starter|innovative thinker|strategic thinker|(?:verbal and written\s+)?communication skills|soft skills|interpersonal skills|people skills)\b/i;
 const PASSIVE = /\b(?:was|were|been|being)\s+(?:built|developed|implemented|designed|deployed|managed|created|optimized|led|completed)\b/i;
 const METRIC = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)(?=\s|[,.]|$)/i;
@@ -149,12 +150,16 @@ export function hasCommunicationSignal(value: string): boolean {
   return COMMUNICATION_SIGNAL.test(value);
 }
 
+export function hasVagueBuzzwords(value: string): boolean {
+  return VAGUE_BUZZWORDS.test(value);
+}
+
 export function atsLanguageErrors(value: string): string[] {
   const errors: string[] = [];
   if (FIRST_PERSON.test(value)) errors.push("Uses a first-person pronoun.");
   if (WEAK_OPENING.test(value)) errors.push("Starts with weak responsibility language.");
   if (FILLER.test(value)) errors.push("Contains filler or self-congratulatory wording.");
-  if (VAGUE_BUZZWORDS.test(value)) {
+  if (hasVagueBuzzwords(value)) {
     errors.push("Contains vague resume buzzwords that should be replaced with concrete evidence.");
   }
   if (PASSIVE.test(value)) errors.push("Uses avoidable passive voice.");

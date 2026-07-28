@@ -423,7 +423,7 @@ export class RealBulletComposer implements BulletComposer {
         validation.diagnostics
           .filter((item) =>
             item.errors.some((error) =>
-              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short/i.test(
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language/i.test(
                 error,
               ),
             ),
