@@ -381,15 +381,16 @@ export function ensureMaximumBulletWords(
   // Keep the trailing metric/result clause intact when possible.
   const segments = cleaned.split(/,\s+/);
   if (segments.length >= 2) {
-    const tail = segments.slice(-2).join(", ");
+    const tailSegments =
+      segments.length >= 3 ? segments.slice(-2) : segments.slice(-1);
+    const headSource = segments
+      .slice(0, segments.length - tailSegments.length)
+      .join(", ");
+    const tail = tailSegments.join(", ");
     const headBudget = Math.max(8, maximumWords - bulletWordCount(tail) - 1);
-    const head = shortenClauseToWordBudget(
-      segments.slice(0, -2).join(", ") || segments[0] || "",
-      headBudget,
-      preserve,
-    );
+    const head = shortenClauseToWordBudget(headSource, headBudget, preserve);
     const rebuilt = normalizeBulletSentence(
-      [head, ...segments.slice(-2)].filter(Boolean).join(", "),
+      [head, ...tailSegments].filter(Boolean).join(", "),
     );
     if (
       bulletWordCount(rebuilt) <= maximumWords &&
@@ -412,7 +413,27 @@ export function ensureMaximumBulletWords(
       .slice(0, maximumWords)
       .join(" ");
   }
-  return normalizeBulletSentence(compressed);
+  let result = normalizeBulletSentence(compressed);
+  // normalizeBulletSentence / metric-clause rebuilds can slip one token over;
+  // hard-cap so sentence-strength validation cannot fail closed on length.
+  if (bulletWordCount(result) > maximumWords) {
+    const capped = result
+      .replace(/[.!?]+$/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, maximumWords)
+      .join(" ");
+    result = normalizeBulletSentence(capped);
+  }
+  if (bulletWordCount(result) > maximumWords) {
+    result = `${result
+      .replace(/[.!?]+$/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, maximumWords)
+      .join(" ")}.`;
+  }
+  return result;
 }
 
 function escapeRegExpLiteral(value: string): string {
