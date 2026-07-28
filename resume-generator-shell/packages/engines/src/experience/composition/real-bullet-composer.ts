@@ -256,10 +256,16 @@ export class RealBulletComposer implements BulletComposer {
         (keyword) => !directKeywordRepresented(composed.finalBullet, keyword),
       );
       if (missingDirects.length > 0) {
+        const actionLower = actionClause.toLocaleLowerCase();
         const coveringScopes = missingDirects
           .map((keyword) => substantiveKeyword(keyword))
           .filter(
-            (scope) => Boolean(scope) && !isJdMarketingOrMetaScope(scope),
+            (scope) =>
+              Boolean(scope) &&
+              !isJdMarketingOrMetaScope(scope) &&
+              !/\bso\s+(?:new|that)\b/i.test(scope) &&
+              !/\bmarkets?\s+can\b/i.test(scope) &&
+              !actionLower.includes(scope.toLocaleLowerCase()),
           );
         if (coveringScopes.length > 0) {
           actionClause = `${actionClause.replace(/[.!?]+$/g, "")} covering ${coveringScopes.join(" and ")}`;

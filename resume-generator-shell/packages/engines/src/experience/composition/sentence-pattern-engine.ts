@@ -422,9 +422,32 @@ export class SentencePatternEngine {
     const base =
       candidates.find((candidate) => candidate.sentencePattern === preferredPattern)
         ?.finalBullet ?? candidates[0]?.finalBullet ?? "";
+    const fallbackEndings = [
+      "improving delivery predictability for product and engineering stakeholders",
+      "strengthening cross-team execution with product partners",
+      "advancing stakeholder alignment across product and platform teams",
+      "supporting clearer delivery outcomes for engineering partners",
+    ] as const;
+    const endingSeed = Math.abs(
+      [...input.plan.bulletId].reduce((hash, char) => hash + char.charCodeAt(0), 0),
+    );
+    let ending =
+      fallbackEndings[endingSeed % fallbackEndings.length] ??
+      fallbackEndings[0]!;
+    for (let offset = 0; offset < fallbackEndings.length; offset += 1) {
+      const candidate =
+        fallbackEndings[(endingSeed + offset) % fallbackEndings.length]!;
+      const skeleton = endingSkeleton(
+        `${base.replace(/[.!?]+$/g, "")}, enabling ${candidate}`,
+      );
+      if (!input.usedEndingSkeletons?.has(skeleton)) {
+        ending = candidate;
+        break;
+      }
+    }
     return {
       finalBullet: compressToMaximumWords(
-        `${base.replace(/[.!?]+$/g, "")}, enabling stronger delivery outcomes for product and engineering stakeholders`,
+        `${base.replace(/[.!?]+$/g, "")}, enabling ${ending}`,
         input.maximumWords,
         preserve,
       ),

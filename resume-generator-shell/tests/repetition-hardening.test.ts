@@ -114,6 +114,31 @@ describe("repetition hardening", () => {
     ).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
   });
 
+  it("scrubs imperative echoes, em-dash JD glue, and duplicated scopes from bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Implemented standardize market launches — build repeatable infrastructure provisioning so new using go through delivery planning covering repeatable infrastructure provisioning so new markets can to strengthen integration reliability, reducing manual processing effort by 29%.",
+      ),
+    ).not.toMatch(
+      /standardize|—|using go through|covering repeatable|markets can to|so new/i,
+    );
+    expect(
+      normalizeBulletSentence(
+        "Secured harden security posture with cloud security posture through access controls, reducing security findings by 38%.",
+      ),
+    ).not.toMatch(/\bharden\b|security posture with cloud security posture/i);
+    expect(
+      normalizeBulletSentence(
+        "Accelerated accelerate inference performance and reduce latency through profiling, reducing latency by 42%.",
+      ),
+    ).not.toMatch(/\bAccelerated accelerate\b|\band reduce\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Stabilized orchestrate security mindset — experience with access control best through penetration testing, delivering a 28% reduction in incident detection time.",
+      ),
+    ).not.toMatch(/\borchestrate\b|experience with|best through|—/i);
+  });
+
   it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {
     const jobDescription = createJobDescription(
       `Senior Machine Learning Engineer

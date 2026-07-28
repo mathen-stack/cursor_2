@@ -383,6 +383,84 @@ export function stripIntraBulletRepetition(sentence: string): string {
     "$1$2 capability building",
   );
 
+  // Past-tense verb + same-stem / related infinitive object.
+  // e.g. "Accelerated accelerate inference" or "Secured harden security".
+  text = text.replace(
+    /^([A-Za-z][A-Za-z-]*)\s+([a-z][a-z-]*)\b/,
+    (match, verb: string, next: string) => {
+      const verbStem = actionVerbStem(verb);
+      const nextStem = actionVerbStem(next);
+      if (verbStem && nextStem && verbStem === nextStem) {
+        return verb;
+      }
+      if (
+        /^(?:secur|harden)$/i.test(verbStem) &&
+        /^(?:secur|harden)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:implement|standard|build)$/i.test(verbStem) &&
+        /^(?:implement|standard|build)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      if (
+        /^(?:stabil|orchestr)$/i.test(verbStem) &&
+        /^(?:stabil|orchestr)$/i.test(nextStem)
+      ) {
+        return verb;
+      }
+      return match;
+    },
+  );
+
+  // Strip leftover leading infinitives after the allocated past-tense verb.
+  text = text.replace(
+    /^([A-Z][A-Za-z-]*)\s+(?:standardize|harden|orchestrate|accelerate|instrument|implement|secure|build|design|develop|deploy|optimize|monitor|automate|launch|consolidate|stabilize|reduce|improve|create|establish|validate|streamline|strengthen|transform|modernize)\b/i,
+    "$1",
+  );
+  text = text.replace(
+    /\band\s+(?:standardize|harden|orchestrate|accelerate|implement|secure)\b(?=\s*(?:through|using|,|$))/gi,
+    "",
+  );
+  // Parallel JD imperatives glued into one scope: "performance and reduce latency".
+  text = text.replace(
+    /\band\s+(?:reduce|improve|increase|decrease|enhance)\s+[A-Za-z][\w.+#/-]*(?:\s+[A-Za-z][\w.+#/-]*){0,3}(?=\s*(?:through|using|,|$))/gi,
+    "",
+  );
+
+  // "security posture with cloud security posture" → "cloud security posture"
+  text = text.replace(
+    /\b((?:[A-Za-z][\w.+#/-]*\s+){0,3}[A-Za-z][\w.+#/-]*)\s+with\s+((?:[A-Za-z][\w.+#/-]*\s+){0,2})\1\b/gi,
+    "$2$1",
+  );
+
+  // Em-dash JD glue and "experience with" remnants.
+  text = text.replace(/\s*[–—]\s+(?:build|design|develop|secure|experience|orchestrate|implement)\b[^,]*/gi, "");
+  text = text.replace(/\bexperience with\b/gi, "");
+  text = text.replace(/\bbest through\b/gi, "through");
+  text = text.replace(/\busing go through\b/gi, "through");
+  text = text.replace(/\bgo through\b/gi, "");
+  text = text.replace(/\bcan to\b/gi, "to");
+  text = text.replace(/\bso new(?:\s+markets?(?:\s+can)?)?\b/gi, "");
+  text = text.replace(/\bmarkets?\s+can\b/gi, "");
+
+  // Drop a covering clause that restates text already present earlier.
+  text = text.replace(
+    /\bcovering\s+([^,]+?)(?=,|\s+(?:to|using|through)\b|$)/gi,
+    (full, covered: string) => {
+      const idx = text.toLocaleLowerCase().indexOf(full.toLocaleLowerCase());
+      const before = idx >= 0 ? text.slice(0, idx) : "";
+      return before.toLocaleLowerCase().includes(covered.toLocaleLowerCase().trim())
+        ? ""
+        : full;
+    },
+  );
+
+  // Remove the first duplicate of any 4+ word phrase within the bullet.
+  text = dedupeRepeatedPhrases(text);
+
   // "increasing throughput by 2.6x and improving request throughput"
   text = text.replace(
     /\b(increasing|reducing|maintaining|improving|accelerating|shortening)\s+([^,]+?)\s+by\s+(\d+(?:\.\d+)?(?:%|x))\s+and\s+(?:improving|advancing|strengthening)\s+(?:[a-z][a-z0-9+./-]*\s+)?\2\b/gi,
@@ -394,6 +472,33 @@ export function stripIntraBulletRepetition(sentence: string): string {
   );
 
   return text.replace(/\s+/g, " ").replace(/\s+,/g, ",").replace(/,\s*,+/g, ", ").trim();
+}
+
+function dedupeRepeatedPhrases(sentence: string): string {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length < 8) {
+    return sentence;
+  }
+  for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
+    for (let start = 0; start + length * 2 <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ").toLocaleLowerCase();
+      if (phrase.split(/\s+/).length < 4) {
+        continue;
+      }
+      for (
+        let next = start + length;
+        next + length <= words.length;
+        next += 1
+      ) {
+        const other = words.slice(next, next + length).join(" ").toLocaleLowerCase();
+        if (other === phrase) {
+          words.splice(next, length);
+          return dedupeRepeatedPhrases(words.join(" "));
+        }
+      }
+    }
+  }
+  return words.join(" ");
 }
 
 export function substantiveKeyword(keyword: string): string {

@@ -20,7 +20,7 @@ export interface DirectKeywordSelection {
   controlledReuse: string[];
 }
 
-const LEADING_NOISE = /^(?:(?:you(?:'ll| will)?|the successful candidate(?: will)?|this role(?: will)?|responsible for|must|should|will|required to|expected to)\s+)?(?:architect|automate|build|collaborate|communicate|coordinate|conduct|create|define|deliver|deploy|design|develop|drive|ensure|establish|evaluate|implement|improve|integrate|lead|maintain|manage|mentor|monitor|optimize|own|partner|perform|present|productionize|reduce|scale|secure|support|test|translate|troubleshoot)(?:s|ed|ing)?\s+(?:with\s+|on\s+|for\s+|to\s+)?/i;
+const LEADING_NOISE = /^(?:(?:you(?:'ll| will)?|the successful candidate(?: will)?|this role(?: will)?|responsible for|must|should|will|required to|expected to)\s+)?(?:accelerat|architect|automat|build|collaborat|communicat|consolidat|coordinat|conduct|creat|defin|deliver|deploy|design|develop|driv|ensur|establish|evaluat|facilitat|harden|implement|improv|instrument|integrat|launch|lead|maintain|manag|mentor|moderniz|monitor|optimiz|orchestrat|own|partner|perform|present|productioniz|reduc|scal|secur|stabiliz|standardiz|streamlin|strengthen|support|test|translat|transform|troubleshoot|tun|validat)(?:e|es|ed|ing|s)?\s+(?:with\s+|on\s+|for\s+|to\s+)?/i;
 
 const DANGLING_TAIL = /^(?:a|an|and|as|at|by|for|from|in|into|of|on|or|the|to|with|using|via|across|through|over|under|between|within|without|per|vs|versus)$/i;
 
@@ -49,7 +49,17 @@ function cleanMatchedText(value: string): string {
 }
 
 function finalizeKeywordPhrase(value: string): string | null {
-  const words = cleanMatchedText(value)
+  // Prefer the left-hand clause of em-dash JD banners before word capping so we
+  // do not allocate glued imperative pairs as one action object.
+  const withoutDashClause = cleanMatchedText(value)
+    .split(/\s*[–—-]\s+/)[0]
+    ?.replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .trim() ?? cleanMatchedText(value);
+
+  const words = withoutDashClause
     .split(/\s+/)
     .map((word) =>
       word
@@ -60,6 +70,19 @@ function finalizeKeywordPhrase(value: string): string | null {
     .slice(0, 8);
   while (words.length > 0 && DANGLING_TAIL.test(words[words.length - 1] ?? "")) {
     words.pop();
+  }
+  // Truncated JD tails such as "so new markets can" create broken bullets.
+  while (
+    words.length > 0 &&
+    /^(?:so|new|markets?|can|that|quickly|launch(?:es|ed|ing)?)$/i.test(
+      words[words.length - 1] ?? "",
+    )
+  ) {
+    const tail = words[words.length - 1] ?? "";
+    words.pop();
+    if (/^so$/i.test(tail)) {
+      break;
+    }
   }
   // Soft-skill JD lines often include adverbs that sentence normalization later
   // removes as weak filler; drop them from allocated keywords up front.
@@ -115,6 +138,14 @@ function finalizeKeywordPhrase(value: string): string | null {
   if (
     /\b(?:connects|enables|helps|allows|provides|offers)\b/i.test(finalized) &&
     finalized.split(/\s+/).length >= 5
+  ) {
+    return null;
+  }
+  // Reject incomplete truncated fragments that cannot form a noun scope alone.
+  if (
+    /\bso\s+(?:new|that)\b/i.test(finalized) ||
+    /\bmarkets?\s+can\b/i.test(finalized) ||
+    /\bcan$/i.test(finalized)
   ) {
     return null;
   }
