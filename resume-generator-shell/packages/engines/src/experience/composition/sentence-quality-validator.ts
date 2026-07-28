@@ -30,16 +30,14 @@ function startsWithVerb(text: string, verb: string): boolean {
 }
 
 function allSupportingUsed(text: string, keywordPackage: KeywordPackage): boolean {
-  const lower = stripFirstPersonPronouns(text).toLocaleLowerCase();
   return keywordPackage.supportingKeywords.every((keyword) =>
-    lower.includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
+    directKeywordRepresented(text, keyword),
   );
 }
 
 function allOutcomesUsed(text: string, keywordPackage: KeywordPackage): boolean {
-  const lower = stripFirstPersonPronouns(text).toLocaleLowerCase();
   return keywordPackage.outcomeKeywords.every((keyword) =>
-    lower.includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
+    directKeywordRepresented(text, keyword),
   );
 }
 

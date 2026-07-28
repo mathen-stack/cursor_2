@@ -50,6 +50,7 @@ export function collectExperienceKeywordHints(input: {
     bullets: ReadonlyArray<{
       directKeywords: readonly string[];
       supportingKeywords: readonly string[];
+      outcomeKeywords?: readonly string[];
       finalBullet: string;
     }>;
   }>;
@@ -61,6 +62,8 @@ export function collectExperienceKeywordHints(input: {
       for (const keyword of [
         ...bullet.directKeywords,
         ...bullet.supportingKeywords,
+        ...(bullet.outcomeKeywords ?? []),
+        bullet.finalBullet,
       ]) {
         const cleaned = keyword.replace(/\s+/g, " ").trim();
         const key = cleaned.toLocaleLowerCase();

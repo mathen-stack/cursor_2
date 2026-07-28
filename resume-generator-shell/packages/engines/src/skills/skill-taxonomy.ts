@@ -40,7 +40,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "HTML", name: "HTML", category: "Programming Languages", aliases: ["HTML"], caseSensitive: true },
   { key: "CSS", name: "CSS", category: "Programming Languages", aliases: ["CSS"], caseSensitive: true },
 
-  { key: "MACHINE_LEARNING", name: "Machine Learning", category: "AI & Machine Learning", aliases: ["machine learning", "ML models", "ML model"] },
+  { key: "MACHINE_LEARNING", name: "Machine Learning", category: "AI & Machine Learning", aliases: ["machine learning", "machine learning models", "scalable machine learning models", "ML models", "ML model"] },
   { key: "DEEP_LEARNING", name: "Deep Learning", category: "AI & Machine Learning", aliases: ["deep learning", "neural networks", "neural network"] },
   { key: "NLP", name: "Natural Language Processing", category: "AI & Machine Learning", aliases: ["natural language processing", "NLP"] },
   { key: "COMPUTER_VISION", name: "Computer Vision", category: "AI & Machine Learning", aliases: ["computer vision"] },
@@ -81,9 +81,9 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
 
   { key: "MLOPS", name: "MLOps", category: "MLOps & Model Operations", aliases: ["MLOps", "ML Ops"] },
   { key: "MLFLOW", name: "MLflow", category: "MLOps & Model Operations", aliases: ["MLflow"] },
-  { key: "MODEL_DEPLOYMENT", name: "Model Deployment", category: "MLOps & Model Operations", aliases: ["model deployment", "deploy models", "deploy machine learning models", "productionize models"] },
-  { key: "MODEL_MONITORING", name: "Model Monitoring", category: "MLOps & Model Operations", aliases: ["model monitoring", "monitor models", "monitoring model performance"] },
-  { key: "MODEL_SERVING", name: "Model Serving", category: "MLOps & Model Operations", aliases: ["model serving", "inference serving", "serving models"] },
+  { key: "MODEL_DEPLOYMENT", name: "Model Deployment", category: "MLOps & Model Operations", aliases: ["model deployment", "deploy models", "deploy machine learning models", "deploy scalable machine learning models", "build and deploy scalable machine learning models", "productionize models"] },
+  { key: "MODEL_MONITORING", name: "Model Monitoring", category: "MLOps & Model Operations", aliases: ["model monitoring", "monitor models", "monitoring model performance", "monitor production model performance"] },
+  { key: "MODEL_SERVING", name: "Model Serving", category: "MLOps & Model Operations", aliases: ["model serving", "inference serving", "serving models", "inference performance", "improve inference performance", "inference latency"] },
   { key: "DRIFT_DETECTION", name: "Drift Detection", category: "MLOps & Model Operations", aliases: ["drift detection", "data drift", "model drift"] },
   { key: "EXPERIMENT_TRACKING", name: "Experiment Tracking", category: "MLOps & Model Operations", aliases: ["experiment tracking"] },
   { key: "FEATURE_STORES", name: "Feature Stores", category: "MLOps & Model Operations", aliases: ["feature store", "feature stores"] },
@@ -172,15 +172,15 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "SCALABILITY", name: "Scalable Systems", category: "Architecture & Engineering", aliases: ["scalable systems", "scalability", "high-scale"] },
   { key: "RELIABILITY", name: "System Reliability", category: "Architecture & Engineering", aliases: ["system reliability", "reliable systems", "reliability"] },
   { key: "HIGH_AVAILABILITY", name: "High Availability", category: "Architecture & Engineering", aliases: ["high availability", "highly available"] },
-  { key: "PERFORMANCE_OPTIMIZATION", name: "Performance Optimization", category: "Architecture & Engineering", aliases: ["performance optimization", "optimize performance", "improve performance"] },
+  { key: "PERFORMANCE_OPTIMIZATION", name: "Performance Optimization", category: "Architecture & Engineering", aliases: ["performance optimization", "optimize performance", "improve performance", "improve inference performance", "inference performance"] },
 
   { key: "AGILE", name: "Agile Delivery", category: "Leadership & Delivery", aliases: ["Agile", "Agile delivery"] },
   { key: "SCRUM", name: "Scrum", category: "Leadership & Delivery", aliases: ["Scrum"] },
-  { key: "TECHNICAL_LEADERSHIP", name: "Technical Leadership", category: "Leadership & Delivery", aliases: ["technical leadership", "lead technical", "technical lead"] },
+  { key: "TECHNICAL_LEADERSHIP", name: "Technical Leadership", category: "Leadership & Delivery", aliases: ["technical leadership", "lead technical", "technical lead", "architecture decisions", "communicate architecture decisions", "technical strategy"] },
   { key: "MENTORING", name: "Mentoring", category: "Leadership & Delivery", aliases: ["mentor engineers", "mentoring", "mentor team members"] },
-  { key: "STAKEHOLDER_MANAGEMENT", name: "Stakeholder Management", category: "Leadership & Delivery", aliases: ["stakeholder management", "manage stakeholders", "stakeholder communication"] },
-  { key: "CROSS_FUNCTIONAL", name: "Cross-Functional Collaboration", category: "Leadership & Delivery", aliases: ["cross-functional collaboration", "cross functional collaboration", "collaborate with product", "partner with product"] },
-  { key: "REQUIREMENTS_GATHERING", name: "Requirements Gathering", category: "Leadership & Delivery", aliases: ["requirements gathering", "gather requirements", "translate business requirements"] },
+  { key: "STAKEHOLDER_MANAGEMENT", name: "Stakeholder Management", category: "Leadership & Delivery", aliases: ["stakeholder management", "manage stakeholders", "stakeholder communication", "non-technical stakeholders", "technical and non-technical stakeholders", "product stakeholders"] },
+  { key: "CROSS_FUNCTIONAL", name: "Cross-Functional Collaboration", category: "Leadership & Delivery", aliases: ["cross-functional collaboration", "cross functional collaboration", "collaborate with product", "partner with product", "collaborate with product, data, and platform", "product, data, and platform teams", "platform teams"] },
+  { key: "REQUIREMENTS_GATHERING", name: "Requirements Gathering", category: "Leadership & Delivery", aliases: ["requirements gathering", "gather requirements", "translate business requirements", "business requirements"] },
   { key: "TECHNICAL_DOCUMENTATION", name: "Technical Documentation", category: "Leadership & Delivery", aliases: ["technical documentation", "document technical decisions", "documentation"] },
 ];
 
@@ -201,6 +201,8 @@ export const SKILL_INFERENCE_RULES: SkillInferenceRule[] = [
   { triggerKeys: ["MLFLOW"], inferredKey: "EXPERIMENT_TRACKING", rationale: "MLflow directly supports experiment tracking." },
   { triggerKeys: ["MODEL_DEPLOYMENT"], inferredKey: "MLOPS", rationale: "Production model deployment is a core MLOps capability." },
   { triggerKeys: ["MODEL_MONITORING"], inferredKey: "MLOPS", rationale: "Production model monitoring is a core MLOps capability." },
+  { triggerKeys: ["MODEL_SERVING"], inferredKey: "MODEL_DEPLOYMENT", rationale: "Inference/serving work strongly implies production model deployment." },
+  { triggerKeys: ["MODEL_MONITORING"], inferredKey: "OBSERVABILITY", rationale: "Production model monitoring is an observability practice." },
   { triggerKeys: ["DATA_PIPELINES"], inferredKey: "ETL_ELT", rationale: "Building data pipelines strongly implies ETL/ELT practices." },
   { triggerKeys: ["KAFKA"], inferredKey: "STREAMING_DATA", rationale: "Kafka directly supports streaming-data architectures." },
   { triggerKeys: ["SPARK"], inferredKey: "DISTRIBUTED_DATA_PROCESSING", rationale: "Spark directly supports distributed data processing." },
@@ -208,6 +210,7 @@ export const SKILL_INFERENCE_RULES: SkillInferenceRule[] = [
   { triggerKeys: ["CI_CD"], inferredKey: "DEPLOYMENT_AUTOMATION", rationale: "CI/CD directly implies deployment automation." },
   { triggerKeys: ["PROMETHEUS", "GRAFANA", "OPENTELEMETRY"], inferredKey: "OBSERVABILITY", rationale: "Observability tools directly support production observability." },
   { triggerKeys: ["DISTRIBUTED_SYSTEMS"], inferredKey: "SCALABILITY", rationale: "Distributed-system design strongly implies scalability engineering." },
+  { triggerKeys: ["PERFORMANCE_OPTIMIZATION"], inferredKey: "RELIABILITY", rationale: "Performance optimization work strengthens system reliability outcomes." },
 ];
 
 export const SKILL_DEFINITION_BY_KEY = new Map(

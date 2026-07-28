@@ -133,6 +133,7 @@ export class ResumeOrchestrator {
         for (const keyword of [
           ...bullet.directKeywords,
           ...bullet.supportingKeywords,
+          ...bullet.outcomeKeywords,
           bullet.finalBullet,
         ]) {
           const cleaned = keyword.replace(/\s+/g, " ").trim();

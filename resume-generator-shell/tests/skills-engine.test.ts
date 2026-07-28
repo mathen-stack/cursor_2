@@ -168,4 +168,29 @@ Python and REST APIs are required for production delivery.`;
     );
     expect(withoutEvidence.validation.experienceEvidencedSkillCount).toBe(0);
   });
+
+  it("surfaces relevant SAMPLE_JD keywords in the Skills section", async () => {
+    const output = await createProductionSkillsEngine().execute(input(ML_JD, "RELEVANT"));
+    const names = new Set(output.skills.map((skill) => skill.name));
+
+    expect(output.status).toBe("approved");
+    for (const required of [
+      "Python",
+      "Docker",
+      "Kubernetes",
+      "MLflow",
+      "AWS",
+      "Machine Learning",
+      "Model Monitoring",
+      "CI/CD",
+      "Distributed Systems",
+      "Model Serving",
+      "Model Deployment",
+      "Technical Leadership",
+      "Stakeholder Management",
+      "Performance Optimization",
+    ]) {
+      expect(names.has(required)).toBe(true);
+    }
+  });
 });

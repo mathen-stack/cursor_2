@@ -697,8 +697,13 @@ export function stripIntraBulletRepetition(sentence: string): string {
   );
 
   // Strip leftover leading infinitives after the allocated past-tense verb.
+  // Keep ambiguous noun/verb tokens like "design reviews" / "solution design".
   text = text.replace(
-    /^([A-Z][A-Za-z-]*)\s+(?:standardize|harden|orchestrate|accelerate|instrument|implement|secure|build|design|develop|deploy|optimize|monitor|automate|launch|consolidate|stabilize|reduce|improve|create|establish|validate|streamline|strengthen|transform|modernize)\b/i,
+    /^([A-Z][A-Za-z-]*)\s+(?:standardize|harden|orchestrate|accelerate|instrument|implement|secure|automate|launch|consolidate|stabilize|establish|validate|streamline|strengthen|transform|modernize)\b/i,
+    "$1",
+  );
+  text = text.replace(
+    /^([A-Z][A-Za-z-]*)\s+(?:build|design|develop|deploy|optimize|monitor|reduce|improve|create)\b(?=\s*(?:through|using|,|$))/i,
     "$1",
   );
   text = text.replace(

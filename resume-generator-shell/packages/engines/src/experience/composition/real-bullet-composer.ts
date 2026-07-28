@@ -11,6 +11,7 @@ import {
   ensureCompositionCommunicationSignal,
   ensureUniqueActionScopeBullet,
   ensureMinimumBulletWords,
+  containsVagueBuzzwords,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   metricAsGerund,
@@ -380,12 +381,79 @@ export class RealBulletComposer implements BulletComposer {
       });
     }
 
+    const syncClaimedKeywords = (
+      draft: ExperienceBullet,
+    ): ExperienceBullet => {
+      const original = packagesByBullet.get(draft.bulletId);
+      if (!original) {
+        return draft;
+      }
+      return {
+        ...draft,
+        directKeywords: original.directKeywords.filter((keyword) =>
+          directKeywordRepresented(draft.finalBullet, keyword),
+        ),
+        supportingKeywords: original.supportingKeywords.filter((keyword) =>
+          directKeywordRepresented(draft.finalBullet, keyword),
+        ),
+        outcomeKeywords: original.outcomeKeywords.filter((keyword) =>
+          draft.finalBullet
+            .toLocaleLowerCase()
+            .includes(stripFirstPersonPronouns(keyword).toLocaleLowerCase()),
+        ),
+      };
+    };
+
+    const restoreMissingSupport = (
+      draft: ExperienceBullet,
+    ): ExperienceBullet => {
+      const original = packagesByBullet.get(draft.bulletId);
+      if (!original) {
+        return draft;
+      }
+      let finalBullet = draft.finalBullet;
+      const missingSupport = original.supportingKeywords
+        .map((keyword) => stripFirstPersonPronouns(keyword))
+        .filter(
+          (keyword) =>
+            Boolean(keyword) &&
+            !isJdMarketingOrMetaScope(keyword) &&
+            !containsVagueBuzzwords(keyword) &&
+            !directKeywordRepresented(finalBullet, keyword),
+        );
+      if (missingSupport.length === 0) {
+        return draft;
+      }
+      const base = finalBullet.replace(/[.!?]+$/g, "").trim();
+      const supportClause = joinNatural(missingSupport.slice(0, 2));
+      if (/\b(?:using|through)\b/i.test(base)) {
+        finalBullet = repairBrokenBulletWording(`${base} and ${supportClause}`);
+      } else {
+        const split = base.match(
+          /^(.*?)(,\s*(?:increasing|reducing|maintaining|improving|delivering|accelerating|shortening|while|that improved|enabling)\b.*)$/i,
+        );
+        finalBullet = repairBrokenBulletWording(
+          split
+            ? `${split[1]} through ${supportClause}${split[2]}`
+            : `${base} through ${supportClause}`,
+        );
+      }
+      return {
+        ...draft,
+        finalBullet: ensureMinimumBulletWords(
+          finalBullet,
+          minimumWords,
+          draft.bulletId,
+        ),
+      };
+    };
+
     // Document-wide: rewrite colliding multi-word action scopes before validation.
     const usedActionScopeKeys = new Set<string>();
     const minimumWords = this.sentenceQualityValidator.minimumWords;
     for (let index = 0; index < drafts.length; index += 1) {
       const draft = drafts[index]!;
-      drafts[index] = {
+      drafts[index] = restoreMissingSupport({
         ...draft,
         finalBullet: ensureUniqueActionScopeBullet({
           finalBullet: draft.finalBullet,
@@ -394,7 +462,22 @@ export class RealBulletComposer implements BulletComposer {
           usedScopeKeys: usedActionScopeKeys,
           minimumWords,
         }),
-      };
+      });
+    }
+    // Re-uniqueify after support restore, then claim only keywords still present.
+    const finalizedScopeKeys = new Set<string>();
+    for (let index = 0; index < drafts.length; index += 1) {
+      const draft = drafts[index]!;
+      drafts[index] = syncClaimedKeywords({
+        ...draft,
+        finalBullet: ensureUniqueActionScopeBullet({
+          finalBullet: draft.finalBullet,
+          actionVerb: draft.actionVerb,
+          bulletId: draft.bulletId,
+          usedScopeKeys: finalizedScopeKeys,
+          minimumWords,
+        }),
+      });
     }
 
     let validation = validateBulletComposition({
@@ -417,13 +500,13 @@ export class RealBulletComposer implements BulletComposer {
       sentenceQualityValidator: this.sentenceQualityValidator,
     });
 
-    // Repair wording/length failures, then re-assert document-wide scope uniqueness.
+    // Repair wording/length/coverage failures, then re-assert document-wide uniqueness.
     if (validation.overallStatus !== "approved") {
       const failingIds = new Set(
         validation.diagnostics
           .filter((item) =>
             item.errors.some((error) =>
-              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language|personal pronoun|first-person/i.test(
+              /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|buzzword|filler|weak language|personal pronoun|first-person|supporting keywords|outcome keywords|direct JD keyword/i.test(
                 error,
               ),
             ),
@@ -450,10 +533,10 @@ export class RealBulletComposer implements BulletComposer {
             usedScopeKeys: repairedScopeKeys,
             minimumWords,
           });
-          drafts[index] = {
+          drafts[index] = syncClaimedKeywords({
             ...draft,
             finalBullet,
-          };
+          });
         }
         validation = validateBulletComposition({
           plans: input.plans,
