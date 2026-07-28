@@ -379,42 +379,13 @@ export default function ResumeGenerator() {
 
                 <div className="profile-field">
                   <span>Period</span>
-                  <div className="period-inputs">
-                    <input
-                      type="month"
-                      name={`careerStartDate-${entry.experienceId}`}
-                      aria-label="Experience start date"
-                      value={monthInputValue(entry.startDate)}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(index, "startDate", event.target.value)
-                      }
-                    />
-                    <span className="period-separator">-</span>
-                    <input
-                      type="month"
-                      name={`careerEndDate-${entry.experienceId}`}
-                      aria-label="Experience end date"
-                      value={monthInputValue(entry.endDate)}
-                      disabled={/^present$/i.test(entry.endDate.trim())}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(index, "endDate", event.target.value)
-                      }
-                    />
-                  </div>
-                  <label className="period-present">
-                    <input
-                      type="checkbox"
-                      checked={/^present$/i.test(entry.endDate.trim())}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateCareer(
-                          index,
-                          "endDate",
-                          event.target.checked ? "Present" : "",
-                        )
-                      }
-                    />
-                    <span>Present</span>
-                  </label>
+                  <PeriodDateControl
+                    startValue={entry.startDate}
+                    endValue={entry.endDate}
+                    allowPresentEnd
+                    onStartChange={(value) => updateCareer(index, "startDate", value)}
+                    onEndChange={(value) => updateCareer(index, "endDate", value)}
+                  />
                 </div>
               </div>
             </div>
