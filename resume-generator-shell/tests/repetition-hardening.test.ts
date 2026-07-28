@@ -45,6 +45,13 @@ describe("repetition hardening", () => {
         "Deployed",
       ),
     ).toMatch(/^Deployed\s+/);
+    // Comma-led / empty-object openings must still pass startsWithVerb (space after verb).
+    const repaired = ensureAllocatedOpeningVerb(
+      ", reducing delivery cycle time by 24% and improving stakeholder alignment.",
+      "Collaborated",
+    );
+    expect(repaired.toLocaleLowerCase().startsWith("collaborated ")).toBe(true);
+    expect(repaired).toMatch(/^Collaborated\s+\S+/);
   });
 
   it("scrubs vague resume buzzwords into concrete evidence wording", () => {

@@ -14,20 +14,28 @@ interface ServiceGlobal {
 
 const globalService = globalThis as typeof globalThis & ServiceGlobal;
 
-export function getExperienceGenerationService(): ExperienceGenerationService {
-  if (globalService.__resumeExperienceService) {
-    return globalService.__resumeExperienceService;
-  }
-
+function createExperienceGenerationService(): ExperienceGenerationService {
   const modelProvider = loadExperienceModelProviderConfig(process.env);
   const bundle = createProductionExperienceEngine({ modelProvider });
-  const service = new ExperienceGenerationService({
+  return new ExperienceGenerationService({
     engine: bundle.engine,
     providerName: bundle.providerName,
     store: getGenerationRunStore(),
     logger: new ConsoleGenerationLogger(),
   });
+}
 
+export function getExperienceGenerationService(): ExperienceGenerationService {
+  // Match resume-service: avoid stale engine singletons under Next HMR.
+  if (process.env.NODE_ENV !== "production") {
+    return createExperienceGenerationService();
+  }
+
+  if (globalService.__resumeExperienceService) {
+    return globalService.__resumeExperienceService;
+  }
+
+  const service = createExperienceGenerationService();
   globalService.__resumeExperienceService = service;
   return service;
 }

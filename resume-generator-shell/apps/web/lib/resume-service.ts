@@ -18,11 +18,7 @@ interface ResumeServiceGlobal {
 
 const globalService = globalThis as typeof globalThis & ResumeServiceGlobal;
 
-export function getResumeGenerationService(): ResumeGenerationService {
-  if (globalService.__resumeGenerationService) {
-    return globalService.__resumeGenerationService;
-  }
-
+function createResumeGenerationService(): ResumeGenerationService {
   const modelProvider = loadExperienceModelProviderConfig(process.env);
   const experienceBundle = createProductionExperienceEngine({
     modelProvider,
@@ -36,10 +32,25 @@ export function getResumeGenerationService(): ResumeGenerationService {
     },
     new ImmutableFinalResumeAssembler(),
   );
-  const service = new ResumeGenerationService(orchestrator, {
+  return new ResumeGenerationService(orchestrator, {
     store: getGenerationRunStore(),
     providerName: experienceBundle.providerName,
   });
+}
+
+export function getResumeGenerationService(): ResumeGenerationService {
+  // In development, never reuse a process-global singleton. Next HMR can leave
+  // stale engine instances on globalThis after @resume/engines edits, which
+  // surfaces as already-fixed composition validation failures in the UI.
+  if (process.env.NODE_ENV !== "production") {
+    return createResumeGenerationService();
+  }
+
+  if (globalService.__resumeGenerationService) {
+    return globalService.__resumeGenerationService;
+  }
+
+  const service = createResumeGenerationService();
   globalService.__resumeGenerationService = service;
   return service;
 }

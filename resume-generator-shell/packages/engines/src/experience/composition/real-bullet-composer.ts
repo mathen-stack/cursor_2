@@ -375,7 +375,10 @@ export class RealBulletComposer implements BulletComposer {
         directKeywords: representedDirectKeywords,
         supportingKeywords: representedSupportingKeywords,
         outcomeKeywords: representedOutcomeKeywords,
-        finalBullet: composed.finalBullet,
+        finalBullet: ensureAllocatedOpeningVerb(
+          composed.finalBullet,
+          keywordPackage.actionVerb,
+        ),
         strengthScore: 0,
         distinctivenessScore: 0,
         status: "approved",
@@ -538,6 +541,66 @@ export class RealBulletComposer implements BulletComposer {
               actionVerb: draft.actionVerb,
               bulletId: draft.bulletId,
               usedScopeKeys: repairedScopeKeys,
+              minimumWords,
+            }),
+            draft.actionVerb,
+          );
+          drafts[index] = syncClaimedKeywords({
+            ...draft,
+            finalBullet,
+          });
+        }
+        validation = validateBulletComposition({
+          plans: input.plans,
+          keywordPackages: drafts.map((bullet) => {
+            const original = packagesByBullet.get(bullet.bulletId);
+            if (!original) {
+              throw new Error(`Missing keyword package for composed bullet ${bullet.bulletId}.`);
+            }
+            return {
+              ...original,
+              directKeywords: bullet.directKeywords,
+              supportingKeywords: bullet.supportingKeywords,
+              outcomeKeywords: bullet.outcomeKeywords,
+            };
+          }),
+          stories: input.stories,
+          bullets: drafts,
+          patternsByBullet,
+          sentenceQualityValidator: this.sentenceQualityValidator,
+        });
+      }
+    }
+
+    // Last-chance opening-verb repair: uniqueify/normalize can still drop the
+    // allocated verb after the general repair pass. Force-restore before throw.
+    if (validation.overallStatus !== "approved") {
+      const verbFailingIds = new Set(
+        validation.diagnostics
+          .filter((item) =>
+            item.errors.some((error) =>
+              /action verb|active voice/i.test(error),
+            ),
+          )
+          .map((item) => item.bulletId),
+      );
+      if (verbFailingIds.size > 0) {
+        const verbScopeKeys = new Set<string>();
+        for (let index = 0; index < drafts.length; index += 1) {
+          const draft = drafts[index]!;
+          let finalBullet = draft.finalBullet;
+          if (verbFailingIds.has(draft.bulletId)) {
+            finalBullet = ensureAllocatedOpeningVerb(
+              finalBullet,
+              draft.actionVerb,
+            );
+          }
+          finalBullet = ensureAllocatedOpeningVerb(
+            ensureUniqueActionScopeBullet({
+              finalBullet,
+              actionVerb: draft.actionVerb,
+              bulletId: draft.bulletId,
+              usedScopeKeys: verbScopeKeys,
               minimumWords,
             }),
             draft.actionVerb,

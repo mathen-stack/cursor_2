@@ -305,10 +305,25 @@ function escapeRegExpLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function openingVerbPrefix(actionVerb: string): string {
+  return `${actionVerb.replace(/\s+/g, " ").trim().toLocaleLowerCase()} `;
+}
+
+function startsWithAllocatedOpeningVerb(
+  text: string,
+  actionVerb: string,
+): boolean {
+  const verb = actionVerb.replace(/\s+/g, " ").trim();
+  if (!verb) {
+    return true;
+  }
+  return text.toLocaleLowerCase().startsWith(openingVerbPrefix(verb));
+}
+
 /**
  * Forces the bullet to start with its allocated action verb + a concrete object.
- * Uniqueify/repair/support-restore can otherwise leave a comma-led or verb-less
- * opening that fails sentence-strength validation.
+ * Uniqueify/repair/support-restore/normalize can otherwise leave a comma-led or
+ * verb-less opening that fails sentence-strength validation.
  */
 export function ensureAllocatedOpeningVerb(
   text: string,
@@ -335,7 +350,32 @@ export function ensureAllocatedOpeningVerb(
     body = `production delivery outcomes${body}`;
   }
 
-  return normalizeBulletSentence(`${verb} ${body}`);
+  let result = normalizeBulletSentence(`${verb} ${body}`);
+  // normalizeBulletSentence may strip/rewrite the opening; re-assert once.
+  if (!startsWithAllocatedOpeningVerb(result, verb)) {
+    const remainder = result
+      .replace(/^[A-Za-z][A-Za-z-]*\s*/, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    const fallbackBody =
+      remainder && !/^[,;:]/.test(remainder)
+        ? remainder
+        : "production delivery outcomes";
+    result = normalizeBulletSentence(`${verb} ${fallbackBody}`);
+  }
+  if (!startsWithAllocatedOpeningVerb(result, verb)) {
+    const capitalized = `${verb.charAt(0).toUpperCase()}${verb.slice(1)}`;
+    const remainder = result
+      .replace(/^[A-Za-z][A-Za-z-]*\s*/, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    const fallbackBody =
+      remainder && !/^[,;:]/.test(remainder)
+        ? remainder
+        : "production delivery outcomes";
+    return `${capitalized} ${fallbackBody}.`;
+  }
+  return result;
 }
 
 /**
