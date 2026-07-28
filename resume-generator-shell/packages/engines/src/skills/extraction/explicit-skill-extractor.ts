@@ -136,6 +136,47 @@ export class ExplicitSkillExtractor {
       });
     }
 
+    // Sparse JDs with no catalog hits still need grounded seeds so density
+    // backfill can meet the 6-32 skills floor without inventing stack items.
+    if (candidates.length === 0) {
+      const bootstrapPatterns: Array<{
+        key: string;
+        pattern: RegExp;
+      }> = [
+        { key: "SYSTEM_DESIGN", pattern: /\b(?:software\s+)?(?:engineer|developer|engineering)\b/i },
+        { key: "CROSS_FUNCTIONAL", pattern: /\b(?:team|collaborate|partnership|cross[- ]functional)\b/i },
+        { key: "AGILE", pattern: /\b(?:agile|scrum|sprint|delivery)\b/i },
+      ];
+      for (const bootstrap of bootstrapPatterns) {
+        const match = bootstrap.pattern.exec(text);
+        if (!match || typeof match.index !== "number" || !match[0]) {
+          continue;
+        }
+        const definition = SKILL_DEFINITIONS.find((item) => item.key === bootstrap.key);
+        if (!definition) {
+          continue;
+        }
+        const evidence = [
+          {
+            sourceText: match[0],
+            startIndex: match.index,
+            endIndex: match.index + match[0].length,
+          },
+        ];
+        candidates.push({
+          key: definition.key,
+          name: definition.name,
+          category: definition.category,
+          source: "explicit",
+          priority: "high",
+          score: 70,
+          evidence,
+          inferredFrom: [],
+          mentionCount: 1,
+        });
+      }
+    }
+
     return {
       context: input.context,
       candidates: candidates.sort(

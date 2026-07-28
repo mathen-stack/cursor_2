@@ -39,6 +39,8 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "BASH", name: "Bash", category: "Programming Languages", aliases: ["Bash", "shell scripting"] },
   { key: "PHP", name: "PHP", category: "Programming Languages", aliases: ["PHP"], caseSensitive: true },
   { key: "RUBY", name: "Ruby", category: "Programming Languages", aliases: ["Ruby"] },
+  { key: "SWIFT", name: "Swift", category: "Programming Languages", aliases: ["Swift"] },
+  { key: "KOTLIN", name: "Kotlin", category: "Programming Languages", aliases: ["Kotlin"] },
   { key: "HTML", name: "HTML", category: "Programming Languages", aliases: ["HTML"], caseSensitive: true },
   { key: "CSS", name: "CSS", category: "Programming Languages", aliases: ["CSS"], caseSensitive: true },
 
@@ -142,6 +144,8 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "BIGQUERY", name: "BigQuery", category: "Databases & Storage", aliases: ["BigQuery"] },
   { key: "REDSHIFT", name: "Amazon Redshift", category: "Databases & Storage", aliases: ["Amazon Redshift", "Redshift"] },
   { key: "VECTOR_DATABASES", name: "Vector Databases", category: "Databases & Storage", aliases: ["vector database", "vector databases", "vector store", "vector stores"] },
+  { key: "EXCEL", name: "Excel", category: "Databases & Storage", aliases: ["Excel", "Microsoft Excel"] },
+  { key: "TABLEAU", name: "Tableau", category: "Databases & Storage", aliases: ["Tableau"] },
 
   { key: "CI_CD", name: "CI/CD", category: "DevOps & CI/CD", aliases: ["CI/CD", "continuous integration", "continuous delivery", "continuous deployment"] },
   { key: "GITHUB_ACTIONS", name: "GitHub Actions", category: "DevOps & CI/CD", aliases: ["GitHub Actions"] },
@@ -167,7 +171,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "HIPAA", name: "HIPAA", category: "Security & Compliance", aliases: ["HIPAA"] },
   { key: "GDPR", name: "GDPR", category: "Security & Compliance", aliases: ["GDPR"] },
 
-  { key: "SYSTEM_DESIGN", name: "System Design", category: "Architecture & Engineering", aliases: ["system design", "systems design", "software engineer", "software engineering"] },
+  { key: "SYSTEM_DESIGN", name: "System Design", category: "Architecture & Engineering", aliases: ["system design", "systems design", "software engineer", "software engineering", "staff software engineer", "product work", "ship great products", "impactful product work"] },
   { key: "DISTRIBUTED_SYSTEMS", name: "Distributed Systems", category: "Architecture & Engineering", aliases: ["distributed systems", "distributed system"] },
   { key: "MICROSERVICES", name: "Microservices", category: "Architecture & Engineering", aliases: ["microservices", "microservice architecture"] },
   { key: "EVENT_DRIVEN", name: "Event-Driven Architecture", category: "Architecture & Engineering", aliases: ["event-driven architecture", "event driven architecture"] },
@@ -182,7 +186,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   { key: "TECHNICAL_LEADERSHIP", name: "Technical Leadership", category: "Leadership & Delivery", aliases: ["technical leadership", "lead technical", "technical lead", "architecture decisions", "communicate architecture decisions", "technical strategy"] },
   { key: "MENTORING", name: "Mentoring", category: "Leadership & Delivery", aliases: ["mentor engineers", "mentoring", "mentor team members"] },
   { key: "STAKEHOLDER_MANAGEMENT", name: "Stakeholder Management", category: "Leadership & Delivery", aliases: ["stakeholder management", "manage stakeholders", "stakeholder communication", "non-technical stakeholders", "technical and non-technical stakeholders", "product stakeholders", "collaborate with stakeholders"] },
-  { key: "CROSS_FUNCTIONAL", name: "Cross-Functional Collaboration", category: "Leadership & Delivery", aliases: ["cross-functional collaboration", "cross functional collaboration", "collaborate with product", "partner with product", "collaborate with product, data, and platform", "product, data, and platform teams", "platform teams", "collaborate with teams", "work with the team", "cross-functional engineering teams"] },
+  { key: "CROSS_FUNCTIONAL", name: "Cross-Functional Collaboration", category: "Leadership & Delivery", aliases: ["cross-functional collaboration", "cross functional collaboration", "collaborate with product", "partner with product", "collaborate with product, data, and platform", "product, data, and platform teams", "platform teams", "collaborate with teams", "work with the team", "cross-functional engineering teams", "join our team", "grow with us"] },
   { key: "REQUIREMENTS_GATHERING", name: "Requirements Gathering", category: "Leadership & Delivery", aliases: ["requirements gathering", "gather requirements", "translate business requirements", "business requirements"] },
   { key: "TECHNICAL_DOCUMENTATION", name: "Technical Documentation", category: "Leadership & Delivery", aliases: ["technical documentation", "document technical decisions", "documentation"] },
 ];
@@ -192,6 +196,44 @@ export interface SkillInferenceRule {
   inferredKey: string;
   rationale: string;
 }
+
+/**
+ * Universal grounded fillers used when explicit JD skills alone cannot meet
+ * the Skills density floor. Always inferredFrom explicit catalog skills.
+ */
+export const DENSITY_BACKFILL_KEYS = [
+  "SYSTEM_DESIGN",
+  "API_DESIGN",
+  "SCALABILITY",
+  "RELIABILITY",
+  "TECHNICAL_DOCUMENTATION",
+  "CROSS_FUNCTIONAL",
+  "AGILE",
+  "REQUIREMENTS_GATHERING",
+] as const;
+
+const LANGUAGE_DENSITY_TRIGGERS = [
+  "JAVA",
+  "PYTHON",
+  "TYPESCRIPT",
+  "JAVASCRIPT",
+  "GO",
+  "CSHARP",
+  "NODE_JS",
+  "REACT",
+  "PHP",
+  "RUBY",
+  "SCALA",
+  "RUST",
+  "CPP",
+  "R_LANG",
+  "BASH",
+  "HTML",
+  "CSS",
+  "SQL",
+  "SWIFT",
+  "KOTLIN",
+] as const;
 
 export const SKILL_INFERENCE_RULES: SkillInferenceRule[] = [
   { triggerKeys: ["KUBERNETES"], inferredKey: "CONTAINER_ORCHESTRATION", rationale: "Kubernetes directly implies container orchestration." },
@@ -229,12 +271,15 @@ export const SKILL_INFERENCE_RULES: SkillInferenceRule[] = [
   { triggerKeys: ["POSTGRESQL", "MYSQL", "MONGODB", "REDIS"], inferredKey: "SYSTEM_DESIGN", rationale: "Production datastore work commonly requires system design judgment." },
   { triggerKeys: ["POSTGRESQL", "MYSQL", "MONGODB"], inferredKey: "DATA_ENGINEERING", rationale: "Production datastore ownership commonly includes data engineering practices." },
   { triggerKeys: ["POSTGRESQL", "MYSQL", "MONGODB"], inferredKey: "DATA_QUALITY", rationale: "Production datastore ownership commonly includes data quality practices." },
-  { triggerKeys: ["JAVA", "PYTHON", "TYPESCRIPT", "GO", "CSHARP", "NODE_JS", "REACT", "PHP", "RUBY"], inferredKey: "SYSTEM_DESIGN", rationale: "Professional engineering with these stacks commonly requires system design." },
-  { triggerKeys: ["JAVA", "PYTHON", "TYPESCRIPT", "GO", "CSHARP", "NODE_JS", "REACT", "PHP", "RUBY"], inferredKey: "API_DESIGN", rationale: "Professional engineering with these stacks commonly includes API design." },
-  { triggerKeys: ["JAVA", "PYTHON", "TYPESCRIPT", "GO", "CSHARP", "NODE_JS", "REACT", "PHP", "RUBY"], inferredKey: "SCALABILITY", rationale: "Professional engineering with these stacks commonly addresses scalability." },
-  { triggerKeys: ["JAVA", "PYTHON", "TYPESCRIPT", "GO", "CSHARP", "NODE_JS", "REACT", "PHP", "RUBY"], inferredKey: "RELIABILITY", rationale: "Professional engineering with these stacks commonly addresses reliability." },
-  { triggerKeys: ["JAVA", "PYTHON", "TYPESCRIPT", "GO", "CSHARP", "NODE_JS", "REACT", "PHP", "RUBY"], inferredKey: "TECHNICAL_DOCUMENTATION", rationale: "Professional engineering with these stacks commonly includes technical documentation." },
-  { triggerKeys: ["CI_CD"], inferredKey: "DEPLOYMENT_AUTOMATION", rationale: "CI/CD directly implies deployment automation." },
+  { triggerKeys: [...LANGUAGE_DENSITY_TRIGGERS], inferredKey: "SYSTEM_DESIGN", rationale: "Professional engineering with these stacks commonly requires system design." },
+  { triggerKeys: [...LANGUAGE_DENSITY_TRIGGERS], inferredKey: "API_DESIGN", rationale: "Professional engineering with these stacks commonly includes API design." },
+  { triggerKeys: [...LANGUAGE_DENSITY_TRIGGERS], inferredKey: "SCALABILITY", rationale: "Professional engineering with these stacks commonly addresses scalability." },
+  { triggerKeys: [...LANGUAGE_DENSITY_TRIGGERS], inferredKey: "RELIABILITY", rationale: "Professional engineering with these stacks commonly addresses reliability." },
+  { triggerKeys: [...LANGUAGE_DENSITY_TRIGGERS], inferredKey: "TECHNICAL_DOCUMENTATION", rationale: "Professional engineering with these stacks commonly includes technical documentation." },
+  { triggerKeys: ["CI_CD", "JENKINS", "GITHUB_ACTIONS", "GITLAB_CI"], inferredKey: "DEPLOYMENT_AUTOMATION", rationale: "CI/CD tooling directly implies deployment automation." },
+  { triggerKeys: ["JENKINS", "GITHUB_ACTIONS", "GITLAB_CI"], inferredKey: "CI_CD", rationale: "Named CI tools directly imply CI/CD capability." },
+  { triggerKeys: ["BASH", "LINUX"], inferredKey: "CI_CD", rationale: "Shell/Linux operations commonly support CI/CD delivery." },
+  { triggerKeys: ["OAUTH", "OIDC", "IAM"], inferredKey: "SECURITY", rationale: "Identity protocols are application-security capabilities." },
   { triggerKeys: ["PROMETHEUS", "GRAFANA", "OPENTELEMETRY"], inferredKey: "OBSERVABILITY", rationale: "Observability tools directly support production observability." },
   { triggerKeys: ["DISTRIBUTED_SYSTEMS"], inferredKey: "SCALABILITY", rationale: "Distributed-system design strongly implies scalability engineering." },
   { triggerKeys: ["PERFORMANCE_OPTIMIZATION"], inferredKey: "RELIABILITY", rationale: "Performance optimization work strengthens system reliability outcomes." },
@@ -242,6 +287,7 @@ export const SKILL_INFERENCE_RULES: SkillInferenceRule[] = [
   { triggerKeys: ["SYSTEM_DESIGN"], inferredKey: "RELIABILITY", rationale: "System design work commonly addresses reliability concerns." },
   { triggerKeys: ["SYSTEM_DESIGN"], inferredKey: "API_DESIGN", rationale: "System design for services commonly includes API design." },
   { triggerKeys: ["SYSTEM_DESIGN"], inferredKey: "TECHNICAL_DOCUMENTATION", rationale: "System design work commonly includes technical documentation." },
+  { triggerKeys: ["SYSTEM_DESIGN"], inferredKey: "CROSS_FUNCTIONAL", rationale: "System design work commonly includes cross-functional alignment." },
   { triggerKeys: ["TECHNICAL_LEADERSHIP", "MENTORING"], inferredKey: "CROSS_FUNCTIONAL", rationale: "Technical leadership and mentoring imply cross-functional collaboration." },
   { triggerKeys: ["TECHNICAL_LEADERSHIP"], inferredKey: "TECHNICAL_DOCUMENTATION", rationale: "Technical leadership commonly includes documenting decisions." },
   { triggerKeys: ["STAKEHOLDER_MANAGEMENT"], inferredKey: "REQUIREMENTS_GATHERING", rationale: "Stakeholder management strongly implies requirements alignment." },

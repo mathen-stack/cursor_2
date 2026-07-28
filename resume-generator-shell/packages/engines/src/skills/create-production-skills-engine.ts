@@ -21,12 +21,15 @@ export interface ProductionSkillsEngineOptions extends DefaultSkillsEngineOption
 export function createProductionSkillsEngine(
   options: ProductionSkillsEngineOptions = {},
 ): DefaultSkillsEngine {
+  const minimumSkills = options.minimumSkills ?? 6;
   return new DefaultSkillsEngine(
     {
       explicitSkillExtractor: new ExplicitSkillExtractor(),
-      supportingSkillInferenceEngine: new SupportingSkillInferenceEngine(
-        options.inference,
-      ),
+      supportingSkillInferenceEngine: new SupportingSkillInferenceEngine({
+        maximumInferredSkills: 24,
+        minimumSkills,
+        ...options.inference,
+      }),
       skillRankingEngine: new SkillRankingEngine(options.ranking),
       skillsValidator: new SkillsValidator(),
     },

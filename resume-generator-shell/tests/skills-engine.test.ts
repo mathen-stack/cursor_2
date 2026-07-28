@@ -249,4 +249,25 @@ Deliver production outcomes with strong engineering standards across teams.`;
       expect(output.validation.inferredSkillsGrounded).toBe(true);
     }
   });
+
+  it("fills frequently failing thin stacks like Bash/Linux to the density floor", async () => {
+    const thinStacks = [
+      "DevOps role needing Bash and Linux scripting skills for production delivery.",
+      "API engineer. GraphQL experience required for product services delivery.",
+      "Backend engineer with Redis caching experience required for scale.",
+      "Security-minded engineer. OAuth and OIDC experience required for apps.",
+      "Systems engineer. Rust experience is required for low-level systems work.",
+      "Cloud engineer with AWS and Azure experience preferred for platform work.",
+    ];
+
+    for (const [index, jdText] of thinStacks.entries()) {
+      const output = await createProductionSkillsEngine().execute(
+        input(jdText, `THIN-${index}`),
+      );
+      expect(output.status).toBe("approved");
+      expect(output.skills.length).toBeGreaterThanOrEqual(6);
+      expect(output.validation.skillDensityApproved).toBe(true);
+      expect(output.validation.inferredSkillsGrounded).toBe(true);
+    }
+  });
 });
