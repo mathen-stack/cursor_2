@@ -114,6 +114,21 @@ function pickUniqueValue(input: {
   return Math.min(input.maximum, Math.max(input.minimum, value + step));
 }
 
+const EMERGENCY_MEASURES = [
+  "delivery lead time",
+  "operational toil",
+  "handoff delays",
+  "change failure rate",
+  "mean recovery time",
+  "coordination overhead",
+  "rework volume",
+  "capacity headroom",
+  "release risk",
+  "manual intervention rate",
+  "support escalation rate",
+  "queue wait time",
+] as const;
+
 export class MetricGenerationEngine {
   generate(input: {
     jobDescription: JobDescription;
@@ -184,6 +199,7 @@ export class MetricGenerationEngine {
         ...Object.values(STAR_DIMENSION_PROFILES).flatMap((entry) =>
           entry.metricProfiles.map((candidate) => candidate.label),
         ),
+        ...EMERGENCY_MEASURES,
         `${input.plan.achievementTheme} outcomes`,
         `${input.plan.roleFocusArea || "delivery"} results`,
         outcome,
@@ -197,7 +213,19 @@ export class MetricGenerationEngine {
         fallbacks.find((candidate) =>
           isMeasureAvailable(candidate, input.usedMetricPatternKeys),
         ) ??
-        `${input.plan.bulletId.toLowerCase()} delivery outcome`;
+        EMERGENCY_MEASURES.find((candidate) =>
+          isMeasureAvailable(candidate, input.usedMetricPatternKeys),
+        ) ??
+        `operational outcome ${
+          (Math.abs(
+            [...input.plan.bulletId].reduce(
+              (hash, char) => hash + char.charCodeAt(0),
+              0,
+            ),
+          ) %
+            50) +
+          1
+        }`;
     }
 
     const direction =

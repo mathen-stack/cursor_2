@@ -78,10 +78,13 @@ export function metricFingerprint(value: string): string {
 }
 
 export function hasIntraBulletVerbEcho(value: string): boolean {
+  // Match conjugated action verbs only — `\w*` falsely flags noun pairs like
+  // "release automation and rollback automation".
   return (
-    /\bCoordinat\w*\b[^.]*\bcoordination\b/i.test(value) ||
-    /\bAlign\w*\b[^.]*\balignment\b/i.test(value) ||
-    /\bAutomat\w*\b[^.]*\bautomation\b/i.test(value)
+    /\bCoordinat(?:e|es|ed|ing)\b[^.]*\bcoordination\b/i.test(value) ||
+    /\bAlign(?:s|ed|ing)?\b[^.]*\balignment\b/i.test(value) ||
+    /\bAutomat(?:e|es|ed|ing)\b[^.]*\bautomation\b/i.test(value) ||
+    /\bMentor(?:s|ed|ing)?\b[^.]*\bmentoring\b/i.test(value)
   );
 }
 
@@ -125,6 +128,9 @@ export function atsLanguageErrors(value: string): string[] {
     errors.push("Contains vague resume buzzwords that should be replaced with concrete evidence.");
   }
   if (PASSIVE.test(value)) errors.push("Uses avoidable passive voice.");
+  if (/\bexp-\d+-b-\d+\b/i.test(value)) {
+    errors.push("Contains an internal bullet identifier instead of concrete work scope.");
+  }
   if (!/^[A-Z][A-Za-z-]+\s/.test(value)) errors.push("Does not begin with a clear action verb.");
   if (!value.endsWith(".")) errors.push("Does not end with a period.");
   if (/[;!?]/.test(value)) errors.push("Uses punctuation that weakens ATS scanability.");

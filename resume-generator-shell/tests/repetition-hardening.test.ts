@@ -5,6 +5,7 @@ import {
   isJdMarketingOrMetaScope,
   normalizeBulletSentence,
   stripIntraBulletRepetition,
+  substantiveKeyword,
 } from "@resume/engines";
 
 const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
@@ -57,6 +58,28 @@ describe("repetition hardening", () => {
         "Facilitated communication skills across engineering partners, reducing handoff delays by 22%",
       ),
     ).toMatch(/stakeholder communication/i);
+  });
+
+  it("strips internal bullet identifiers and experience-with prefixes from visible text", () => {
+    expect(
+      normalizeBulletSentence(
+        "Instrumented incident response and observability for exp-002-b-001, maintaining 99.91% service availability.",
+      ),
+    ).not.toMatch(/\bexp-\d+-b-\d+\b/i);
+    expect(
+      substantiveKeyword("Experience with AWS"),
+    ).toBe("AWS");
+    expect(
+      substantiveKeyword("collaborate with product stakeholders"),
+    ).toBe("product stakeholders");
+    expect(
+      substantiveKeyword("collaborate with teams"),
+    ).toMatch(/collaboration with teams|collaborate with teams/i);
+    expect(
+      stripIntraBulletRepetition(
+        "Mentored mentoring and roadmap planning, increasing supported workload scale by 22%",
+      ),
+    ).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
   });
 
   it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {
@@ -132,11 +155,15 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
 
     for (const bullet of bullets) {
       expect(bullet).not.toMatch(/\bCoordinat\w*\b.*\bcoordination\b/i);
+      expect(bullet).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
       expect(bullet).not.toMatch(/\bthroughput\b.*\bthroughput\b/i);
       expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
       expect(bullet).not.toMatch(/\bdynamic\b/i);
       expect(bullet).not.toMatch(/\bproactive\b/i);
       expect(bullet).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
+      expect(bullet).not.toMatch(/\bexp-\d+-b-\d+\b/i);
+      expect(bullet).not.toMatch(/\bExperience with\b/i);
+      expect(bullet).not.toMatch(/\bLed collaborate\b/i);
     }
 
     const percentAmounts = bullets

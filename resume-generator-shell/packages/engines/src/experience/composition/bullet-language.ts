@@ -39,6 +39,24 @@ const COMMUNICATION_SCOPE_VARIANTS = [
   "architecture and delivery discussions with engineering partners",
 ] as const;
 
+/** Short uniqueness qualifiers — never expose internal bullet IDs. */
+const UNIQUE_SCOPE_QUALIFIERS = [
+  "across production systems",
+  "for platform delivery",
+  "in release workflows",
+  "across critical services",
+  "for customer workloads",
+  "during peak demand",
+  "across distributed services",
+  "for operational readiness",
+] as const;
+
+function hashSeed(seed: string): number {
+  return Math.abs(
+    [...seed].reduce((hash, char) => hash + char.charCodeAt(0), 0),
+  );
+}
+
 function isUsedScope(scope: string, usedScopeKeys?: ReadonlySet<string>): boolean {
   if (!usedScopeKeys || usedScopeKeys.size === 0) {
     return false;
@@ -59,6 +77,30 @@ function isUsedScope(scope: string, usedScopeKeys?: ReadonlySet<string>): boolea
   return false;
 }
 
+function uniqueScopedPhrase(
+  base: string,
+  seed: string,
+  usedScopeKeys?: ReadonlySet<string>,
+): string {
+  const cleanedBase =
+    base.replace(/\s+/g, " ").trim() || "production delivery outcomes";
+  const candidates = [
+    cleanedBase,
+    ...UNIQUE_SCOPE_QUALIFIERS.map(
+      (qualifier) => `${cleanedBase} ${qualifier}`,
+    ),
+  ];
+  const unused = candidates.find(
+    (candidate) => !isUsedScope(candidate, usedScopeKeys),
+  );
+  if (unused) {
+    return unused;
+  }
+  const index = hashSeed(seed) % UNIQUE_SCOPE_QUALIFIERS.length;
+  // Keep the last-resort phrase compact so supporting methods remain representable.
+  return `${cleanedBase} ${UNIQUE_SCOPE_QUALIFIERS[index]}`;
+}
+
 function pickUnusedCommunicationScope(
   preferred: string | undefined,
   usedScopeKeys: ReadonlySet<string> | undefined,
@@ -73,11 +115,13 @@ function pickUnusedCommunicationScope(
     return unused;
   }
   // Deterministic last-resort variant so concurrent roles never share one clone.
-  const index =
-    Math.abs(
-      [...seed].reduce((hash, char) => hash + char.charCodeAt(0), 0),
-    ) % COMMUNICATION_SCOPE_VARIANTS.length;
-  return `${COMMUNICATION_SCOPE_VARIANTS[index]} for ${seed.toLowerCase()}`;
+  // Never append internal identifiers such as exp-001-b-004 into visible text.
+  const index = hashSeed(seed) % COMMUNICATION_SCOPE_VARIANTS.length;
+  return uniqueScopedPhrase(
+    COMMUNICATION_SCOPE_VARIANTS[index]!,
+    seed,
+    usedScopeKeys,
+  );
 }
 
 /** Visible action-object text used for document-wide scope uniqueness. */
@@ -198,6 +242,9 @@ export function normalizeBulletSentence(value: string): string {
       )
       .replace(/\b(?:verbal and written\s+)?communication skills\b/gi, "stakeholder communication")
       .replace(/\b(?:soft skills|interpersonal skills|people skills)\b/gi, "cross-functional collaboration")
+      // Never leave internal plan identifiers in visible resume text.
+      .replace(/\bfor\s+exp-\d+-b-\d+\b/gi, " across production systems")
+      .replace(/\bexp-\d+-b-\d+\b/gi, "production systems")
       .replace(/\s+,/g, ",")
       .replace(/,\s*,+/g, ", ")
       .replace(/\s+/g, " ")
@@ -229,20 +276,24 @@ export function stripIntraBulletRepetition(sentence: string): string {
 
   // Coordinated/Aligned/Automated ... delivery coordination → keep a collaboration signal.
   text = text.replace(
-    /\b(Coordinat\w*|Align\w*|Automat\w*)\b([^]*?)\b(?:stakeholder\s+)?(?:alignment and\s+)?delivery\s+coordination\b/i,
+    /\b(Coordinat(?:e|es|ed|ing)|Align(?:s|ed|ing)?|Automat(?:e|es|ed|ing))\b([^]*?)\b(?:stakeholder\s+)?(?:alignment and\s+)?delivery\s+coordination\b/i,
     "$1$2 cross-functional delivery priorities",
   );
   text = text.replace(
-    /\b(Coordinat\w*)\b([^]*?)\bdependency\s+coordination\b/gi,
+    /\b(Coordinat(?:e|es|ed|ing))\b([^]*?)\bdependency\s+coordination\b/gi,
     "$1$2 dependency planning",
   );
   text = text.replace(
-    /\b(Coordinat\w*)\b([^]*?)\bcoordination\b/gi,
+    /\b(Coordinat(?:e|es|ed|ing))\b([^]*?)\bcoordination\b/gi,
     "$1$2 collaboration",
   );
   text = text.replace(
-    /\b(Align\w*)\b([^]*?)\balignment\b/gi,
+    /\b(Align(?:s|ed|ing)?)\b([^]*?)\balignment\b/gi,
     "$1$2 priorities",
+  );
+  text = text.replace(
+    /\b(Mentor(?:s|ed|ing)?)\b([^]*?)\bmentoring\b/gi,
+    "$1$2 capability building",
   );
 
   // "increasing throughput by 2.6x and improving request throughput"
@@ -262,12 +313,28 @@ export function substantiveKeyword(keyword: string): string {
   if (/^mentor(?:ed|ing|s)?\s+engineers?\b/i.test(keyword.trim())) {
     return "engineer mentoring";
   }
-  const cleaned = cleanScope(stripFirstPersonPronouns(keyword));
-  const withoutSeniority = cleaned
+  const cleaned = cleanScope(stripFirstPersonPronouns(keyword))
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  // Convert leftover imperative openings into noun scopes when cleanScope kept
+  // the original phrase (e.g. short remnants).
+  const asNounScope = cleaned
+    .replace(/^(?:collaborate|collaborating)\s+with\b/i, "collaboration with")
+    .replace(
+      /^(?:communicate|communicating)\s+(?:with|to|across)\b/i,
+      "communication with",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutSeniority = asNounScope
     .replace(/^(?:entry[- ]level|junior|mid[- ]level|senior|lead|staff|principal|chief)\s+/i, "")
     .replace(/\s+(?:engineer|developer|scientist|architect|manager|specialist|analyst)$/i, "")
     .trim();
-  const phrase = withoutSeniority || cleaned || stripTerminal(keyword);
+  const phrase = withoutSeniority || asNounScope || cleaned || stripTerminal(keyword);
   const withoutWeakFiller = phrase
     .replace(WEAK_FILLER, " ")
     .replace(/\s+/g, " ")
@@ -352,18 +419,39 @@ export function buildActionClause(input: {
     !/,| and | through /i.test(focusScope)
       ? focusScope
       : "";
+  const compactFocusSanitized = compactFocusRaw
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(/[.]+$/g, "")
+    .trim();
   const compactFocus =
-    compactFocusRaw && !isJdMarketingOrMetaScope(compactFocusRaw)
-      ? compactFocusRaw
+    compactFocusSanitized && !isJdMarketingOrMetaScope(compactFocusSanitized)
+      ? compactFocusSanitized
       : "";
   const compactThemeRaw =
     themeScope.split(/\s+/).filter(Boolean).length > 0 &&
     themeScope.split(/\s+/).length <= 6
       ? themeScope
       : "";
+  const compactThemeSanitized = compactThemeRaw
+    .replace(
+      /^(?:experience|proficiency|knowledge|expertise|familiarity)\s+(?:with|in|of|using)\s+/i,
+      "",
+    )
+    .replace(
+      /^production implementation and delivery for\s+/i,
+      "",
+    )
+    .replace(/[.]+$/g, "")
+    .trim();
   const compactTheme =
-    compactThemeRaw && !isJdMarketingOrMetaScope(compactThemeRaw)
-      ? compactThemeRaw
+    compactThemeSanitized &&
+    compactThemeSanitized.split(/\s+/).length <= 8 &&
+    !isJdMarketingOrMetaScope(compactThemeSanitized) &&
+    !/^experience with\b/i.test(compactThemeSanitized)
+      ? compactThemeSanitized
       : "";
   const compactTaskRaw = substantiveKeyword(input.story.task)
     .split(/\s+/)
@@ -471,14 +559,18 @@ export function buildActionClause(input: {
       cleanFallback;
   }
   if (/^experience with\b/i.test(normalizedDirectScope)) {
-    const withoutPrefix = normalizedDirectScope.replace(/^experience with\s+/i, "").trim();
+    const withoutPrefix = normalizedDirectScope
+      .replace(/^experience with\s+/i, "")
+      .replace(/[.]+$/g, "")
+      .trim();
     const toolScope = joinNatural(explicitTools.slice(0, 2));
+    // Never fall back to compactFocus/theme here — those may still carry the
+    // "Experience with …" requirement label and reintroduce it.
     normalizedDirectScope =
       withoutPrefix ||
       toolScope ||
-      compactFocus ||
-      compactTheme ||
-      cleanFallback;
+      cleanFallback ||
+      "production delivery outcomes";
   }
   if (/\b(?:the effort to|took responsibility to)\b/i.test(normalizedDirectScope)) {
     normalizedDirectScope = cleanFallback;
@@ -586,9 +678,15 @@ export function buildActionClause(input: {
   }
 
   if (input.plan.achievementDimension === "mentoring-knowledge-sharing") {
-    const mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
+    let mentoringScope = /mentor|coach|knowledge|engineer|onboard/i.test(normalizedDirectScope)
       ? normalizedDirectScope
       : `engineering capability around ${normalizedDirectScope}`;
+    if (/^mentor/i.test(verb) && /\bmentoring\b/i.test(mentoringScope)) {
+      mentoringScope = mentoringScope
+        .replace(/\bmentoring\b/gi, "capability building")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
     return stripTerminal(
       `${verb} ${mentoringScope}${buildSupportClause(mentoringScope)}`,
     );
@@ -599,15 +697,26 @@ export function buildActionClause(input: {
     const methodScope = joinNatural(filteredMethods.slice(0, 2));
     const toolScope = joinNatural(explicitTools.slice(0, 2));
     normalizedDirectScope =
-      [toolScope, compactFocus, `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`]
-        .find((candidate) => candidate && !isUsedScope(candidate, input.usedScopeKeys)) ||
-      `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`;
+      [toolScope, compactFocus]
+        .find(
+          (candidate) =>
+            Boolean(candidate) && !isUsedScope(candidate, input.usedScopeKeys),
+        ) ||
+      uniqueScopedPhrase(
+        cleanFallback,
+        input.plan.bulletId,
+        input.usedScopeKeys,
+      );
     // Prefer not to consume methods as the object when we can keep them in "through".
     if (methodScope && normalizedDirectScope === methodScope) {
       normalizedDirectScope =
         compactFocus ||
         toolScope ||
-        `${cleanFallback} for ${input.plan.bulletId.toLowerCase()}`;
+        uniqueScopedPhrase(
+          cleanFallback,
+          input.plan.bulletId,
+          input.usedScopeKeys,
+        );
     }
   }
 

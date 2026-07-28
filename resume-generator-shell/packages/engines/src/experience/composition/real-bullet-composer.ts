@@ -145,6 +145,11 @@ export class RealBulletComposer implements BulletComposer {
           }
           const key = canonicalKeywordKey(substantiveKeyword(keyword));
           return Boolean(key) && !usedDirectScopeKeys.has(key);
+        }).map((keyword) => {
+          if (/^mentor/i.test(keywordPackage.actionVerb) && /\bmentoring\b/i.test(keyword)) {
+            return keyword.replace(/\bmentoring\b/gi, "capability building");
+          }
+          return keyword;
         }),
       );
       const rewrittenSupporting = keywordPackage.supportingKeywords
@@ -167,6 +172,9 @@ export class RealBulletComposer implements BulletComposer {
           if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
             return keyword.replace(/\balignment\b/gi, "planning");
           }
+          if (/^mentor/i.test(keywordPackage.actionVerb) && /\bmentoring\b/i.test(keyword)) {
+            return keyword.replace(/\bmentoring\b/gi, "capability building");
+          }
           return keyword;
         })
         .filter(Boolean);
@@ -187,6 +195,9 @@ export class RealBulletComposer implements BulletComposer {
           }
           if (/^align/i.test(keywordPackage.actionVerb) && /\balignment\b/i.test(keyword)) {
             keyword = keyword.replace(/\balignment\b/gi, "planning");
+          }
+          if (/^mentor/i.test(keywordPackage.actionVerb) && /\bmentoring\b/i.test(keyword)) {
+            keyword = keyword.replace(/\bmentoring\b/gi, "capability building");
           }
           return { ...detail, keyword };
         }),
@@ -235,18 +246,23 @@ export class RealBulletComposer implements BulletComposer {
         (keyword) => !directKeywordRepresented(composed.finalBullet, keyword),
       );
       if (missingDirects.length > 0) {
-        actionClause = `${actionClause.replace(/[.!?]+$/g, "")} covering ${missingDirects.join(" and ")}`;
-        composed = this.sentencePatternEngine.compose({
-          actionClause,
-          plan,
-          keywordPackage: compositionPackage,
-          story,
-          minimumWords: this.sentenceQualityValidator.minimumWords,
-          maximumWords: this.sentenceQualityValidator.maximumWords,
-          patternOffset: (input.regenerationAttempt ?? 0) + 1,
-          usedConnectors,
-          usedEndingSkeletons,
-        });
+        const coveringScopes = missingDirects
+          .map((keyword) => substantiveKeyword(keyword))
+          .filter(Boolean);
+        if (coveringScopes.length > 0) {
+          actionClause = `${actionClause.replace(/[.!?]+$/g, "")} covering ${coveringScopes.join(" and ")}`;
+          composed = this.sentencePatternEngine.compose({
+            actionClause,
+            plan,
+            keywordPackage: compositionPackage,
+            story,
+            minimumWords: this.sentenceQualityValidator.minimumWords,
+            maximumWords: this.sentenceQualityValidator.maximumWords,
+            patternOffset: (input.regenerationAttempt ?? 0) + 1,
+            usedConnectors,
+            usedEndingSkeletons,
+          });
+        }
       }
 
       for (const connector of composed.connectors) {

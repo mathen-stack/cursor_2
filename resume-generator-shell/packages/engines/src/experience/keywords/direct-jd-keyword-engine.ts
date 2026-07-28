@@ -370,6 +370,33 @@ export class DirectJDKeywordEngine {
     }
 
     if (candidates.length === 0) {
+      // Absolute last resort: any grounded phrase or tool anywhere in the JD so
+      // later bullets (EXP-*-B-00N) never abort generation after inventory reuse.
+      const absoluteFallbacks = dedupeCandidates(
+        collectPatternCandidates(
+          {
+            ...primary,
+            sourceText: input.jobDescription.rawText,
+            evidence: [
+              {
+                sourceText: input.jobDescription.rawText,
+                startIndex: 0,
+                endIndex: input.jobDescription.rawText.length,
+              },
+            ],
+          },
+          [
+            ...DIRECT_JD_PHRASE_PATTERNS,
+            ...EXPLICIT_TOOL_PATTERNS,
+            ...GENERIC_PATTERNS,
+          ],
+          12,
+        ),
+      );
+      candidates.push(...absoluteFallbacks.slice(0, 5));
+    }
+
+    if (candidates.length === 0) {
       throw new Error(`No JD-grounded direct keyword could be extracted for ${input.plan.bulletId}.`);
     }
 
