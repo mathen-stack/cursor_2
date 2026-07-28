@@ -213,4 +213,21 @@ Optimize performance and accessibility across web apps.`;
     expect(names.has("CSS Modules")).toBe(true);
     expect(output.validation.explicitSkillsCovered).toBe(true);
   });
+
+  it("fills sparse Java/Spring/SQL JDs to the minimum skill density", async () => {
+    const sparseJd = `Java developer needed. Spring Boot and SQL are required for backend services.
+Build and maintain production APIs with strong engineering standards.`;
+    const output = await createProductionSkillsEngine().execute(
+      input(sparseJd, "SPARSE-SPRING"),
+    );
+    const names = new Set(output.skills.map((skill) => skill.name));
+
+    expect(output.status).toBe("approved");
+    expect(output.skills.length).toBeGreaterThanOrEqual(6);
+    expect(names.has("Java")).toBe(true);
+    expect(names.has("Spring Boot")).toBe(true);
+    expect(names.has("SQL")).toBe(true);
+    expect(output.validation.skillDensityApproved).toBe(true);
+    expect(output.validation.inferredSkillsGrounded).toBe(true);
+  });
 });

@@ -97,6 +97,7 @@ export class DefaultSkillsEngine implements SkillsEngine {
       jobDescription: input.jobDescription,
       candidates: [...explicit.candidates, ...inferred.candidates],
       maximumSkills: this.maximumSkills,
+      minimumSkills: this.minimumSkills,
       experienceEvidenceKeys,
     });
     assertSkillsContextMatch(

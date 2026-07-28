@@ -242,6 +242,24 @@ export class SkillRankingEngine {
       }
     }
 
+    // Density fill: when grounded candidates remain and we are below the
+    // configured floor, force-select them (still JD-triggered only).
+    const minimumSkills = Math.max(0, input.minimumSkills ?? 0);
+    if (selectedCandidates.length < minimumSkills) {
+      for (const candidate of ordered) {
+        if (selectedCandidates.length >= minimumSkills) {
+          break;
+        }
+        if (selectedKeys.has(candidate.key)) {
+          continue;
+        }
+        allowedCategories.add(candidate.category);
+        if (!trySelect(candidate, true)) {
+          omitted.push(candidate.name);
+        }
+      }
+    }
+
     selectedCandidates.sort((left, right) => {
       const categoryDifference =
         SKILL_CATEGORY_ORDER.indexOf(left.category) -

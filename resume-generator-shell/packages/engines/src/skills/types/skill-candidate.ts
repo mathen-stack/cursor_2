@@ -37,6 +37,8 @@ export interface SkillInferenceInput extends SkillExtractionInput {
 export interface SkillRankingInput extends SkillExtractionInput {
   candidates: SkillCandidate[];
   maximumSkills: number;
+  /** Prefer filling grounded candidates up to this floor when available. */
+  minimumSkills?: number;
   /** Catalog skill keys evidenced by experience bullet keywords. */
   experienceEvidenceKeys?: ReadonlySet<string>;
 }
