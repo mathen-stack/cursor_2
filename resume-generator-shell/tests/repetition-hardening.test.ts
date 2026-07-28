@@ -236,4 +236,74 @@ Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems
     );
     expect(new Set(deliveringValues).size).toBe(deliveringValues.length);
   });
+
+  it("never ships the Platform Engineer screenshot repetition failures", async () => {
+    const jobDescription = createJobDescription(
+      `Platform Engineer
+Standardize market launches — build repeatable infrastructure provisioning so new markets can launch quickly.
+Design scalable cloud platforms on AWS and Kubernetes.
+Launch CI/CD pipelines with Terraform.
+Secure harden security posture with cloud security posture management.
+Accelerate inference performance and reduce latency.
+Instrument monitoring with Prometheus.
+Orchestrate security mindset — experience with access control best practices through penetration testing.
+Collaborate with product and engineering stakeholders.
+Lead technical strategy.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-SCREENSHOT-REP", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Company",
+          startDate: "2017-08",
+          endDate: "2018-02",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    const bullets = result.experiences.flatMap((experience) =>
+      experience.bullets.map((bullet) => bullet.finalBullet),
+    );
+
+    for (const bullet of bullets) {
+      expect(bullet).not.toMatch(
+        /\b(?:Implemented standardize|Secured harden|Accelerated accelerate|Stabilized orchestrate)\b/i,
+      );
+      expect(bullet).not.toMatch(/[–—]/);
+      expect(bullet).not.toMatch(
+        /\b(?:using go through|can to|so new markets?|experience with|and'?re in the middle)\b/i,
+      );
+      expect(bullet).not.toMatch(
+        /repeatable infrastructure provisioning[\s\S]*repeatable infrastructure provisioning/i,
+      );
+      expect(bullet).not.toMatch(
+        /stronger delivery outcomes for product and engineering stakeholders/i,
+      );
+    }
+
+    const endingCounts = new Map<string, number>();
+    for (const bullet of bullets) {
+      const ending = bullet
+        .toLocaleLowerCase()
+        .match(
+          /,\s*((?:enabling|while|that improved|and strengthening|while reinforcing|while advancing|while strengthening|while supporting)\s+.+)\.?$/,
+        )?.[1];
+      if (!ending) continue;
+      endingCounts.set(ending, (endingCounts.get(ending) ?? 0) + 1);
+    }
+    for (const [ending, count] of endingCounts) {
+      expect({ ending, count }).toEqual({ ending, count: 1 });
+    }
+  });
 });

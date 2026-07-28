@@ -11,6 +11,7 @@ import {
   ensureCompositionCommunicationSignal,
   hasCompositionCommunicationSignal,
   isJdMarketingOrMetaScope,
+  normalizeBulletSentence,
   stripFirstPersonPronouns,
   substantiveKeyword,
 } from "./bullet-language";
@@ -24,6 +25,10 @@ import {
   type SentenceQualityValidatorOptions,
 } from "./sentence-quality-validator";
 import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
+import {
+  hasIntraBulletPhraseLoop,
+  hasIntraBulletVerbEcho,
+} from "../validation/experience-validation-language";
 
 function uniqueSubstantiveKeywords(keywords: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -286,19 +291,32 @@ export class RealBulletComposer implements BulletComposer {
       for (const connector of composed.connectors) {
         usedConnectors.add(connector);
       }
-      usedEndingSkeletons.add(endingSkeleton(composed.finalBullet));
 
       // Communication-focused bullets must keep stakeholder/collaboration evidence
       // even after compression or Align/coordination echo rewrites.
+      let finalBullet = composed.finalBullet;
       if (plan.communicationFocused) {
-        const repaired = ensureCompositionCommunicationSignal(composed.finalBullet);
-        if (repaired !== composed.finalBullet) {
-          composed = {
-            ...composed,
-            finalBullet: repaired,
-          };
-        }
+        finalBullet = ensureCompositionCommunicationSignal(finalBullet);
       }
+      // Final scrub pass — never ship phrase loops or imperative clashes.
+      finalBullet = normalizeBulletSentence(finalBullet);
+      if (
+        hasIntraBulletPhraseLoop(finalBullet) ||
+        hasIntraBulletVerbEcho(finalBullet) ||
+        /[–—]/.test(finalBullet) ||
+        /\b(?:using go through|can to|so new markets?|experience with)\b/i.test(
+          finalBullet,
+        )
+      ) {
+        throw new Error(
+          `Compressed STAR bullet composition rejected repetitive or broken wording in ${plan.bulletId}.`,
+        );
+      }
+      composed = {
+        ...composed,
+        finalBullet,
+      };
+      usedEndingSkeletons.add(endingSkeleton(composed.finalBullet));
 
       // Only claim directs that survived composition/compression so sentence
       // validation cannot reject the bullet for truncated JD phrases.

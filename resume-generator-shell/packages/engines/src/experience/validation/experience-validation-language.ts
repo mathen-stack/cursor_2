@@ -84,8 +84,35 @@ export function hasIntraBulletVerbEcho(value: string): boolean {
     /\bCoordinat(?:e|es|ed|ing)\b[^.]*\bcoordination\b/i.test(value) ||
     /\bAlign(?:s|ed|ing)?\b[^.]*\balignment\b/i.test(value) ||
     /\bAutomat(?:e|es|ed|ing)\b[^.]*\bautomation\b/i.test(value) ||
-    /\bMentor(?:s|ed|ing)?\b[^.]*\bmentoring\b/i.test(value)
+    /\bMentor(?:s|ed|ing)?\b[^.]*\bmentoring\b/i.test(value) ||
+    /\b(Accelerated|Implemented|Secured|Stabilized|Orchestrated|Standardized|Hardened)\s+\1\b/i.test(
+      value,
+    ) ||
+    /\b(?:Implemented|Secured|Stabilized|Accelerated|Orchestrated)\s+(?:standardize|harden|orchestrate|accelerate|implement|secure|build)\b/i.test(
+      value,
+    )
   );
+}
+
+/** True when any 4+ word phrase is repeated inside one bullet. */
+export function hasIntraBulletPhraseLoop(value: string): boolean {
+  const words = value
+    .toLocaleLowerCase()
+    .replace(/[–—]/g, " ")
+    .replace(/[^a-z0-9+.#/\s-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (let length = Math.min(8, Math.floor(words.length / 2)); length >= 4; length -= 1) {
+    const seen = new Set<string>();
+    for (let start = 0; start + length <= words.length; start += 1) {
+      const phrase = words.slice(start, start + length).join(" ");
+      if (seen.has(phrase)) {
+        return true;
+      }
+      seen.add(phrase);
+    }
+  }
+  return false;
 }
 
 export function hasRepeatedContentNoun(value: string): boolean {
@@ -138,6 +165,20 @@ export function atsLanguageErrors(value: string): string[] {
     )
   ) {
     errors.push("Contains job-posting meta copy that does not belong on a resume.");
+  }
+  if (
+    /\b(?:and'?re|we're|we're in the middle|in the middle of a major)\b/i.test(value)
+  ) {
+    errors.push("Contains conversational placeholder language.");
+  }
+  if (hasIntraBulletPhraseLoop(value) || hasIntraBulletVerbEcho(value)) {
+    errors.push("Contains repeated phrasing or an imperative verb/object clash.");
+  }
+  if (/[–—]/.test(value)) {
+    errors.push("Contains an em-dash JD fragment that should be rewritten as a noun scope.");
+  }
+  if (/\b(?:using go through|go through|can to|so new markets?)\b/i.test(value)) {
+    errors.push("Contains broken connector or truncated JD wording.");
   }
   if (!/^[A-Z][A-Za-z-]+\s/.test(value)) errors.push("Does not begin with a clear action verb.");
   if (!value.endsWith(".")) errors.push("Does not end with a period.");

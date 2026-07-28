@@ -20,6 +20,7 @@ import {
   clampScore,
   hasBusinessImpact,
   hasCommunicationSignal,
+  hasIntraBulletPhraseLoop,
   hasIntraBulletVerbEcho,
   hasMetric,
   hasRepeatedContentNoun,
@@ -358,10 +359,11 @@ export class RealExperienceValidator implements ExperienceValidator {
 
       if (
         hasIntraBulletVerbEcho(bullet.finalBullet) ||
-        hasRepeatedContentNoun(bullet.finalBullet)
+        hasRepeatedContentNoun(bullet.finalBullet) ||
+        hasIntraBulletPhraseLoop(bullet.finalBullet)
       ) {
         errors.push(
-          "Bullet repeats the same action stem or content noun inside one sentence.",
+          "Bullet repeats the same action stem, phrase, or content noun inside one sentence.",
         );
         addFailure(bullet.bulletId, "intra-bullet-repetition");
       }

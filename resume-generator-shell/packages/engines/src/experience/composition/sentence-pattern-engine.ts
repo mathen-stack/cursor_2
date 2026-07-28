@@ -93,7 +93,24 @@ export function endingSkeleton(bulletText: string): string {
     /\b(?:increasing|reducing|maintaining|improving|accelerating|shortening)\s+.+?\s+by\s+(\d+(?:\.\d+)?(?:%|x))\b/,
   );
   if (byMetric) {
+    // Also fingerprint the trailing enabling/while clause so identical endings
+    // cannot hide behind different metric numbers.
+    const trailing = lower.match(
+      /,\s*((?:enabling|while|that improved|and strengthening|while reinforcing|while advancing|while strengthening|while supporting)\s+.+)$/,
+    );
+    if (trailing?.[1]) {
+      return `by-metric:${byMetric[1]}:tail:${trailing[1]
+        .replace(/\b\d+(?:\.\d+)?\s?(?:%|x)\b/gi, "<metric>")
+        .replace(/\s+/g, " ")
+        .trim()}`;
+    }
     return `by-metric:${byMetric[1]}`;
+  }
+  const enabling = lower.match(
+    /,\s*((?:enabling|while|that improved|and strengthening|while reinforcing|while advancing|while strengthening|while supporting)\s+.+)$/,
+  );
+  if (enabling?.[1]) {
+    return `tail:${enabling[1].replace(/\s+/g, " ").trim()}`;
   }
   const tail = lower.split(/,\s+/).slice(-1)[0] ?? lower;
   return tail
@@ -101,6 +118,39 @@ export function endingSkeleton(bulletText: string): string {
     .replace(/\b(?:a|an|the|in|by|and|while|to|for|of)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function diversifyEnding(
+  bulletText: string,
+  bulletId: string,
+  usedEndingSkeletons: ReadonlySet<string> | undefined,
+): string {
+  const skeleton = endingSkeleton(bulletText);
+  if (!usedEndingSkeletons?.has(skeleton)) {
+    return bulletText;
+  }
+  const fallbackEndings = [
+    "improving delivery predictability across product partners",
+    "strengthening cross-team execution for engineering stakeholders",
+    "advancing stakeholder alignment on release priorities",
+    "supporting clearer handoffs across platform teams",
+    "reducing coordination overhead for product delivery",
+    "raising confidence in shared delivery commitments",
+  ] as const;
+  const seed = Math.abs(
+    [...bulletId].reduce((hash, char) => hash + char.charCodeAt(0), 0),
+  );
+  const base = bulletText.replace(/[.!?]+$/g, "").replace(/,\s*(?:enabling|while|that improved|and strengthening|while reinforcing|while advancing|while strengthening|while supporting)\s+.+$/i, "");
+  for (let offset = 0; offset < fallbackEndings.length; offset += 1) {
+    const ending = fallbackEndings[(seed + offset) % fallbackEndings.length]!;
+    const candidate = normalizeBulletSentence(`${base}, enabling ${ending}`);
+    if (!usedEndingSkeletons.has(endingSkeleton(candidate))) {
+      return candidate;
+    }
+  }
+  return normalizeBulletSentence(
+    `${base}, enabling ${fallbackEndings[seed % fallbackEndings.length]} across delivery teams`,
+  );
 }
 
 function buildWithPattern(input: {
@@ -384,7 +434,8 @@ export class SentencePatternEngine {
       return preferred;
     }
 
-    // Fall back without ending uniqueness if every candidate collides.
+    // Prefer length-valid candidates, then rewrite any ending that still clones
+    // a previously used trailing impact clause.
     const lengthValid = candidates.filter((candidate) => {
       const count = wordCount(candidate.finalBullet);
       return (
@@ -394,10 +445,17 @@ export class SentencePatternEngine {
       );
     });
     if (lengthValid.length > 0) {
-      return (
+      const selected =
         lengthValid.find((candidate) => candidate.sentencePattern === preferredPattern) ??
-        lengthValid[0]!
-      );
+        lengthValid[0]!;
+      return {
+        ...selected,
+        finalBullet: diversifyEnding(
+          selected.finalBullet,
+          input.plan.bulletId,
+          input.usedEndingSkeletons,
+        ),
+      };
     }
 
     const shortest = [...candidates].sort(
@@ -412,7 +470,11 @@ export class SentencePatternEngine {
       );
       if (wordCount(compressed) >= minimumWords) {
         return {
-          finalBullet: compressed,
+          finalBullet: diversifyEnding(
+            compressed,
+            input.plan.bulletId,
+            input.usedEndingSkeletons,
+          ),
           sentencePattern: shortest.sentencePattern,
           connectors: shortest.connectors,
         };
@@ -423,10 +485,10 @@ export class SentencePatternEngine {
       candidates.find((candidate) => candidate.sentencePattern === preferredPattern)
         ?.finalBullet ?? candidates[0]?.finalBullet ?? "";
     const fallbackEndings = [
-      "improving delivery predictability for product and engineering stakeholders",
-      "strengthening cross-team execution with product partners",
-      "advancing stakeholder alignment across product and platform teams",
-      "supporting clearer delivery outcomes for engineering partners",
+      "improving delivery predictability across product partners",
+      "strengthening cross-team execution for engineering stakeholders",
+      "advancing stakeholder alignment on release priorities",
+      "supporting clearer handoffs across platform teams",
     ] as const;
     const endingSeed = Math.abs(
       [...input.plan.bulletId].reduce((hash, char) => hash + char.charCodeAt(0), 0),

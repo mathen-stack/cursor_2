@@ -7,6 +7,7 @@ import type {
 import type { KeywordPackage } from "../types/keyword-package";
 import type { StarStory } from "../types/star-story";
 import { canonicalKeywordKey } from "../keywords/keyword-normalizer";
+import { endingSkeleton } from "./sentence-pattern-engine";
 import { SentenceQualityValidator } from "./sentence-quality-validator";
 
 function duplicates(values: readonly string[]): string[] {
@@ -183,6 +184,12 @@ export function validateBulletComposition(input: {
   if (missingPlanBulletIds.length > 0) errors.push("One or more bullet plans were not composed.");
   if (duplicateBulletIds.length > 0) errors.push("Composed bullet IDs are duplicated.");
   if (duplicateFinalBullets.length > 0) errors.push("Final bullet text is duplicated.");
+  const duplicateEndingSkeletons = duplicates(
+    input.bullets.map((item) => endingSkeleton(item.finalBullet)),
+  );
+  if (duplicateEndingSkeletons.length > 0) {
+    errors.push("Two or more bullets share the same trailing impact ending.");
+  }
   if (input.stories.some((story) => story.status !== "approved")) errors.push("A rejected STAR story reached composition.");
   if (weakBulletIds.length > 0) errors.push("One or more composed bullets failed sentence-strength validation.");
   if (lowDistinctivenessBulletIds.length > 0) errors.push("One or more bullets are not distinctive enough within the role.");

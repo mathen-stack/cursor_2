@@ -12,6 +12,10 @@ import {
   stripFirstPersonPronouns,
   wordCount,
 } from "./bullet-language";
+import {
+  hasIntraBulletPhraseLoop,
+  hasIntraBulletVerbEcho,
+} from "../validation/experience-validation-language";
 
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|us|our|ours)\b/i;
 const WEAK_LANGUAGE = /\b(?:responsible for|worked on|helped with|assisted with|participated in|involved in|various tasks|successfully|effectively)\b/i;
@@ -141,6 +145,12 @@ export class SentenceQualityValidator {
     if (!punctuationValid) errors.push("Bullet must be one clean sentence with one terminal period.");
     if (!communicationSignalPresent) errors.push("Communication-focused bullet lost its stakeholder or collaboration signal.");
     if (!leadershipSignalPresent) errors.push("Leadership-focused bullet lost its technical direction signal.");
+    if (hasIntraBulletPhraseLoop(text) || hasIntraBulletVerbEcho(text)) {
+      errors.push("Bullet contains repeated phrasing or an imperative verb/object clash.");
+    }
+    if (/[–—]/.test(text) || /\b(?:using go through|can to|so new markets?)\b/i.test(text)) {
+      errors.push("Bullet retains broken JD fragment wording.");
+    }
     if (input.distinctivenessScore < 8) errors.push("Bullet is not sufficiently distinctive within its role.");
     if (strengthScore < this.minimumStrengthScore) errors.push("Bullet strength score is below the approval threshold.");
     if (count > 40 && count <= this.maximumWords) warnings.push("Bullet is valid but near the upper word-count limit.");
