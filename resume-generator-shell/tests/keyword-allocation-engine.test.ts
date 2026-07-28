@@ -13,7 +13,12 @@ import {
   DirectJDKeywordEngine,
   canonicalKeywordKey,
   createMilestone5ExperienceEngine,
+  hasCommunicationAllocationSignal,
 } from "@resume/engines";
+import {
+  SOFTWARE_MIND_SENIOR_FRONTEND_JD,
+  softwareMindCareerProfile,
+} from "./fixtures/software-mind-senior-frontend";
 
 const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
 
@@ -153,16 +158,86 @@ describe("Real global keyword allocation", () => {
       const keywordPackage = packagesByBullet.get(plan.bulletId);
       expect(keywordPackage).toBeDefined();
       expect(
-        [
-          ...(keywordPackage?.directKeywords ?? []),
-          ...(keywordPackage?.supportingKeywords ?? []),
-          ...(keywordPackage?.outcomeKeywords ?? []),
-        ].join(" "),
-      ).toMatch(/stakeholder|collaborat|cross-functional|alignment|requirements gathering|architecture workshop/i);
+        hasCommunicationAllocationSignal(
+          [
+            ...(keywordPackage?.directKeywords ?? []),
+            ...(keywordPackage?.supportingKeywords ?? []),
+            ...(keywordPackage?.outcomeKeywords ?? []),
+            keywordPackage?.actionVerb ?? "",
+          ].join(" "),
+        ),
+      ).toBe(true);
     }
 
     expect(output.validation?.communicationPackagesRelevant).toBe(true);
     expect(output.validation?.leadershipPackagesRelevant).toBe(true);
+  });
+
+  it("keeps SoftMind EXP-003 communication allocation relevant without relying on reused direct JD phrases", async () => {
+    const profile = softwareMindCareerProfile("PROFILE-SOFTWARE-MIND-KEYWORDS");
+    const jobDescription = createJobDescription(SOFTWARE_MIND_SENIOR_FRONTEND_JD);
+    const context = createGenerationContext(profile.profileId, jobDescription);
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const extracted = await extractor.execute({ context, jobDescription });
+    const roles = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute({
+      context,
+      jobDescription,
+      careerHistory: profile.careerHistory,
+      requirements: extracted.requirements,
+    });
+    const plans = await new RealBulletPlanner().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      minimumBulletsPerRole: 5,
+    });
+    const output = await new RealKeywordAllocator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      plans: plans.plans,
+    });
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.validation?.communicationPackagesRelevant).toBe(true);
+    expect(output.validation?.communicationPackageErrors).toEqual([]);
+
+    const communicationPlans = plans.plans.filter((plan) => plan.communicationFocused);
+    expect(communicationPlans.map((plan) => plan.bulletId)).toEqual([
+      "EXP-001-B-005",
+      "EXP-002-B-005",
+      "EXP-003-B-005",
+    ]);
+
+    for (const plan of communicationPlans) {
+      const keywordPackage = output.packages.find(
+        (item) => item.bulletId === plan.bulletId,
+      );
+      expect(keywordPackage).toBeDefined();
+      // Communication relevance must survive even if controlled direct-JD reuse
+      // does not supply a communication stem for this bullet.
+      const withoutDirect = [
+        keywordPackage?.actionVerb ?? "",
+        ...(keywordPackage?.supportingKeywords ?? []),
+        ...(keywordPackage?.outcomeKeywords ?? []),
+      ].join(" ");
+      expect(
+        hasCommunicationAllocationSignal(withoutDirect),
+        `${plan.bulletId} lost communication signal outside direct keywords: ${withoutDirect}`,
+      ).toBe(true);
+      expect(
+        (keywordPackage?.supportingKeywords ?? []).some((keyword) =>
+          hasCommunicationAllocationSignal(keyword),
+        ),
+        `${plan.bulletId} supporting keywords lack a communication signal`,
+      ).toBe(true);
+    }
   });
 
   it("never allocates Resume Worded soft-skill buzzphrases as direct keywords", async () => {

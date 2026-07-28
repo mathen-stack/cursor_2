@@ -34,6 +34,7 @@ export * from "./keywords/action-verb-engine";
 export * from "./keywords/direct-jd-keyword-engine";
 export * from "./keywords/keyword-allocation-validator";
 export * from "./keywords/keyword-normalizer";
+export * from "./keywords/keyword-signals";
 export * from "./keywords/keyword-taxonomy";
 export * from "./keywords/outcome-keyword-engine";
 export * from "./keywords/real-keyword-allocator";

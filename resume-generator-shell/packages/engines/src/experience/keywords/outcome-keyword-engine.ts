@@ -5,6 +5,7 @@ import {
   CATEGORY_OUTCOME_HINTS,
   OUTCOMES_BY_DIMENSION,
 } from "./keyword-taxonomy";
+import { hasCommunicationAllocationSignal } from "./keyword-signals";
 import { canonicalKeywordKey } from "./keyword-normalizer";
 
 interface OutcomeCandidate extends OutcomeKeywordDetail {
@@ -62,9 +63,24 @@ export class OutcomeKeywordEngine {
       score: categoryScore - index,
     }));
 
+    const communicationPreferredFallbacks = input.plan.communicationFocused
+      ? [
+          ...OUTCOMES_BY_DIMENSION["cross-functional-alignment"],
+          ...CATEGORY_OUTCOME_HINTS.communication,
+          ...CATEGORY_OUTCOME_HINTS.collaboration,
+        ].map<OutcomeCandidate>((keyword, index) => ({
+          keyword,
+          canonicalKey: canonicalKeywordKey(keyword),
+          rationale:
+            "Communication-focused outcome fallback retained under document-wide uniqueness.",
+          score: 40 - index * 0.01,
+        }))
+      : [];
+
     const candidates = dedupe([
       ...dimensionCandidates,
       ...categoryCandidates,
+      ...communicationPreferredFallbacks,
       // Fall back across the full outcome inventory so document-wide uniqueness
       // can still allocate when a dimension's local list is exhausted.
       ...Object.values(OUTCOMES_BY_DIMENSION)
@@ -87,7 +103,18 @@ export class OutcomeKeywordEngine {
       (candidate) => !input.usedCanonicalKeys.has(candidate.canonicalKey),
     );
 
-    const selected = candidates.slice(0, maximumKeywords);
+    const ordered = input.plan.communicationFocused
+      ? [
+          ...candidates.filter((candidate) =>
+            hasCommunicationAllocationSignal(candidate.keyword),
+          ),
+          ...candidates.filter(
+            (candidate) => !hasCommunicationAllocationSignal(candidate.keyword),
+          ),
+        ]
+      : candidates;
+
+    const selected = ordered.slice(0, maximumKeywords);
     if (selected.length < maximumKeywords) {
       throw new Error(
         `Outcome keyword inventory is insufficient for ${input.plan.bulletId}.`,

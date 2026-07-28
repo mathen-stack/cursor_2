@@ -6,6 +6,10 @@ import type {
 } from "../types/keyword-package";
 import type { JDRequirement } from "../types/requirement";
 import type { RoleAssignment } from "../types/role-assignment";
+import {
+  hasCommunicationAllocationSignal,
+  hasLeadershipAllocationSignal,
+} from "./keyword-signals";
 import { canonicalKeywordKey } from "./keyword-normalizer";
 
 function duplicateValues(values: string[]): string[] {
@@ -147,20 +151,10 @@ export function validateKeywordAllocation(input: {
       continue;
     }
     const text = packageText(keywordPackage);
-    if (
-      plan.communicationFocused &&
-      !/collaborat|communicat|stakeholder|requirements gathering|cross-functional|alignment|facilitat|coordinat|product partnership|architecture workshop/.test(
-        text,
-      )
-    ) {
+    if (plan.communicationFocused && !hasCommunicationAllocationSignal(text)) {
       communicationPackageErrors.push(plan.bulletId);
     }
-    if (
-      plan.leadershipFocused &&
-      !/lead|spearhead|direct|champion|guide|mentor|strategy|roadmap|governance|engineering standard|architecture/.test(
-        text,
-      )
-    ) {
+    if (plan.leadershipFocused && !hasLeadershipAllocationSignal(text)) {
       leadershipPackageErrors.push(plan.bulletId);
     }
   }

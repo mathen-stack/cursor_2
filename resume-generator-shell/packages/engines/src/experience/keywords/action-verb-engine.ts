@@ -5,6 +5,7 @@ import {
   ACTION_VERBS_BY_CATEGORY,
   ACTION_VERBS_BY_DIMENSION,
 } from "./keyword-taxonomy";
+import { hasCommunicationAllocationSignal } from "./keyword-signals";
 import { canonicalActionVerbKey } from "./keyword-normalizer";
 
 export interface ActionVerbSelection {
@@ -34,6 +35,17 @@ const GLOBAL_FALLBACKS = [
   "Validated",
   "Modernized",
   "Transformed",
+] as const;
+
+const COMMUNICATION_FALLBACK_VERBS = [
+  "Coordinated",
+  "Facilitated",
+  "Aligned",
+  "Collaborated",
+  "Communicated",
+  "Presented",
+  "Translated",
+  "Led",
 ] as const;
 
 function seniorityRank(seniority: RoleAssignment["seniority"]): number {
@@ -90,9 +102,12 @@ export class ActionVerbEngine {
       !input.plan.leadershipFocused &&
       (effectiveDimension === "implementation-integration" ||
         effectiveDimension === "customer-business-impact");
+    const fallbacks = input.plan.communicationFocused
+      ? [...COMMUNICATION_FALLBACK_VERBS, ...GLOBAL_FALLBACKS]
+      : GLOBAL_FALLBACKS;
     const candidates = useCategoryFirst
-      ? [...categoryPreferred, ...dimensionPreferred, ...GLOBAL_FALLBACKS]
-      : [...dimensionPreferred, ...categoryPreferred, ...GLOBAL_FALLBACKS];
+      ? [...categoryPreferred, ...dimensionPreferred, ...fallbacks]
+      : [...dimensionPreferred, ...categoryPreferred, ...fallbacks];
 
     for (const actionVerb of candidates) {
       const canonicalKey = canonicalActionVerbKey(actionVerb);
@@ -100,6 +115,17 @@ export class ActionVerbEngine {
         continue;
       }
       if (!suitableForSeniority(actionVerb, input.assignment, input.plan)) {
+        continue;
+      }
+      if (
+        input.plan.communicationFocused &&
+        !hasCommunicationAllocationSignal(actionVerb) &&
+        candidates.some(
+          (candidate) =>
+            hasCommunicationAllocationSignal(candidate) &&
+            !input.usedCanonicalKeys.has(canonicalActionVerbKey(candidate)),
+        )
+      ) {
         continue;
       }
       return {

@@ -4,11 +4,13 @@ import type { SupportingKeywordDetail } from "../types/keyword-package";
 import type { JDRequirement, RequirementCategory } from "../types/requirement";
 import type { RoleAssignment } from "../types/role-assignment";
 import {
+  COMMUNICATION_SUPPORTING_FALLBACK_POOL,
   EXPLICIT_TOOL_PATTERNS,
   SUPPORTING_BY_CATEGORY,
   SUPPORTING_BY_DIMENSION,
   SUPPORTING_FALLBACK_POOL,
 } from "./keyword-taxonomy";
+import { hasCommunicationAllocationSignal } from "./keyword-signals";
 import { canonicalKeywordKey, containsCaseInsensitive } from "./keyword-normalizer";
 
 interface SupportingCandidate extends SupportingKeywordDetail {
@@ -190,13 +192,27 @@ export class SupportingKeywordEngine {
     const category = SUPPORTING_BY_CATEGORY[input.requirement.category].map(
       (keyword) => inferredCandidate(keyword, "category"),
     );
+    const communicationFallback = input.plan.communicationFocused
+      ? COMMUNICATION_SUPPORTING_FALLBACK_POOL.map((keyword) => ({
+          ...inferredCandidate(keyword, "dimension"),
+          score: 35,
+          rationale:
+            "Communication-signal fallback retained so communication-focused plans stay relevant under document-wide uniqueness locks.",
+        }))
+      : [];
     const fallback = SUPPORTING_FALLBACK_POOL.map((keyword) => ({
       ...inferredCandidate(keyword, "dimension"),
       score: 20,
       rationale: "Fallback supporting method used after primary inventories were exhausted under document-wide uniqueness locks.",
     }));
 
-    const all = dedupe([...explicit, ...dimension, ...category, ...fallback]).filter(
+    const all = dedupe([
+      ...explicit,
+      ...dimension,
+      ...category,
+      ...communicationFallback,
+      ...fallback,
+    ]).filter(
       (candidate) =>
         !input.directCanonicalKeys.has(candidate.canonicalKey) &&
         !input.directKeywords.some((directKeyword) =>
@@ -208,7 +224,19 @@ export class SupportingKeywordEngine {
     );
 
     const selected: SupportingCandidate[] = [];
-    for (const candidate of unused) {
+    const preferCommunicationSignal = input.plan.communicationFocused;
+    const ordered = preferCommunicationSignal
+      ? [
+          ...unused.filter((candidate) =>
+            hasCommunicationAllocationSignal(candidate.keyword),
+          ),
+          ...unused.filter(
+            (candidate) => !hasCommunicationAllocationSignal(candidate.keyword),
+          ),
+        ]
+      : unused;
+
+    for (const candidate of ordered) {
       if (selected.length >= maximumKeywords) {
         break;
       }
@@ -218,11 +246,39 @@ export class SupportingKeywordEngine {
       selected.push(candidate);
     }
 
+    if (
+      preferCommunicationSignal &&
+      selected.length > 0 &&
+      !selected.some((candidate) =>
+        hasCommunicationAllocationSignal(candidate.keyword),
+      )
+    ) {
+      const signalCandidate = unused.find(
+        (candidate) =>
+          hasCommunicationAllocationSignal(candidate.keyword) &&
+          !selected.some((item) => item.canonicalKey === candidate.canonicalKey),
+      );
+      if (signalCandidate) {
+        selected[selected.length - 1] = signalCandidate;
+      }
+    }
+
     // Prefer completing the bullet with one unique supporting method over failing
     // generation when the document-wide inventory is nearly exhausted.
     if (selected.length === 0) {
       throw new Error(
         `Supporting keyword inventory is insufficient to allocate ${maximumKeywords} distinct keywords for ${input.plan.bulletId}.`,
+      );
+    }
+
+    if (
+      preferCommunicationSignal &&
+      !selected.some((candidate) =>
+        hasCommunicationAllocationSignal(candidate.keyword),
+      )
+    ) {
+      throw new Error(
+        `Communication supporting keyword inventory is insufficient to retain a communication signal for ${input.plan.bulletId}.`,
       );
     }
 

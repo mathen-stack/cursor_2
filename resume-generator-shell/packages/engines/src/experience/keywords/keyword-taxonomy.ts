@@ -381,6 +381,14 @@ export const SUPPORTING_BY_DIMENSION: Readonly<Record<AchievementDimension, read
     "priority negotiation",
     "shared roadmap reviews",
     "interface agreements",
+    "stakeholder collaboration",
+    "cross-functional syncs",
+    "alignment workshops",
+    "cross-team coordination",
+    "product partnership forums",
+    "stakeholder facilitation",
+    "collaborative planning sessions",
+    "communication cadences",
   ],
   "technical-leadership": [
     "technical strategy",
@@ -471,6 +479,34 @@ export const SUPPORTING_FALLBACK_POOL: readonly string[] = [
   "retention policy design",
 ];
 
+/**
+ * Communication-focused packages must keep a communication signal even after
+ * primary inventories are exhausted by document-wide uniqueness. Technical
+ * SUPPORTING_FALLBACK_POOL entries must not replace that signal.
+ */
+export const COMMUNICATION_SUPPORTING_FALLBACK_POOL: readonly string[] = [
+  "stakeholder collaboration forums",
+  "cross-functional alignment reviews",
+  "requirements gathering workshops",
+  "product partnership check-ins",
+  "architecture workshop facilitation",
+  "cross-team coordination rituals",
+  "stakeholder briefing cadences",
+  "delivery negotiation sessions",
+  "roadmap alignment forums",
+  "release coordination syncs",
+  "handoff facilitation reviews",
+  "collaborative discovery workshops",
+  "cross-functional planning forums",
+  "stakeholder communication loops",
+  "alignment decision forums",
+  "partner engineering syncs",
+  "cross-team collaboration rituals",
+  "facilitated dependency reviews",
+  "coordinated delivery standups",
+  "executive stakeholder briefings",
+];
+
 export const OUTCOMES_BY_DIMENSION: Readonly<Record<AchievementDimension, readonly string[]>> = {
   "architecture-design": [
     "architectural scalability",
@@ -537,6 +573,12 @@ export const OUTCOMES_BY_DIMENSION: Readonly<Record<AchievementDimension, readon
     "delivery predictability",
     "decision turnaround time",
     "cross-team execution",
+    "cross-functional collaboration quality",
+    "stakeholder confidence",
+    "requirements clarity",
+    "partnership effectiveness",
+    "alignment cycle time",
+    "coordinated delivery readiness",
   ],
   "technical-leadership": [
     "engineering velocity",
@@ -569,7 +611,13 @@ export const ACTION_VERBS_BY_DIMENSION: Readonly<Record<AchievementDimension, re
   "security-governance": ["Secured", "Governed", "Remediated", "Hardened"],
   "data-quality": ["Engineered", "Validated", "Orchestrated", "Standardized"],
   "customer-business-impact": ["Transformed", "Enabled", "Improved", "Delivered"],
-  "cross-functional-alignment": ["Led", "Coordinated", "Facilitated", "Aligned"],
+  "cross-functional-alignment": [
+    "Coordinated",
+    "Facilitated",
+    "Aligned",
+    "Collaborated",
+    "Led",
+  ],
   "technical-leadership": ["Spearheaded", "Directed", "Championed", "Guided"],
   "mentoring-knowledge-sharing": ["Mentored", "Coached", "Guided", "Established"],
   "implementation-integration": ["Implemented", "Integrated", "Developed", "Built"],
