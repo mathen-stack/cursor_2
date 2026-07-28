@@ -85,6 +85,38 @@ function sentenceThree(
 ): string {
   const peopleKeys = new Set(people.map((keyword) => keyword.normalizedKey));
   if (peopleKeys.has("MENTORING") || peopleKeys.has("TECHNICAL_LEADERSHIP")) {
+    // Prefer allocated JD phrases so direct-keyword coverage stays exact
+    // ("mentor engineers" must appear, not only "mentors engineers").
+    const leadershipPhraseByKey = new Map<string, string>();
+    for (const keyword of people) {
+      if (
+        ![
+          "MENTORING",
+          "TECHNICAL_LEADERSHIP",
+          "STAKEHOLDER_MANAGEMENT",
+          "CROSS_FUNCTIONAL",
+        ].includes(keyword.normalizedKey)
+      ) {
+        continue;
+      }
+      const dedupeKey = keyword.text.trim().toLocaleLowerCase();
+      if (!dedupeKey || leadershipPhraseByKey.has(dedupeKey)) {
+        continue;
+      }
+      leadershipPhraseByKey.set(dedupeKey, keyword.text.trim());
+    }
+    const leadershipPhrases = [...leadershipPhraseByKey.values()];
+    if (leadershipPhrases.length >= 2) {
+      return `Provides ${list(leadershipPhrases)} while aligning delivery with product priorities and measurable business needs.`;
+    }
+    if (leadershipPhrases.length === 1) {
+      const phrase = leadershipPhrases[0]!;
+      // Avoid "technical leadership and technical leadership" style echoes.
+      if (/technical leadership/i.test(phrase)) {
+        return `Provides ${phrase}, mentors engineers, and aligns architecture decisions with product priorities and measurable business needs.`;
+      }
+      return `Provides ${phrase} and technical leadership while aligning architecture decisions with product priorities and measurable business needs.`;
+    }
     return LEADERSHIP_SENTENCE;
   }
   if (people.length > 0) {
