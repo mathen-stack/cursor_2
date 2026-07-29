@@ -388,10 +388,20 @@ export default function AdminProfilesClient() {
     }
   }
 
-  async function rejectAccount(username: string) {
+  async function removeAccount(
+    username: string,
+    options?: { pendingSignup?: boolean },
+  ) {
+    const pendingSignup = options?.pendingSignup === true;
+    if (admin && username === admin.username) {
+      setError("You cannot remove your own account.");
+      return;
+    }
     if (
       !window.confirm(
-        `Reject and remove signup for @${username}? This cannot be undone.`,
+        pendingSignup
+          ? `Reject and remove signup for @${username}? This cannot be undone.`
+          : `Remove account @${username} and their saved profile? This cannot be undone.`,
       )
     ) {
       return;
@@ -409,9 +419,18 @@ export default function AdminProfilesClient() {
         error?: { message?: string };
       };
       if (!response.ok || !payload.account) {
-        throw new Error(payload.error?.message ?? "Could not reject account.");
+        throw new Error(
+          payload.error?.message ??
+            (pendingSignup
+              ? "Could not reject account."
+              : "Could not remove account."),
+        );
       }
-      setMessage(`Rejected signup @${username}`);
+      setMessage(
+        pendingSignup
+          ? `Rejected signup @${username}`
+          : `Removed account @${username}`,
+      );
       await refreshSummaries();
       if (selectedUsername === username) {
         const remaining = accounts.filter((item) => item.username !== username);
@@ -419,11 +438,19 @@ export default function AdminProfilesClient() {
       }
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Account rejection failed.",
+        caught instanceof Error
+          ? caught.message
+          : pendingSignup
+            ? "Account rejection failed."
+            : "Account removal failed.",
       );
     } finally {
       setSaving(false);
     }
+  }
+
+  async function rejectAccount(username: string) {
+    await removeAccount(username, { pendingSignup: true });
   }
 
   async function clearSelectedProfile() {
@@ -521,8 +548,8 @@ export default function AdminProfilesClient() {
             <div>
               <h2>Database</h2>
               <p className="hint">
-                Change usernames and passwords, approve new signups, then edit
-                each user’s saved profile used for resume generation.
+                Change usernames and passwords, approve or remove accounts, then
+                edit each user’s saved profile used for resume generation.
               </p>
             </div>
           </div>
@@ -754,6 +781,18 @@ export default function AdminProfilesClient() {
                     </label>
                   </div>
                   <div className="section-actions section-actions-end">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={
+                        saving ||
+                        !selectedUsername ||
+                        selectedUsername === admin.username
+                      }
+                      onClick={() => void removeAccount(selectedUsername)}
+                    >
+                      Remove Account
+                    </button>
                     <button
                       type="button"
                       className="primary"

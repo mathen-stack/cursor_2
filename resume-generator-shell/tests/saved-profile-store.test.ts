@@ -15,6 +15,7 @@ import {
 } from "../apps/web/lib/auth";
 import {
   createStoredAccount,
+  deleteStoredAccount,
   signUpStoredAccount,
   updateStoredAccount,
 } from "../apps/web/lib/user-account-store";
@@ -189,6 +190,48 @@ describe("signup approval", () => {
       expect(approved.account.status).toBe("approved");
       const result = await authenticateCredentials("newcomer", "secret99");
       expect(result.ok).toBe(true);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("admin account removal", () => {
+  it("lets an admin remove another user account", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-remove-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      await createStoredAccount({
+        username: "member",
+        password: "secret1",
+        role: "user",
+        updatedBy: "admin",
+      });
+      const removed = await deleteStoredAccount({
+        username: "member",
+        deletedBy: "admin",
+      });
+      expect(removed.username).toBe("member");
+      expect(await authenticateCredentials("member", "secret1")).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks an admin from removing their own account", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-remove-self-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      await expect(
+        deleteStoredAccount({ username: "admin", deletedBy: "admin" }),
+      ).rejects.toThrow(/own account/i);
     } finally {
       process.chdir(previousCwd);
       await rm(tempRoot, { recursive: true, force: true });

@@ -386,6 +386,12 @@ export async function deleteStoredAccount(input: {
   deletedBy: string;
 }): Promise<PublicAccount> {
   const username = sanitizeUsername(input.username);
+  const deletedBy = sanitizeUsername(input.deletedBy);
+  if (username && deletedBy && username === deletedBy) {
+    throw Object.assign(new Error("You cannot remove your own account."), {
+      status: 400,
+    });
+  }
   const users = await listStoredAccounts();
   const index = users.findIndex((user) => user.username === username);
   if (index < 0) {
