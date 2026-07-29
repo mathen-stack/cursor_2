@@ -518,9 +518,10 @@ export default function AdminProfilesClient() {
                     />
                   </svg>
                   <input
-                    type="search"
+                    type="text"
                     value={usernameSearch}
                     placeholder="Search username…"
+                    autoComplete="off"
                     aria-label="Search username"
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       setUsernameSearch(event.target.value)

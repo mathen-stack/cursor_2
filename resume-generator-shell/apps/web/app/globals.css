@@ -176,16 +176,12 @@ button:disabled {
   position: absolute;
   top: 50%;
   left: 0.85rem;
+  z-index: 1;
   width: 0.95rem;
   height: 0.95rem;
   transform: translateY(-50%);
   color: var(--muted);
   pointer-events: none;
-}
-
-.admin-user-search input {
-  width: 100%;
-  padding-left: 3rem;
 }
 
 .admin-user-empty {
@@ -405,6 +401,10 @@ button:disabled {
   font-size: 0.92rem;
   outline: none;
   transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.profile-field.admin-user-search input {
+  padding: 0.72rem 0.82rem 0.72rem 2.75rem;
 }
 
 .profile-field input::placeholder,
