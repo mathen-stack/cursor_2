@@ -367,7 +367,7 @@ textarea {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent-deep), var(--accent));
-  transition: width 220ms ease;
+  transition: width 300ms linear;
 }
 
 .generation-progress {

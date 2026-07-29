@@ -26,18 +26,53 @@ const GENERATION_STEPS = [
   { id: "readiness", label: "Checking ATS readiness" },
 ] as const;
 
+/** Constant progress cadence — same speed before and after the API returns. */
+const PROGRESS_TICK_MS = 300;
+const PROGRESS_PERCENT_PER_TICK = 2;
+const PROGRESS_HOLD_PERCENT = 92;
+
 type GenerationProgress = {
   stepIndex: number;
   percent: number;
   label: string;
 };
 
-function initialGenerationProgress(): GenerationProgress {
+function progressFromPercent(percent: number): GenerationProgress {
+  const capped = Math.max(0, Math.min(100, percent));
+  const stepIndex =
+    capped >= 100
+      ? GENERATION_STEPS.length - 1
+      : Math.min(
+          GENERATION_STEPS.length - 2,
+          Math.floor(
+            ((Math.min(capped, PROGRESS_HOLD_PERCENT) - 6) /
+              (PROGRESS_HOLD_PERCENT - 6)) *
+              (GENERATION_STEPS.length - 1),
+          ),
+        );
+  const safeIndex = Math.max(0, stepIndex);
   return {
-    stepIndex: 0,
-    percent: 6,
-    label: GENERATION_STEPS[0].label,
+    stepIndex: safeIndex,
+    percent: capped,
+    label:
+      capped >= 100
+        ? "Resume ready"
+        : (GENERATION_STEPS[safeIndex]?.label ?? GENERATION_STEPS[0].label),
   };
+}
+
+function initialGenerationProgress(): GenerationProgress {
+  return progressFromPercent(6);
+}
+
+function advanceGenerationProgress(
+  current: GenerationProgress | null,
+  ceiling: number,
+): GenerationProgress {
+  const base = current ?? initialGenerationProgress();
+  return progressFromPercent(
+    Math.min(ceiling, base.percent + PROGRESS_PERCENT_PER_TICK),
+  );
 }
 
 function newCareerEntry(index: number): CareerEntry {
@@ -114,33 +149,50 @@ export default function ResumeGenerator() {
   });
   const [resume, setResume] = useState<FinalResumeData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [finishingProgress, setFinishingProgress] = useState(false);
+  const [pendingResume, setPendingResume] = useState<FinalResumeData | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [generationProgress, setGenerationProgress] =
     useState<GenerationProgress | null>(null);
+
+  const showGenerationProgress = loading || finishingProgress;
 
   useEffect(() => {
     if (!loading) return;
 
     setGenerationProgress(initialGenerationProgress());
-    const startedAt = Date.now();
     const timer = window.setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      // Advance through pipeline labels while the blocking generate request runs.
-      // Hold under 92% until the response arrives so completion feels earned.
-      const stepIndex = Math.min(
-        GENERATION_STEPS.length - 2,
-        Math.floor(elapsed / 1200),
+      setGenerationProgress((current) =>
+        advanceGenerationProgress(current, PROGRESS_HOLD_PERCENT),
       );
-      const percent = Math.min(92, 6 + Math.floor(elapsed / 90));
-      setGenerationProgress({
-        stepIndex,
-        percent,
-        label: GENERATION_STEPS[stepIndex]?.label ?? GENERATION_STEPS[0].label,
-      });
-    }, 250);
+    }, PROGRESS_TICK_MS);
 
     return () => window.clearInterval(timer);
   }, [loading]);
+
+  useEffect(() => {
+    if (!finishingProgress || !pendingResume) return;
+
+    const timer = window.setInterval(() => {
+      setGenerationProgress((current) =>
+        advanceGenerationProgress(current, 100),
+      );
+    }, PROGRESS_TICK_MS);
+
+    return () => window.clearInterval(timer);
+  }, [finishingProgress, pendingResume]);
+
+  useEffect(() => {
+    if (!finishingProgress || !pendingResume) return;
+    if (!generationProgress || generationProgress.percent < 100) return;
+
+    setResume(pendingResume);
+    setPendingResume(null);
+    setFinishingProgress(false);
+    setGenerationProgress(null);
+  }, [finishingProgress, pendingResume, generationProgress]);
 
   const canGenerate = useMemo(() => {
     const personal = profile.personalInformation;
@@ -251,6 +303,8 @@ export default function ResumeGenerator() {
 
   async function generate() {
     setLoading(true);
+    setFinishingProgress(false);
+    setPendingResume(null);
     setError("");
     setResume(null);
     setGenerationProgress(initialGenerationProgress());
@@ -274,15 +328,14 @@ export default function ResumeGenerator() {
             : "Resume generation failed.",
         );
       }
-      setGenerationProgress({
-        stepIndex: GENERATION_STEPS.length - 1,
-        percent: 100,
-        label: "Resume ready",
-      });
-      setResume(payload);
+      // Keep the same constant progress speed through 100% instead of jumping.
+      setPendingResume(payload);
+      setFinishingProgress(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Resume generation failed.");
       setGenerationProgress(null);
+      setPendingResume(null);
+      setFinishingProgress(false);
     } finally {
       setLoading(false);
     }
@@ -560,13 +613,13 @@ export default function ResumeGenerator() {
             <button
               type="button"
               className="primary"
-              disabled={!canGenerate || loading}
+              disabled={!canGenerate || loading || finishingProgress}
               onClick={generate}
             >
-              {loading ? "Generating…" : "Generate complete resume"}
+              {loading || finishingProgress ? "Generating…" : "Generate complete resume"}
             </button>
             <p className="inline-status">
-              {loading
+              {loading || finishingProgress
                 ? "Running JD-isolated resume pipeline…"
                 : "Ready when profile, career history, education, and JD are filled in."}
             </p>
@@ -581,7 +634,7 @@ export default function ResumeGenerator() {
             </div>
           </div>
 
-          {loading && generationProgress ? (
+          {showGenerationProgress && generationProgress ? (
             <GenerationProgressPanel progress={generationProgress} />
           ) : !resume ? (
             <div className="empty-board">
