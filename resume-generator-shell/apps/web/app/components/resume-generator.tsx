@@ -45,8 +45,9 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
 }
 
 /**
- * Save PDF into download/<full-name>.pdf and trigger a browser download.
- * Uses a plain filename (no folder prefix) so browsers do not open Save As.
+ * Save PDF into download/<full-name>.pdf, then force a browser download via a
+ * same-origin GET. Blob+anchor clicks are often blocked after async generate
+ * because the original user gesture has expired.
  */
 async function autoDeliverGeneratedResume(
   resume: FinalResumeData,
@@ -55,33 +56,47 @@ async function autoDeliverGeneratedResume(
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format }),
+    body: JSON.stringify({ resume, format, saveOnly: true }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
     throw new Error(payload.error?.message ?? "Resume auto-download failed.");
   }
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") ?? "";
-  const filenameMatch = disposition.match(/filename="([^"]+)"/);
-  const rawName =
-    filenameMatch?.[1] ??
+  const saved = (await response.json()) as { filename?: string };
+  const filename =
+    saved.filename ??
     resumeFilenameFromFullName(
       resume.profile.personalInformation.fullName,
       format,
     );
-  const filename = rawName.includes("/")
-    ? rawName.slice(rawName.lastIndexOf("/") + 1)
-    : rawName;
-  const url = URL.createObjectURL(blob);
+
+  triggerBrowserFileDownload(`/api/resume/download/${encodeURIComponent(filename)}`);
+  return { filename };
+}
+
+function triggerBrowserFileDownload(href: string): void {
+  const frame = document.createElement("iframe");
+  frame.src = href;
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.style.position = "fixed";
+  frame.style.width = "1px";
+  frame.style.height = "1px";
+  frame.style.opacity = "0";
+  frame.style.pointerEvents = "none";
+  document.body.appendChild(frame);
+  window.setTimeout(() => {
+    frame.remove();
+  }, 60_000);
+
+  // Fallback for browsers that ignore iframe attachment downloads.
   const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
+  anchor.href = href;
+  anchor.rel = "noopener";
+  anchor.download = "";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
-  return { filename };
 }
 
 async function downloadGeneratedResume(
@@ -91,31 +106,20 @@ async function downloadGeneratedResume(
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format }),
+    body: JSON.stringify({ resume, format, saveOnly: true }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
     throw new Error(payload.error?.message ?? "Resume export failed.");
   }
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") ?? "";
-  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const saved = (await response.json()) as { filename?: string };
   const filename =
-    filenameMatch?.[1] ??
+    saved.filename ??
     resumeFilenameFromFullName(
       resume.profile.personalInformation.fullName,
       format,
     );
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename.includes("/")
-    ? filename.slice(filename.lastIndexOf("/") + 1)
-    : filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  triggerBrowserFileDownload(`/api/resume/download/${encodeURIComponent(filename)}`);
 }
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
