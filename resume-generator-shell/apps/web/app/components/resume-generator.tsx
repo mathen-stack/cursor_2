@@ -188,16 +188,27 @@ export default function ResumeGenerator() {
     () => jdDrafts.filter((draft) => draft.text.trim().length >= 50).length,
     [jdDrafts],
   );
-  const hasActiveJobs = jobs.some(
-    (job) => job.status === "running" || job.status === "finishing",
-  );
-  const activeJobCount = useMemo(
+  const inFlightDraftIds = useMemo(
     () =>
-      jobs.filter(
-        (job) => job.status === "running" || job.status === "finishing",
-      ).length,
+      new Set(
+        jobs
+          .filter(
+            (job) => job.status === "running" || job.status === "finishing",
+          )
+          .map((job) => job.draftId),
+      ),
     [jobs],
   );
+  const startableJdCount = useMemo(
+    () =>
+      jdDrafts.filter(
+        (draft) =>
+          draft.text.trim().length >= 50 && !inFlightDraftIds.has(draft.id),
+      ).length,
+    [jdDrafts, inFlightDraftIds],
+  );
+  const hasActiveJobs = inFlightDraftIds.size > 0;
+  const activeJobCount = inFlightDraftIds.size;
 
   useEffect(() => {
     if (!hasActiveJobs) return;
@@ -262,7 +273,7 @@ export default function ResumeGenerator() {
     );
   }, [profile]);
 
-  const canGenerate = profileReady && readyJdCount > 0;
+  const canGenerate = profileReady && startableJdCount > 0;
 
   function updatePersonal(
     field: keyof UserProfile["personalInformation"],
@@ -362,8 +373,11 @@ export default function ResumeGenerator() {
   async function generate() {
     const readyDrafts = jdDrafts
       .map((draft, index) => ({ draft, index }))
-      .filter(({ draft }) => draft.text.trim().length >= 50);
-    if (!canGenerate || readyDrafts.length === 0 || hasActiveJobs) return;
+      .filter(
+        ({ draft }) =>
+          draft.text.trim().length >= 50 && !inFlightDraftIds.has(draft.id),
+      );
+    if (!profileReady || readyDrafts.length === 0) return;
 
     const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => ({
       id: createId("JOB"),
@@ -375,9 +389,9 @@ export default function ResumeGenerator() {
       resume: null,
       error: "",
     }));
-    setJobs(nextJobs);
+    // Keep in-progress and completed jobs; append the new parallel batch.
+    setJobs((current) => [...current, ...nextJobs]);
 
-    // Fire every ready JD at once; each job updates independently.
     await Promise.all(
       nextJobs.map(async (job) => {
         const draft = readyDrafts.find((item) => item.draft.id === job.draftId)?.draft;
@@ -686,8 +700,8 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Add one or more JDs. Generate runs them at the same time with the same
-                profile — each JD stays isolated in its own resume pipeline.
+                Add JDs anytime. You can start another generate while earlier resumes are
+                still running — each JD stays isolated in its own pipeline.
               </p>
             </div>
           </div>
@@ -695,11 +709,18 @@ export default function ResumeGenerator() {
           {jdDrafts.map((draft, index) => (
             <div key={draft.id} className="entry-block">
               <div className="entry-head">
-                <p className="entry-label">JD {index + 1}</p>
+                <p className="entry-label">
+                  JD {index + 1}
+                  {inFlightDraftIds.has(draft.id) ? (
+                    <span className="badge" style={{ marginLeft: "0.45rem" }}>
+                      Generating
+                    </span>
+                  ) : null}
+                </p>
                 <button
                   type="button"
                   className="secondary-action entry-remove"
-                  disabled={jdDrafts.length === 1 || hasActiveJobs}
+                  disabled={jdDrafts.length === 1}
                   onClick={() => removeJdDraft(draft.id)}
                 >
                   Remove
@@ -720,12 +741,7 @@ export default function ResumeGenerator() {
           ))}
 
           <div className="section-actions section-actions-end">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={hasActiveJobs}
-              onClick={addJdDraft}
-            >
+            <button type="button" className="secondary-action" onClick={addJdDraft}>
               Add JD
             </button>
           </div>
@@ -734,20 +750,26 @@ export default function ResumeGenerator() {
             <button
               type="button"
               className="primary"
-              disabled={!canGenerate || hasActiveJobs}
+              disabled={!canGenerate}
               onClick={generate}
             >
               {hasActiveJobs
-                ? "Generating…"
-                : readyJdCount > 1
-                  ? `Generate ${readyJdCount} resumes`
+                ? startableJdCount > 1
+                  ? `Generate ${startableJdCount} more resumes`
+                  : startableJdCount === 1
+                    ? "Generate another resume"
+                    : "Generating…"
+                : startableJdCount > 1
+                  ? `Generate ${startableJdCount} resumes`
                   : "Generate complete resume"}
             </button>
             <p className="inline-status">
               {hasActiveJobs
-                ? `Running ${activeJobCount} JD-isolated resume pipeline${activeJobCount === 1 ? "" : "s"}…`
-                : readyJdCount > 1
-                  ? `${readyJdCount} JDs ready. Generate will run them in parallel.`
+                ? startableJdCount > 0
+                  ? `${activeJobCount} running. You can generate ${startableJdCount} more now.`
+                  : `Running ${activeJobCount} JD-isolated resume pipeline${activeJobCount === 1 ? "" : "s"}…`
+                : startableJdCount > 1
+                  ? `${startableJdCount} JDs ready. Generate will run them in parallel.`
                   : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
@@ -768,11 +790,11 @@ export default function ResumeGenerator() {
 
           {jobs.length === 0 ? (
             <div className="empty-board">
-              <p>No resumes yet. Add JDs, then generate one or several at once.</p>
+              <p>No resumes yet. Add JDs, then generate — you can start more while others run.</p>
               <ol>
                 <li>Confirm profile, career history, and education</li>
                 <li>Paste one or more target job descriptions</li>
-                <li>Generate in parallel, open Preview per result, then export</li>
+                <li>Generate anytime; parallel jobs appear in Result as they finish</li>
               </ol>
             </div>
           ) : (
