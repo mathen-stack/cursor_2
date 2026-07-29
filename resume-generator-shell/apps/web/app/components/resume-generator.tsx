@@ -758,8 +758,8 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Add JDs anytime. Result cards show Company | Role. If the posting company
-                is unknown, they show undefined | Role. Career history companies still
+                Add JDs anytime. Result cards show Role | Company. If the posting company
+                is unknown, they show Role | undefined. Career history companies still
                 come from your profile.
               </p>
             </div>
