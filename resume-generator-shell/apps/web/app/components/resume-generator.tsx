@@ -99,10 +99,8 @@ function advanceGenerationProgress(
 type JdDraft = {
   id: string;
   text: string;
-  /** Hiring company that posted this JD (auto-detected when possible). */
+  /** Hiring company detected from JD text (for Result labels). */
   postingCompany: string;
-  /** True once the user edits the posting-company field manually. */
-  companyTouched: boolean;
 };
 
 type GenerationJob = {
@@ -127,7 +125,6 @@ function createJdDraft(text = "", id?: string): JdDraft {
     id: id ?? createId("JD"),
     text,
     postingCompany: detectCompanyNameFromJd(text) ?? "",
-    companyTouched: false,
   };
 }
 
@@ -388,34 +385,17 @@ export default function ResumeGenerator() {
     setJdDrafts((current) =>
       current.map((draft) => {
         if (draft.id !== id) return draft;
-        const detected = detectCompanyNameFromJd(text) ?? "";
         return {
           ...draft,
           text,
-          postingCompany: draft.companyTouched ? draft.postingCompany : detected,
+          postingCompany: detectCompanyNameFromJd(text) ?? "",
         };
       }),
     );
   }
 
-  function updateJdPostingCompany(id: string, postingCompany: string) {
-    setJdDrafts((current) =>
-      current.map((draft) =>
-        draft.id === id
-          ? { ...draft, postingCompany, companyTouched: true }
-          : draft,
-      ),
-    );
-  }
-
   function addJdDraft() {
     setJdDrafts((current) => [...current, createJdDraft("")]);
-  }
-
-  function removeJdDraft(id: string) {
-    setJdDrafts((current) =>
-      current.length <= 1 ? current : current.filter((draft) => draft.id !== id),
-    );
   }
 
   function closeJob(jobId: string) {
@@ -771,67 +751,27 @@ export default function ResumeGenerator() {
           <div className="section-head">
             <div>
               <h2>Job Description</h2>
-              <p className="hint">
-                Add JDs anytime. Result cards show Role | Company. If the posting company
-                is unknown, they show Role | undefined. Career history companies still
-                come from your profile.
-              </p>
+              <p className="hint">Paste a JD and generate. Add more JDs anytime.</p>
             </div>
           </div>
 
-          {jdDrafts.map((draft, index) => {
+          {jdDrafts.map((draft) => {
             const draftReady = draft.text.trim().length >= 50;
             const draftCanGenerate = profileReady && draftReady;
-            const labels = resolveJdLabels(draft, index + 1);
             return (
-              <div key={draft.id} className="entry-block">
-                <div className="entry-head">
-                  <p className="entry-label">
-                    JD {index + 1}
-                    <span className="badge badge-company" style={{ marginLeft: "0.45rem" }}>
-                      {labels.headline}
-                    </span>
-                    {inFlightDraftIds.has(draft.id) ? (
-                      <span className="badge" style={{ marginLeft: "0.45rem" }}>
-                        Generating
-                      </span>
-                    ) : null}
-                  </p>
-                  <div className="entry-head-actions">
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={!draftCanGenerate}
-                      onClick={() => generate([draft.id])}
-                    >
-                      Generate
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action entry-remove"
-                      disabled={jdDrafts.length === 1}
-                      onClick={() => removeJdDraft(draft.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-                <div className="profile-grid">
-                  <label className="profile-field">
-                    <span>Company that posted this JD</span>
-                    <input
-                      type="text"
-                      name={`posting-company-${draft.id}`}
-                      placeholder="Optional if not detected from JD"
-                      value={draft.postingCompany}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        updateJdPostingCompany(draft.id, event.target.value)
-                      }
-                    />
-                  </label>
+              <div key={draft.id} className="entry-block jd-card">
+                <div className="jd-card-actions">
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={!draftCanGenerate}
+                    onClick={() => generate([draft.id])}
+                  >
+                    Generate
+                  </button>
                 </div>
                 <label className="profile-field profile-field-full">
-                  <span className="manual-jd-label">JD text</span>
+                  <span className="sr-only">Job description</span>
                   <textarea
                     name={`jobDescription-${draft.id}`}
                     value={draft.text}

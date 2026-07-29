@@ -168,7 +168,7 @@ function addLineWithTrailingDate(
   ensureSpace(context, lineHeight + after);
   addText(context, leftText, {
     size,
-    bold: options.bold,
+    ...(options.bold !== undefined ? { bold: options.bold } : {}),
     lineHeight,
     maxWidth: Math.max(40, context.contentWidth - size * 8),
     advance: false,
