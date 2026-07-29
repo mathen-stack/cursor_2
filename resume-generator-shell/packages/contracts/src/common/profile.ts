@@ -12,6 +12,8 @@ export const PersonalInformationSchema = z.object({
 export const CareerEntrySchema = z.object({
   experienceId: z.string().min(1),
   companyName: z.string().min(1),
+  /** Optional job title. When blank, role assignment auto-detects from the JD. */
+  role: z.string().optional(),
   startDate: z.string().min(4),
   endDate: z.string().min(4),
 });

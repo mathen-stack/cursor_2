@@ -156,12 +156,45 @@ function selectFocusRequirements(
   return selected;
 }
 
+function inferSeniorityFromTitle(title: string): CareerSeniority {
+  const lower = title.toLowerCase();
+  if (/\bprincipal\b/.test(lower)) return "principal";
+  if (/\bstaff\b/.test(lower)) return "staff";
+  if (
+    /\bengineering manager\b/.test(lower) ||
+    /\b(?:people|engineering|product|project|hiring)\s+manager\b/.test(lower)
+  ) {
+    return "manager";
+  }
+  if (/\btechnical lead\b|\bteam lead\b|\blead engineer\b|\blead\b/.test(lower)) {
+    return "lead";
+  }
+  if (/\bsenior\b|\bsr\.\b/.test(lower)) return "senior";
+  if (/\bjunior\b|\bjr\.\b/.test(lower)) return "junior";
+  if (/\bentry[- ]level\b|\bnew grad\b|\bintern\b/.test(lower)) return "entry";
+  return "mid";
+}
+
+function manualRoleFromEntry(entry: ParsedCareerEntry["entry"]): PlannedRole | null {
+  const title = entry.role?.trim();
+  if (!title) return null;
+  return {
+    title,
+    seniority: inferSeniorityFromTitle(title),
+  };
+}
+
 function createRationale(input: {
   item: ParsedCareerEntry;
   role: PlannedRole;
   analysis: TargetRoleAnalysis;
   totalExperienceMonths: number;
+  manual: boolean;
 }): string {
+  if (input.manual) {
+    return `Used the role title provided on the career entry (“${input.role.title}”).`;
+  }
+
   const totalYears = Math.floor(input.totalExperienceMonths / 12);
   if (input.item.isMostRecent) {
     return `Assigned the JD target role to the most recent experience, aligned with the ${input.analysis.roleFamily} role family and approximately ${totalYears} years of career history.`;
@@ -200,7 +233,8 @@ export class RealRoleAssignmentEngine implements RoleAssignmentEngine {
     const progression = buildRoleProgression(targetRoleAnalysis, definition);
 
     const assignments: RoleAssignment[] = timeline.map((item) => {
-      const role = roleForRank(progression, item.chronologyRank);
+      const manualRole = manualRoleFromEntry(item.entry);
+      const role = manualRole ?? roleForRank(progression, item.chronologyRank);
       const focusRequirements = selectFocusRequirements(
         input.requirements,
         item.chronologyRank,
@@ -225,6 +259,7 @@ export class RealRoleAssignmentEngine implements RoleAssignmentEngine {
           role,
           analysis: targetRoleAnalysis,
           totalExperienceMonths,
+          manual: Boolean(manualRole),
         }),
       };
     });

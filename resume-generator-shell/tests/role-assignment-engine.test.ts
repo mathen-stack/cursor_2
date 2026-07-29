@@ -196,6 +196,81 @@ describe("Real automatic role assignment", () => {
     expect(input).toEqual(snapshot);
   });
 
+  it("prefers manually provided career roles over JD auto-detection", async () => {
+    const input = makeRoleInput(
+      "Senior Machine Learning Engineer role responsible for production machine learning systems, model deployment, monitoring, performance optimization, technical leadership, and collaboration with product teams.",
+      [
+        {
+          experienceId: "EXP-CURRENT",
+          companyName: "Current Company",
+          role: "Staff Platform Engineer",
+          startDate: "2023-01",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-OLD",
+          companyName: "Old Company",
+          role: "Backend Engineer",
+          startDate: "2019-01",
+          endDate: "2022-12",
+        },
+      ],
+      standardRequirements,
+    );
+
+    const output = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute(input);
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.assignments.find((a) => a.experienceId === "EXP-CURRENT")).toMatchObject({
+      assignedRole: "Staff Platform Engineer",
+      seniority: "staff",
+      isMostRecent: true,
+    });
+    expect(output.assignments.find((a) => a.experienceId === "EXP-OLD")).toMatchObject({
+      assignedRole: "Backend Engineer",
+      seniority: "mid",
+    });
+    expect(
+      output.assignments.find((a) => a.experienceId === "EXP-CURRENT")?.rationale,
+    ).toMatch(/provided on the career entry/i);
+  });
+
+  it("auto-detects roles only for experiences without a manual title", async () => {
+    const input = makeRoleInput(
+      "Senior Machine Learning Engineer role responsible for production machine learning systems, model deployment, monitoring, performance optimization, technical leadership, and collaboration with product teams.",
+      [
+        {
+          experienceId: "EXP-CURRENT",
+          companyName: "Current Company",
+          role: "Applied Scientist",
+          startDate: "2023-01",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-OLD",
+          companyName: "Old Company",
+          startDate: "2019-01",
+          endDate: "2022-12",
+        },
+      ],
+      standardRequirements,
+    );
+
+    const output = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute(input);
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.assignments.find((a) => a.experienceId === "EXP-CURRENT")?.assignedRole).toBe(
+      "Applied Scientist",
+    );
+    expect(output.assignments.find((a) => a.experienceId === "EXP-OLD")?.assignedRole).toBe(
+      "Machine Learning Engineer",
+    );
+  });
+
   it("creates a deeper progression for staff-level JDs", async () => {
     const input = makeRoleInput(
       "Staff Machine Learning Engineer role owning model architecture, production deployment, platform reliability, technical strategy, and mentorship across engineering teams.",

@@ -159,6 +159,7 @@ const FIELD_PLACEHOLDERS = {
   linkedin: "https://linkedin.com/in/username",
   portfolio: "https://yourportfolio.com",
   company: "Company name",
+  role: "Role title (leave blank to auto-detect)",
   school: "University or school name",
   degree: "Bachelor of Science",
   fieldOfStudy: "Computer Science",
@@ -322,6 +323,7 @@ function newCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: "",
+    role: "",
     startDate: "",
     endDate: "",
   };
@@ -1013,8 +1015,9 @@ export default function ResumeGenerator({
             <div>
               <h2>Career History</h2>
               <p className="hint">
-                Add company and dates for each position. Use dates like Aug 2018.
-                Role titles are assigned from the JD during generation.
+                Add company, optional role title, and dates for each position.
+                Use dates like Aug 2018. Leave role blank to auto-detect from the
+                JD during generation.
               </p>
             </div>
           </div>
@@ -1042,6 +1045,19 @@ export default function ResumeGenerator({
                     value={entry.companyName}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCareer(index, "companyName", event.target.value)
+                    }
+                  />
+                </label>
+
+                <label className="profile-field">
+                  <span>Role</span>
+                  <input
+                    type="text"
+                    name={`role-${entry.experienceId}`}
+                    placeholder={FIELD_PLACEHOLDERS.role}
+                    value={entry.role ?? ""}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      updateCareer(index, "role", event.target.value)
                     }
                   />
                 </label>

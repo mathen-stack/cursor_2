@@ -40,6 +40,7 @@ const PLACEHOLDERS = {
   linkedin: "https://linkedin.com/in/username",
   portfolio: "https://yourportfolio.com",
   company: "Company name",
+  role: "Role title (leave blank to auto-detect)",
   school: "University or school name",
   degree: "Bachelor of Science",
   fieldOfStudy: "Computer Science",
@@ -52,6 +53,7 @@ function newCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: "",
+    role: "",
     startDate: "",
     endDate: "",
   };
@@ -954,6 +956,27 @@ export default function AdminProfilesClient() {
                                       ? {
                                           ...item,
                                           companyName: event.target.value,
+                                        }
+                                      : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="profile-field">
+                          <span>Role</span>
+                          <input
+                            value={entry.role ?? ""}
+                            placeholder={PLACEHOLDERS.role}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              setDraft((current) => ({
+                                ...current,
+                                careerHistory: current.careerHistory.map(
+                                  (item, itemIndex) =>
+                                    itemIndex === index
+                                      ? {
+                                          ...item,
+                                          role: event.target.value,
                                         }
                                       : item,
                                 ),

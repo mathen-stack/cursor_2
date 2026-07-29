@@ -76,6 +76,40 @@ describe("saved profile helpers", () => {
     );
     expect(normalized?.personalInformation.portfolio).toBeUndefined();
     expect(normalized?.careerHistory[0]?.companyName).toBe("Example AI Company");
+    expect(normalized?.careerHistory[0]?.role).toBe("");
+  });
+
+  it("preserves an optional career role title", () => {
+    const normalized = normalizeStoredProfile({
+      profileId: "PROFILE-1",
+      personalInformation: {
+        fullName: "Alex Morgan",
+        email: "alex@example.com",
+        phone: "+1 555 0100",
+        location: "Remote",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example AI Company",
+          role: "  Senior ML Engineer  ",
+          startDate: "Jan 2022",
+          endDate: "Present",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Example University",
+          degree: "Bachelor of Science",
+          field: "Computer Science",
+          startDate: "Sep 2014",
+          endDate: "Jun 2018",
+        },
+      ],
+    });
+
+    expect(normalized?.careerHistory[0]?.role).toBe("Senior ML Engineer");
   });
 });
 

@@ -21,6 +21,7 @@ function createCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: "",
+    role: "",
     startDate: "",
     endDate: index === 0 ? "Present" : "",
   };
@@ -42,12 +43,14 @@ export default function ExperienceGenerator() {
     {
       experienceId: "EXP-001",
       companyName: "Example AI Company",
+      role: "Senior Machine Learning Engineer",
       startDate: "Jan 2022",
       endDate: "Present",
     },
     {
       experienceId: "EXP-002",
       companyName: "Example Software Company",
+      role: "",
       startDate: "Mar 2018",
       endDate: "Dec 2021",
     },
@@ -166,7 +169,7 @@ export default function ExperienceGenerator() {
                   key={entry.experienceId}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "2fr 1fr 1fr auto",
+                    gridTemplateColumns: "1.4fr 1.4fr 1fr 1fr auto",
                     gap: 8,
                     alignItems: "end",
                   }}
@@ -178,6 +181,17 @@ export default function ExperienceGenerator() {
                       value={entry.companyName}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateCareerEntry(index, "companyName", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label>
+                    <small>Role (optional)</small>
+                    <input
+                      style={inputStyle}
+                      placeholder="Leave blank to auto-detect"
+                      value={entry.role ?? ""}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateCareerEntry(index, "role", event.target.value)
                       }
                     />
                   </label>

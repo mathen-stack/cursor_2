@@ -43,12 +43,25 @@ export function validateRoleAssignments(input: {
     );
   }
 
+  const roleByExperienceId = new Map(
+    input.careerHistory.map((entry) => [
+      entry.experienceId,
+      entry.role?.trim() ?? "",
+    ]),
+  );
+  const hasManualRole = (experienceId: string): boolean =>
+    Boolean(roleByExperienceId.get(experienceId));
+
   const mostRecent = input.assignments.find(
     (assignment) => assignment.isMostRecent,
   );
+  const mostRecentUsesManualRole = mostRecent
+    ? hasManualRole(mostRecent.experienceId)
+    : false;
   const targetRoleAssignedToMostRecent =
-    mostRecent?.assignedRole === input.targetRoleAnalysis.targetRole &&
-    mostRecent.chronologyRank === 1;
+    mostRecentUsesManualRole ||
+    (mostRecent?.assignedRole === input.targetRoleAnalysis.targetRole &&
+      mostRecent.chronologyRank === 1);
   if (!targetRoleAssignedToMostRecent) {
     errors.push("The most recent career entry must receive the target JD role.");
   }
@@ -61,6 +74,10 @@ export function validateRoleAssignments(input: {
     const newer = sorted[index - 1];
     const older = sorted[index];
     if (!newer || !older) continue;
+    // Manual titles are user-authored; skip automatic seniority progression checks.
+    if (hasManualRole(newer.experienceId) || hasManualRole(older.experienceId)) {
+      continue;
+    }
     if (SENIORITY_RANK[older.seniority] > SENIORITY_RANK[newer.seniority]) {
       naturalProgression = false;
       errors.push(

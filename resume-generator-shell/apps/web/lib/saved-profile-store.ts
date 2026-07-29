@@ -22,6 +22,7 @@ function newCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: "",
+    role: "",
     startDate: "",
     endDate: "",
   };
@@ -62,11 +63,13 @@ function normalizeCareerEntry(
 ): CareerEntry | null {
   if (!value || typeof value !== "object") return null;
   const entry = value as Partial<CareerEntry>;
+  const role = asTrimmedString(entry.role);
   return {
     experienceId:
       asTrimmedString(entry.experienceId) ||
       `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: asTrimmedString(entry.companyName),
+    ...(role ? { role } : { role: "" }),
     startDate: asTrimmedString(entry.startDate),
     endDate: asTrimmedString(entry.endDate),
   };
