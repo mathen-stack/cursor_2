@@ -82,14 +82,14 @@ Build React apps with TypeScript for customer-facing products.`;
     });
   });
 
-  it("shows undefined | role when no posting company is detected", () => {
+  it("shows Target Company when no posting company is detected", () => {
     const jd = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
 Experience with Python, Docker, Kubernetes, and AWS is required.`;
     expect(formatJdResultHeadline(jd, 1)).toEqual({
       role: "Senior Machine Learning Engineer",
-      company: "undefined",
-      headline: "Senior Machine Learning Engineer | undefined",
+      company: "Target Company",
+      headline: "Senior Machine Learning Engineer | Target Company",
     });
   });
 

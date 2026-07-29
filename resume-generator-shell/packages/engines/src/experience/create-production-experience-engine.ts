@@ -1,4 +1,5 @@
 import type { StructuredLanguageModel } from "../providers/language-model";
+import { FallbackStructuredLanguageModel } from "../providers/fallback-structured-language-model";
 import { OpenAICompatibleStructuredModel } from "../providers/openai-compatible-structured-model";
 import { RealBulletComposer, type RealBulletComposerOptions } from "./composition/real-bullet-composer";
 import { DefaultExperienceEngine } from "./experience-engine";
@@ -66,17 +67,22 @@ function createRequirementModel(
     model: config.model,
   } as const;
 
+  const primary = new OpenAICompatibleStructuredModel({
+    ...adapterOptions,
+    ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+    ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
+    ...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
+    ...(config.httpReferer ? { httpReferer: config.httpReferer } : {}),
+    ...(config.applicationTitle
+      ? { applicationTitle: config.applicationTitle }
+      : {}),
+  });
+
   return {
-    model: new OpenAICompatibleStructuredModel({
-      ...adapterOptions,
-      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
-      ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
-      ...(config.maxRetries !== undefined ? { maxRetries: config.maxRetries } : {}),
-      ...(config.httpReferer ? { httpReferer: config.httpReferer } : {}),
-      ...(config.applicationTitle
-        ? { applicationTitle: config.applicationTitle }
-        : {}),
-    }),
+    model: new FallbackStructuredLanguageModel(
+      primary,
+      new RuleBasedRequirementModel(),
+    ),
     providerName,
   };
 }

@@ -31,7 +31,7 @@ function resolveRoleFromResume(
 }
 
 function formatResultHeadline(role: string, company: string): string {
-  return `${role} | ${company || "undefined"}`;
+  return `${role} | ${company || "Target Company"}`;
 }
 
 const AUTO_DOWNLOAD_FORMAT = "pdf" as const;
@@ -309,7 +309,7 @@ function createJdDraft(text = "", id?: string): JdDraft {
 
 function resolveJdLabels(draft: JdDraft, fallbackIndex: number) {
   const detected = formatJdResultHeadline(draft.text, fallbackIndex);
-  const company = draft.postingCompany.trim() || detected.company || "undefined";
+  const company = draft.postingCompany.trim() || detected.company || "Target Company";
   const headline = `${detected.role} | ${company}`;
   return {
     role: detected.role,
@@ -515,7 +515,7 @@ export default function ResumeGenerator({
                 job.pendingResume,
                 job.role,
               );
-              const company = job.company || "undefined";
+              const company = job.company || "Target Company";
               return {
                 ...job,
                 status: "done" as const,

@@ -160,7 +160,9 @@ export class OpenAICompatibleStructuredModel
           const error = new Error(
             `Model provider returned HTTP ${response.status}: ${responseText.slice(0, 500)}`,
           );
-          if (!retryable || attempt === this.maxRetries) throw error;
+          if (!retryable || attempt === this.maxRetries) {
+            throw error;
+          }
           lastError = error;
           await new Promise((resolve) =>
             setTimeout(resolve, Math.min(1_000 * 2 ** attempt, 4_000)),
@@ -175,10 +177,18 @@ export class OpenAICompatibleStructuredModel
         const normalized =
           error instanceof Error ? error : new Error("Unknown provider error.");
         const aborted = normalized.name === "AbortError";
+        const httpStatusMatch = /HTTP (\d{3})/.exec(normalized.message);
+        const httpStatus = httpStatusMatch
+          ? Number(httpStatusMatch[1])
+          : undefined;
+        const nonRetryableHttp =
+          typeof httpStatus === "number" &&
+          httpStatus !== 429 &&
+          httpStatus < 500;
         lastError = aborted
           ? new Error(`Model provider timed out after ${this.timeoutMs} ms.`)
           : normalized;
-        if (attempt === this.maxRetries) throw lastError;
+        if (nonRetryableHttp || attempt === this.maxRetries) throw lastError;
         await new Promise((resolve) =>
           setTimeout(resolve, Math.min(1_000 * 2 ** attempt, 4_000)),
         );

@@ -322,7 +322,7 @@ export function formatJdResultHeadline(
   fallbackIndex: number,
 ): { role: string; company: string; headline: string } {
   const role = detectRoleFromJd(text) ?? `Job ${fallbackIndex}`;
-  const company = detectCompanyNameFromJd(text) ?? "undefined";
+  const company = detectCompanyNameFromJd(text) ?? "Target Company";
   const headline = `${role} | ${company}`;
   return { role, company, headline };
 }
