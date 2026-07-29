@@ -85,6 +85,7 @@ type GenerationJob = {
   id: string;
   draftId: string;
   title: string;
+  company?: string;
   status: "running" | "finishing" | "done" | "error";
   progress: GenerationProgress | null;
   pendingResume: FinalResumeData | null;
@@ -105,17 +106,8 @@ function titleFromJdText(text: string, fallbackIndex: number): string {
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean);
-  const role = firstLine
-    ? firstLine.length > 72
-      ? `${firstLine.slice(0, 72)}…`
-      : firstLine
-    : `Job ${fallbackIndex}`;
-  const company = detectCompanyNameFromJd(text);
-  if (company && !role.toLocaleLowerCase().includes(company.toLocaleLowerCase())) {
-    const combined = `${role} · ${company}`;
-    return combined.length > 88 ? `${combined.slice(0, 88)}…` : combined;
-  }
-  return role;
+  if (!firstLine) return `Job ${fallbackIndex}`;
+  return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine;
 }
 
 function newCareerEntry(index: number): CareerEntry {
@@ -404,6 +396,7 @@ export default function ResumeGenerator() {
       id: createId("JOB"),
       draftId: draft.id,
       title: titleFromJdText(draft.text, index + 1),
+      company: detectCompanyNameFromJd(draft.text),
       status: "running",
       progress: initialGenerationProgress(),
       pendingResume: null,
@@ -852,6 +845,7 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      company={job.company}
                       onClose={() => closeJob(job.id)}
                     />
                   );
@@ -868,6 +862,9 @@ export default function ResumeGenerator() {
                           <div className="job-list-copy">
                             <div className="job-title-row">
                               <strong>{job.title}</strong>
+                              {job.company ? (
+                                <span className="badge badge-company">{job.company}</span>
+                              ) : null}
                               <span className="badge">Running</span>
                             </div>
                           </div>
@@ -894,6 +891,9 @@ export default function ResumeGenerator() {
                         <div className="job-list-copy">
                           <div className="job-title-row">
                             <strong>{job.title}</strong>
+                            {job.company ? (
+                              <span className="badge badge-company">{job.company}</span>
+                            ) : null}
                             <span className="badge badge-error">Failed</span>
                           </div>
                           <p className="error" style={{ marginTop: "0.65rem" }}>
@@ -968,11 +968,13 @@ function ResumePreview({
   resume,
   index,
   title,
+  company,
   onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
+  company?: string;
   onClose: () => void;
 }) {
   const template = resume.template.template;
@@ -1088,6 +1090,7 @@ function ResumePreview({
           <div className="job-list-copy">
             <div className="job-title-row">
               <strong>{title}</strong>
+              {company ? <span className="badge badge-company">{company}</span> : null}
               <span className="badge badge-done">
                 {resume.assemblyValidation.overallStatus}
               </span>
