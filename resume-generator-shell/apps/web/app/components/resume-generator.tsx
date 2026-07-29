@@ -148,12 +148,26 @@ async function autoDeliverGeneratedResume(
   return deliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT, profileFullName);
 }
 
-const SAMPLE_JD = `Senior Machine Learning Engineer
-Build and deploy scalable machine learning models in production environments.
-Implement model monitoring, improve inference performance, and automate CI/CD workflows.
-Collaborate with product, data, and platform teams to translate business requirements into technical solutions.
-Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
-Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`;
+const FIELD_PLACEHOLDERS = {
+  fullName: "Enter your full name",
+  email: "name@example.com",
+  phone: "+1 555 123 4567",
+  location: "City, State or Country",
+  linkedin: "https://linkedin.com/in/username",
+  portfolio: "https://yourportfolio.com",
+  company: "Company name",
+  school: "University or school name",
+  degree: "Bachelor of Science",
+  fieldOfStudy: "Computer Science",
+  periodStart: "Aug 2018",
+  periodEnd: "May 2022",
+  periodEndPresent: "Present",
+  jobDescription: "Paste the full job description here",
+  overallScore: "e.g. 85",
+  relevancyScore: "e.g. 78",
+  feedbackCategory: "Select a feedback category",
+  feedbackMessage: "Paste one feedback item from Resume Worded (optional)",
+} as const;
 
 const GENERATION_STEPS = [
   { id: "experience", label: "Building experience bullets" },
@@ -306,7 +320,7 @@ function newCareerEntry(index: number): CareerEntry {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
     companyName: "",
     startDate: "",
-    endDate: index === 0 ? "Present" : "",
+    endDate: "",
   };
 }
 
@@ -329,41 +343,18 @@ function atsScoreClass(score: number): string {
 
 export default function ResumeGenerator() {
   const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
-    createJdDraft(SAMPLE_JD, "JD-001"),
+    createJdDraft("", "JD-001"),
   ]);
   const [profile, setProfile] = useState<UserProfile>({
     profileId: "PROFILE-DEMO",
     personalInformation: {
-      fullName: "Alex Morgan",
-      email: "alex@example.com",
-      phone: "+1 555 0100",
-      location: "Remote",
-      linkedin: "https://www.linkedin.com/in/alex-morgan",
+      fullName: "",
+      email: "",
+      phone: "",
+      location: "",
     },
-    careerHistory: [
-      {
-        experienceId: "EXP-001",
-        companyName: "Example AI Company",
-        startDate: "Jan 2022",
-        endDate: "Present",
-      },
-      {
-        experienceId: "EXP-002",
-        companyName: "Example Software Company",
-        startDate: "Mar 2018",
-        endDate: "Dec 2021",
-      },
-    ],
-    education: [
-      {
-        educationId: "EDU-001",
-        institution: "Example University",
-        degree: "Bachelor of Science",
-        field: "Computer Science",
-        startDate: "Sep 2014",
-        endDate: "Jun 2018",
-      },
-    ],
+    careerHistory: [newCareerEntry(0)],
+    education: [newEducationEntry(0)],
   });
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
@@ -795,7 +786,7 @@ export default function ResumeGenerator() {
               <input
                 type="text"
                 name="fullName"
-                placeholder="Enter your full name"
+                placeholder={FIELD_PLACEHOLDERS.fullName}
                 value={profile.personalInformation.fullName}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("fullName", event.target.value)
@@ -808,7 +799,7 @@ export default function ResumeGenerator() {
               <input
                 type="email"
                 name="email"
-                placeholder="name@example.com"
+                placeholder={FIELD_PLACEHOLDERS.email}
                 value={profile.personalInformation.email}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("email", event.target.value)
@@ -821,7 +812,7 @@ export default function ResumeGenerator() {
               <input
                 type="tel"
                 name="phone"
-                placeholder="+1 555 123 4567"
+                placeholder={FIELD_PLACEHOLDERS.phone}
                 value={profile.personalInformation.phone}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("phone", event.target.value)
@@ -834,7 +825,7 @@ export default function ResumeGenerator() {
               <input
                 type="text"
                 name="location"
-                placeholder="City, State or Country"
+                placeholder={FIELD_PLACEHOLDERS.location}
                 value={profile.personalInformation.location}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("location", event.target.value)
@@ -847,7 +838,7 @@ export default function ResumeGenerator() {
               <input
                 type="url"
                 name="linkedin"
-                placeholder="https://linkedin.com/in/username"
+                placeholder={FIELD_PLACEHOLDERS.linkedin}
                 value={profile.personalInformation.linkedin ?? ""}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("linkedin", event.target.value)
@@ -860,7 +851,7 @@ export default function ResumeGenerator() {
               <input
                 type="url"
                 name="portfolio"
-                placeholder="https://yourportfolio.com"
+                placeholder={FIELD_PLACEHOLDERS.portfolio}
                 value={profile.personalInformation.portfolio ?? ""}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   updatePersonal("portfolio", event.target.value)
@@ -900,7 +891,7 @@ export default function ResumeGenerator() {
                   <input
                     type="text"
                     name={`company-${entry.experienceId}`}
-                    placeholder="Company name"
+                    placeholder={FIELD_PLACEHOLDERS.company}
                     value={entry.companyName}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateCareer(index, "companyName", event.target.value)
@@ -914,6 +905,8 @@ export default function ResumeGenerator() {
                     startValue={entry.startDate}
                     endValue={entry.endDate}
                     allowPresentEnd
+                    startPlaceholder={FIELD_PLACEHOLDERS.periodStart}
+                    endPlaceholder={FIELD_PLACEHOLDERS.periodEndPresent}
                     onStartChange={(value) => updateCareer(index, "startDate", value)}
                     onEndChange={(value) => updateCareer(index, "endDate", value)}
                   />
@@ -959,7 +952,7 @@ export default function ResumeGenerator() {
                   <input
                     type="text"
                     name={`school-${entry.educationId}`}
-                    placeholder="University or school name"
+                    placeholder={FIELD_PLACEHOLDERS.school}
                     value={entry.institution}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateEducation(index, "institution", event.target.value)
@@ -972,7 +965,7 @@ export default function ResumeGenerator() {
                   <input
                     type="text"
                     name={`degree-${entry.educationId}`}
-                    placeholder="Bachelor's degree"
+                    placeholder={FIELD_PLACEHOLDERS.degree}
                     value={entry.degree}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateEducation(index, "degree", event.target.value)
@@ -985,7 +978,7 @@ export default function ResumeGenerator() {
                   <input
                     type="text"
                     name={`fieldOfStudy-${entry.educationId}`}
-                    placeholder="Computer Science"
+                    placeholder={FIELD_PLACEHOLDERS.fieldOfStudy}
                     value={entry.field}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       updateEducation(index, "field", event.target.value)
@@ -998,6 +991,8 @@ export default function ResumeGenerator() {
                   <PeriodDateControl
                     startValue={entry.startDate}
                     endValue={entry.endDate}
+                    startPlaceholder={FIELD_PLACEHOLDERS.periodStart}
+                    endPlaceholder={FIELD_PLACEHOLDERS.periodEnd}
                     onStartChange={(value) =>
                       updateEducation(index, "startDate", value)
                     }
@@ -1033,7 +1028,7 @@ export default function ResumeGenerator() {
                   onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                     updateJdDraft(draft.id, event.target.value)
                   }
-                  placeholder="Paste the full job description here"
+                  placeholder={FIELD_PLACEHOLDERS.jobDescription}
                 />
               </label>
             </div>
@@ -1482,6 +1477,7 @@ function ResumePreview({
                   <input
                     className="control-input"
                     inputMode="decimal"
+                    placeholder={FIELD_PLACEHOLDERS.overallScore}
                     value={externalOverallScore}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       setExternalOverallScore(event.target.value)
@@ -1493,6 +1489,7 @@ function ResumePreview({
                   <input
                     className="control-input"
                     inputMode="decimal"
+                    placeholder={FIELD_PLACEHOLDERS.relevancyScore}
                     value={externalRelevancyScore}
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       setExternalRelevancyScore(event.target.value)
@@ -1503,6 +1500,7 @@ function ResumePreview({
                   <span>Feedback category</span>
                   <select
                     value={feedbackCategory}
+                    aria-label={FIELD_PLACEHOLDERS.feedbackCategory}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) =>
                       setFeedbackCategory(
                         event.target.value as ExternalResumeFeedbackCategory,
@@ -1531,7 +1529,7 @@ function ResumePreview({
               </div>
               <textarea
                 style={{ minHeight: "5rem" }}
-                placeholder="Paste one feedback item from Resume Worded (optional)"
+                placeholder={FIELD_PLACEHOLDERS.feedbackMessage}
                 value={feedbackMessage}
                 onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                   setFeedbackMessage(event.target.value)
