@@ -44,20 +44,44 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
   return `${stem}.${format}`;
 }
 
-/** Quietly write PDF into download/ — no browser Save As dialog. */
-async function autoSaveGeneratedResume(
+/**
+ * Save PDF into download/<full-name>.pdf and trigger a browser download.
+ * Uses a plain filename (no folder prefix) so browsers do not open Save As.
+ */
+async function autoDeliverGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
-): Promise<void> {
+): Promise<{ filename: string }> {
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format, saveOnly: true }),
+    body: JSON.stringify({ resume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
-    throw new Error(payload.error?.message ?? "Resume auto-save failed.");
+    throw new Error(payload.error?.message ?? "Resume auto-download failed.");
   }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const rawName =
+    filenameMatch?.[1] ??
+    resumeFilenameFromFullName(
+      resume.profile.personalInformation.fullName,
+      format,
+    );
+  const filename = rawName.includes("/")
+    ? rawName.slice(rawName.lastIndexOf("/") + 1)
+    : rawName;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return { filename };
 }
 
 async function downloadGeneratedResume(
@@ -85,7 +109,9 @@ async function downloadGeneratedResume(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = filename.includes("/")
+    ? filename.slice(filename.lastIndexOf("/") + 1)
+    : filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -175,6 +201,7 @@ type GenerationJob = {
   pendingResume: FinalResumeData | null;
   resume: FinalResumeData | null;
   error: string;
+  autoDownloadError?: string | undefined;
 };
 
 function createId(prefix: string): string {
@@ -268,6 +295,35 @@ export default function ResumeGenerator() {
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
 
+  function queueAutoDownload(jobId: string, resume: FinalResumeData) {
+    if (autoDownloadedJobIdsRef.current.has(jobId)) return;
+    autoDownloadedJobIdsRef.current.add(jobId);
+    void autoDeliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT)
+      .then(() => {
+        setJobs((current) =>
+          current.map((item) => {
+            if (item.id !== jobId) return item;
+            const { autoDownloadError: _removed, ...rest } = item;
+            return rest;
+          }),
+        );
+      })
+      .catch((caught) => {
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Automatic resume download failed.";
+        console.error(message);
+        setJobs((current) =>
+          current.map((item) =>
+            item.id === jobId ? { ...item, autoDownloadError: message } : item,
+          ),
+        );
+        // Allow a later retry from the done-effect if this attempt failed.
+        autoDownloadedJobIdsRef.current.delete(jobId);
+      });
+  }
+
   const readyJdCount = useMemo(
     () => jdDrafts.filter((draft) => draft.text.trim().length >= 50).length,
     [jdDrafts],
@@ -336,27 +392,10 @@ export default function ResumeGenerator() {
   }, [hasActiveJobs]);
 
   useEffect(() => {
-    const readyJobs = jobs.filter(
-      (job) =>
-        job.status === "done" &&
-        job.resume &&
-        !autoDownloadedJobIdsRef.current.has(job.id),
-    );
-    if (readyJobs.length === 0) return;
-
-    for (const job of readyJobs) {
-      autoDownloadedJobIdsRef.current.add(job.id);
-      const resume = job.resume;
-      if (!resume) continue;
-      void autoSaveGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT).catch(
-        (caught) => {
-          console.error(
-            caught instanceof Error
-              ? caught.message
-              : "Automatic resume save failed.",
-          );
-        },
-      );
+    for (const job of jobs) {
+      if (job.status === "done" && job.resume) {
+        queueAutoDownload(job.id, job.resume);
+      }
     }
   }, [jobs]);
 
@@ -552,6 +591,9 @@ export default function ResumeGenerator() {
                 : "Resume generation failed.",
             );
           }
+          // Start auto-download as soon as the resume exists — do not wait for
+          // the progress bar to reach 100%.
+          queueAutoDownload(job.id, payload);
           setJobs((current) =>
             current.map((item) =>
               item.id === job.id
@@ -904,6 +946,7 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      autoDownloadError={job.autoDownloadError}
                       onClose={() => closeJob(job.id)}
                     />
                   );
@@ -1020,11 +1063,13 @@ function ResumePreview({
   resume,
   index,
   title,
+  autoDownloadError,
   onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
+  autoDownloadError?: string | undefined;
   onClose: () => void;
 }) {
   const template = resume.template.template;
@@ -1161,6 +1206,9 @@ function ResumePreview({
           </div>
         </div>
         {exportError ? <p className="error">{exportError}</p> : null}
+        {autoDownloadError ? (
+          <p className="error">Auto-download failed: {autoDownloadError}</p>
+        ) : null}
 
         {resume.readiness ? (
           <details className="meta-details">
