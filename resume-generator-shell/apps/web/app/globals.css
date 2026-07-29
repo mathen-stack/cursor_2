@@ -605,8 +605,17 @@ textarea {
   flex-wrap: wrap;
 }
 
+.job-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
 .job-title-row strong,
 .job-headline {
+  display: block;
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.35;

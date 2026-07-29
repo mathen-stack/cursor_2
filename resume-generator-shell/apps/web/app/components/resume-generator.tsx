@@ -908,10 +908,10 @@ export default function ResumeGenerator() {
                         <div className="job-list-head">
                           <div className="job-index">{index + 1}</div>
                           <div className="job-list-copy">
-                            <div className="job-title-row">
-                              <strong className="job-headline">{job.title}</strong>
+                            <div className="job-status-row">
                               <span className="badge">Running</span>
                             </div>
+                            <strong className="job-headline">{job.title}</strong>
                           </div>
                           <button
                             type="button"
@@ -934,10 +934,10 @@ export default function ResumeGenerator() {
                       <div className="job-list-head">
                         <div className="job-index">{index + 1}</div>
                         <div className="job-list-copy">
-                          <div className="job-title-row">
-                            <strong className="job-headline">{job.title}</strong>
+                          <div className="job-status-row">
                             <span className="badge badge-error">Failed</span>
                           </div>
+                          <strong className="job-headline">{job.title}</strong>
                           <p className="error" style={{ marginTop: "0.65rem" }}>
                             {job.error || "Resume generation failed."}
                           </p>
@@ -1121,8 +1121,7 @@ function ResumePreview({
         <div className="job-list-head">
           <div className="job-index">{index}</div>
           <div className="job-list-copy">
-            <div className="job-title-row">
-              <strong className="job-headline">{title}</strong>
+            <div className="job-status-row">
               <span className="badge badge-done">
                 {resume.assemblyValidation.overallStatus}
               </span>
@@ -1132,6 +1131,7 @@ function ResumePreview({
                 </span>
               ) : null}
             </div>
+            <strong className="job-headline">{title}</strong>
           </div>
           <button
             type="button"
