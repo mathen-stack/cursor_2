@@ -643,9 +643,13 @@ textarea {
 
 .job-list-head {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  grid-template-columns: 2rem minmax(0, 1fr) auto auto;
   gap: 0.75rem;
-  align-items: start;
+  align-items: center;
+}
+
+.job-list-head .round-pdf-progress {
+  justify-self: end;
 }
 
 .job-list-copy {
