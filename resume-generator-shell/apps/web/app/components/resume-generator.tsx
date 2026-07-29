@@ -168,7 +168,7 @@ function formatEducationPeriod(entry: {
 }): string {
   const start = entry.startDate?.trim() ?? "";
   const end = entry.endDate?.trim() ?? "";
-  if (start && end) return `${start} – ${end}`;
+  if (start && end) return `${start} - ${end}`;
   return start || end;
 }
 
@@ -1375,12 +1375,11 @@ function ResumePreview({
                     ? section.content.map((entry) => (
                         <div key={entry.educationId} className="edu-line">
                           <strong>
-                            {entry.degree} in {entry.field}
+                            {entry.degree} in {entry.field} | {entry.institution}
                           </strong>
-                          , {entry.institution}
-                          {formatEducationPeriod(entry)
-                            ? ` | ${formatEducationPeriod(entry)}`
-                            : ""}
+                          {formatEducationPeriod(entry) ? (
+                            <span>{formatEducationPeriod(entry)}</span>
+                          ) : null}
                         </div>
                       ))
                     : null}

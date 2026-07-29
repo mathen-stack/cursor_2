@@ -110,6 +110,32 @@ describe("resume rendering and export integrity", () => {
     expect(new TextDecoder().decode(pdf.bytes.slice(0, 8))).toBe("%PDF-1.7");
   });
 
+  it("renders education periods as a first-class date line like experience", async () => {
+    const data = await resume("PROFILE-EDU-DATES");
+    const canonical = createCanonicalResume(data);
+    const educationLines = canonical.lines.filter(
+      (line) => line.sectionId === "education",
+    );
+
+    expect(educationLines.map((line) => line.kind)).toEqual([
+      "section-heading",
+      "education",
+      "date",
+    ]);
+    expect(educationLines[1]?.text).toBe(
+      "Bachelor of Science in Computer Science | Example University",
+    );
+    expect(educationLines[2]?.text).toBe("2014-09 - 2018-06");
+    expect(canonical.plainText).toContain("2014-09 - 2018-06");
+
+    const html = await new ProductionResumeRenderer().export(data, "html");
+    const htmlText = new TextDecoder().decode(html.bytes);
+    expect(htmlText).toContain("2014-09 - 2018-06");
+    expect(htmlText).toMatch(
+      /Bachelor of Science in Computer Science \| Example University[\s\S]*2014-09 - 2018-06/,
+    );
+  });
+
   it("rejects a renderer trace that omits source content", async () => {
     const data = await resume("PROFILE-REJECT");
     const canonical = createCanonicalResume(data);

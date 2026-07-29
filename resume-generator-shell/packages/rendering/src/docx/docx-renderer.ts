@@ -183,17 +183,14 @@ function documentXml(data: FinalResumeData): { xml: string; emittedTokens: strin
     if (section.id === "education") {
       for (const education of section.content) {
         const degree = `${education.degree} in ${education.field}`;
-        const period = `${education.startDate} – ${education.endDate}`;
-        const suffix = [education.institution, period]
-          .filter((value): value is string => Boolean(value?.trim()))
-          .join(" | ");
         body.push(
           paragraph(
-            `${textRun(degree, { bold: true })}${suffix ? textRun(` | ${suffix}`) : ""}`,
+            `${textRun(degree, { bold: true })}${textRun(` | ${education.institution}`)}<w:r><w:tab/></w:r>${textRun(`${education.startDate} - ${education.endDate}`)}`,
             {
               style: "ResumeBody",
               spacingBeforePt: template.spacing.paragraphGapPt,
               spacingAfterPt: template.spacing.paragraphGapPt,
+              tabStopTwips: contentWidth,
             },
           ),
         );

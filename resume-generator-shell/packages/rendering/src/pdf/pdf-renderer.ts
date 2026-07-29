@@ -296,11 +296,15 @@ function renderDocument(data: FinalResumeData): {
     if (section.id === "education") {
       for (const education of section.content) {
         const degree = `${education.degree} in ${education.field}`;
-        const period = `${education.startDate} – ${education.endDate}`;
-        const text = [degree, education.institution, period]
-          .filter((value): value is string => Boolean(value?.trim()))
-          .join(" | ");
-        addText(context, text, { after: template.spacing.paragraphGapPt });
+        addText(context, `${degree} | ${education.institution}`, {
+          after: 0,
+        });
+        addText(context, `${education.startDate} - ${education.endDate}`, {
+          size: template.typography.bodySizePt,
+          align: "right",
+          lineHeight: context.lineHeight,
+          after: template.spacing.paragraphGapPt,
+        });
         context.emittedTokens.push(
           education.degree,
           education.field,
