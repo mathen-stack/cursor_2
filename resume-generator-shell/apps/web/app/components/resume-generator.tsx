@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type {
   CareerEntry,
   ExternalResumeFeedbackCategory,
@@ -16,6 +16,29 @@ Implement model monitoring, improve inference performance, and automate CI/CD wo
 Collaborate with product, data, and platform teams to translate business requirements into technical solutions.
 Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
 Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`;
+
+const GENERATION_STEPS = [
+  { id: "experience", label: "Building experience bullets" },
+  { id: "summary", label: "Writing professional summary" },
+  { id: "template", label: "Selecting ATS template" },
+  { id: "skills", label: "Ranking JD skills" },
+  { id: "assemble", label: "Assembling final resume" },
+  { id: "readiness", label: "Checking ATS readiness" },
+] as const;
+
+type GenerationProgress = {
+  stepIndex: number;
+  percent: number;
+  label: string;
+};
+
+function initialGenerationProgress(): GenerationProgress {
+  return {
+    stepIndex: 0,
+    percent: 6,
+    label: GENERATION_STEPS[0].label,
+  };
+}
 
 function newCareerEntry(index: number): CareerEntry {
   return {
@@ -92,6 +115,32 @@ export default function ResumeGenerator() {
   const [resume, setResume] = useState<FinalResumeData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [generationProgress, setGenerationProgress] =
+    useState<GenerationProgress | null>(null);
+
+  useEffect(() => {
+    if (!loading) return;
+
+    setGenerationProgress(initialGenerationProgress());
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      // Advance through pipeline labels while the blocking generate request runs.
+      // Hold under 92% until the response arrives so completion feels earned.
+      const stepIndex = Math.min(
+        GENERATION_STEPS.length - 2,
+        Math.floor(elapsed / 1200),
+      );
+      const percent = Math.min(92, 6 + Math.floor(elapsed / 90));
+      setGenerationProgress({
+        stepIndex,
+        percent,
+        label: GENERATION_STEPS[stepIndex]?.label ?? GENERATION_STEPS[0].label,
+      });
+    }, 250);
+
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   const canGenerate = useMemo(() => {
     const personal = profile.personalInformation;
@@ -204,6 +253,7 @@ export default function ResumeGenerator() {
     setLoading(true);
     setError("");
     setResume(null);
+    setGenerationProgress(initialGenerationProgress());
     try {
       const response = await fetch("/api/resume/generate", {
         method: "POST",
@@ -224,9 +274,15 @@ export default function ResumeGenerator() {
             : "Resume generation failed.",
         );
       }
+      setGenerationProgress({
+        stepIndex: GENERATION_STEPS.length - 1,
+        percent: 100,
+        label: "Resume ready",
+      });
       setResume(payload);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Resume generation failed.");
+      setGenerationProgress(null);
     } finally {
       setLoading(false);
     }
@@ -510,11 +566,23 @@ export default function ResumeGenerator() {
               {loading ? "Generating…" : "Generate complete resume"}
             </button>
             <p className="inline-status">
-              {loading
-                ? "Running JD-isolated resume pipeline…"
+              {loading && generationProgress
+                ? `${generationProgress.percent}% · ${generationProgress.label}`
                 : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
+          {loading && generationProgress ? (
+            <div
+              className="generation-progress-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={generationProgress.percent}
+              aria-label={generationProgress.label}
+            >
+              <span style={{ width: `${generationProgress.percent}%` }} />
+            </div>
+          ) : null}
           {error ? <p className="error">{error}</p> : null}
         </section>
 
@@ -525,7 +593,9 @@ export default function ResumeGenerator() {
             </div>
           </div>
 
-          {!resume ? (
+          {loading && generationProgress ? (
+            <GenerationProgressPanel progress={generationProgress} />
+          ) : !resume ? (
             <div className="empty-board">
               <p>No resume yet. Generate once, then preview and export.</p>
               <ol>
@@ -539,6 +609,48 @@ export default function ResumeGenerator() {
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+function GenerationProgressPanel({
+  progress,
+}: {
+  progress: GenerationProgress;
+}) {
+  return (
+    <div className="generation-progress" aria-live="polite">
+      <div className="generation-progress-head">
+        <strong>Generating resume</strong>
+        <span>{progress.percent}%</span>
+      </div>
+      <div
+        className="generation-progress-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.percent}
+        aria-label={progress.label}
+      >
+        <span style={{ width: `${progress.percent}%` }} />
+      </div>
+      <p className="generation-progress-label">{progress.label}</p>
+      <ol className="generation-progress-steps">
+        {GENERATION_STEPS.map((step, index) => {
+          const state =
+            index < progress.stepIndex
+              ? "done"
+              : index === progress.stepIndex
+                ? "active"
+                : "pending";
+          return (
+            <li key={step.id} data-state={state}>
+              <span className="generation-progress-marker" aria-hidden />
+              <span>{step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

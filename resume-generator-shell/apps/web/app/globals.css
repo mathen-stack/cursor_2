@@ -353,6 +353,114 @@ textarea {
   font-size: 0.86rem;
 }
 
+.generation-progress-bar {
+  margin-top: 0.85rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.generation-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+  transition: width 220ms ease;
+}
+
+.generation-progress {
+  border: 1px solid rgba(62, 207, 142, 0.35);
+  background: var(--run-soft);
+  padding: 1rem 1.05rem 1.05rem;
+  animation: rise 350ms ease-out both;
+}
+
+.generation-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.generation-progress-head strong {
+  font-size: 0.95rem;
+}
+
+.generation-progress-head span {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.generation-progress .generation-progress-bar {
+  margin-top: 0;
+}
+
+.generation-progress-label {
+  margin: 0.7rem 0 0.85rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.generation-progress-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.generation-progress-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.generation-progress-steps li[data-state="done"] {
+  color: var(--accent);
+}
+
+.generation-progress-steps li[data-state="active"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.generation-progress-marker {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.generation-progress-steps li[data-state="done"] .generation-progress-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.generation-progress-steps li[data-state="active"] .generation-progress-marker {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: progress-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(62, 207, 142, 0.22);
+  }
+}
+
 .error {
   margin: 0.85rem 0 0;
   padding: 0.7rem 0.8rem;
