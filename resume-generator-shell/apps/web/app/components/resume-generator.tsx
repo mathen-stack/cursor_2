@@ -116,11 +116,11 @@ function createJdDraft(text = "", id?: string): JdDraft {
 
 function resolveJdLabels(draft: JdDraft, fallbackIndex: number) {
   const detected = formatJdResultHeadline(draft.text, fallbackIndex);
-  const company = draft.postingCompany.trim() || detected.company;
-  const headline = company ? `${detected.role} · ${company}` : detected.role;
+  const company = draft.postingCompany.trim() || detected.company || "undefined";
+  const headline = `${detected.role} · ${company}`;
   return {
     role: detected.role,
-    company: company || undefined,
+    company,
     headline,
   };
 }
@@ -758,9 +758,9 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Add JDs anytime. We detect the company that posted each JD when the text
-                has a clear signal; if not, enter it in Posting company. Career history
-                companies still come from your profile.
+                Add JDs anytime. We detect the company that posted each JD when possible.
+                If not detected, labels show undefined until you enter the company. Career
+                history companies still come from your profile.
               </p>
             </div>
           </div>
@@ -774,7 +774,7 @@ export default function ResumeGenerator() {
                 <div className="entry-head">
                   <p className="entry-label">
                     JD {index + 1}
-                    {labels.role !== `Job ${index + 1}` || labels.company ? (
+                    {labels.role !== `Job ${index + 1}` || labels.company !== "undefined" ? (
                       <span className="badge badge-company" style={{ marginLeft: "0.45rem" }}>
                         {labels.headline}
                       </span>
@@ -806,15 +806,11 @@ export default function ResumeGenerator() {
                 </div>
                 <div className="profile-grid">
                   <label className="profile-field">
-                    <span>Posting company</span>
+                    <span>Company that posted this JD</span>
                     <input
                       type="text"
                       name={`posting-company-${draft.id}`}
-                      placeholder={
-                        detectCompanyNameFromJd(draft.text)
-                          ? "Detected from JD"
-                          : "Company that posted this JD"
-                      }
+                      placeholder="undefined"
                       value={draft.postingCompany}
                       onChange={(event: ChangeEvent<HTMLInputElement>) =>
                         updateJdPostingCompany(draft.id, event.target.value)
