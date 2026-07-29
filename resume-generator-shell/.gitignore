@@ -16,3 +16,4 @@ data/profiles/*
 !.env.example
 *.log
 .DS_Store
+.vercel
