@@ -85,6 +85,7 @@ export default function AdminProfilesClient() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [usernameSearch, setUsernameSearch] = useState("");
 
   const selectedSummary = useMemo(
     () => summaries.find((item) => item.username === selectedUsername) ?? null,
@@ -94,6 +95,18 @@ export default function AdminProfilesClient() {
     () => accounts.find((item) => item.username === selectedUsername) ?? null,
     [accounts, selectedUsername],
   );
+  const filteredSummaries = useMemo(() => {
+    const query = usernameSearch.trim().toLowerCase();
+    if (!query) return summaries;
+    return summaries.filter((summary) => {
+      const account = accounts.find((item) => item.username === summary.username);
+      return (
+        summary.username.toLowerCase().includes(query) ||
+        summary.fullName.toLowerCase().includes(query) ||
+        (account?.displayName.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [summaries, accounts, usernameSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -490,23 +503,39 @@ export default function AdminProfilesClient() {
 
           <div className="admin-layout">
             <aside className="admin-user-list" aria-label="Users">
-              {summaries.map((summary) => (
-                <button
-                  key={summary.username}
-                  type="button"
-                  className={`admin-user-item${
-                    summary.username === selectedUsername ? " is-active" : ""
-                  }`}
-                  onClick={() => setSelectedUsername(summary.username)}
-                >
-                  <strong>@{summary.username}</strong>
-                  <span>
-                    {summary.hasProfile
-                      ? summary.fullName || "Profile saved"
-                      : "No profile yet"}
-                  </span>
-                </button>
-              ))}
+              <label className="profile-field admin-user-search">
+                <span className="sr-only">Search username</span>
+                <input
+                  type="search"
+                  value={usernameSearch}
+                  placeholder="Search username…"
+                  aria-label="Search username"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setUsernameSearch(event.target.value)
+                  }
+                />
+              </label>
+              {filteredSummaries.length === 0 ? (
+                <p className="hint admin-user-empty">No users match that username.</p>
+              ) : (
+                filteredSummaries.map((summary) => (
+                  <button
+                    key={summary.username}
+                    type="button"
+                    className={`admin-user-item${
+                      summary.username === selectedUsername ? " is-active" : ""
+                    }`}
+                    onClick={() => setSelectedUsername(summary.username)}
+                  >
+                    <strong>@{summary.username}</strong>
+                    <span>
+                      {summary.hasProfile
+                        ? summary.fullName || "Profile saved"
+                        : "No profile yet"}
+                    </span>
+                  </button>
+                ))
+              )}
             </aside>
 
             <div className="admin-editor">

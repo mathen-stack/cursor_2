@@ -163,6 +163,19 @@ button:disabled {
   align-content: start;
 }
 
+.admin-user-search {
+  margin: 0;
+}
+
+.admin-user-search input {
+  width: 100%;
+}
+
+.admin-user-empty {
+  margin: 0.35rem 0 0;
+  padding: 0 0.15rem;
+}
+
 .admin-user-item {
   display: grid;
   gap: 0.15rem;
