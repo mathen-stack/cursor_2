@@ -337,6 +337,7 @@ export default function AdminProfilesClient() {
       setAccountUsername(payload.account.username);
       setAccountRole(payload.account.role);
       setAccountPassword("");
+      setShowAccountPassword(false);
       setMessage(
         payload.renamedFrom
           ? `Renamed @${payload.renamedFrom} to @${payload.account.username}`
@@ -373,6 +374,7 @@ export default function AdminProfilesClient() {
       }
       setNewUsername("");
       setNewPassword("");
+      setShowNewPassword(false);
       setNewRole("user");
       setSelectedUsername(payload.account.username);
       setMessage(`Created account @${payload.account.username}`);
