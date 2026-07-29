@@ -527,11 +527,11 @@ export default function ResumeGenerator() {
 
           {!resume ? (
             <div className="empty-board">
-              <p>No resume yet. Generate once to preview and export.</p>
+              <p>No resume yet. Generate once, then preview and export.</p>
               <ol>
                 <li>Confirm profile, career history, and education</li>
                 <li>Paste the target job description</li>
-                <li>Generate, review the paper preview, then export</li>
+                <li>Generate, open Preview when you want to review, then export</li>
               </ol>
             </div>
           ) : (
@@ -545,6 +545,7 @@ export default function ResumeGenerator() {
 
 function ResumePreview({ resume }: { resume: FinalResumeData }) {
   const template = resume.template.template;
+  const [showPreview, setShowPreview] = useState(false);
   const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
   const [exportError, setExportError] = useState("");
   const [externalOverallScore, setExternalOverallScore] = useState("");
@@ -673,8 +674,16 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
         </div>
 
         <div className="download-row">
-          <span className="download-label">Export</span>
+          <span className="download-label">Actions</span>
           <div className="download-actions">
+            <button
+              type="button"
+              className="download-btn"
+              aria-pressed={showPreview}
+              onClick={() => setShowPreview((current) => !current)}
+            >
+              {showPreview ? "Hide preview" : "Preview"}
+            </button>
             {(["docx", "pdf", "txt"] as const).map((format) => (
               <button
                 key={format}
@@ -801,88 +810,94 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
           </details>
         ) : null}
 
-        <div
-          className="resume-sheet"
-          style={{
-            maxWidth: template.pageSize === "a4" ? 794 : 816,
-            fontFamily: template.typography.fontFamily,
-            fontSize: template.typography.bodySizePt,
-            lineHeight: template.typography.bodyLineHeight,
-          }}
-        >
-          {resume.document.sections.map((section) => {
-            if (section.id === "contact") {
-              const contact = section.content;
+        {showPreview ? (
+          <div
+            className="resume-sheet"
+            style={{
+              maxWidth: template.pageSize === "a4" ? 794 : 816,
+              fontFamily: template.typography.fontFamily,
+              fontSize: template.typography.bodySizePt,
+              lineHeight: template.typography.bodyLineHeight,
+            }}
+          >
+            {resume.document.sections.map((section) => {
+              if (section.id === "contact") {
+                const contact = section.content;
+                return (
+                  <header key={section.id} style={{ textAlign: template.alignment.contact }}>
+                    <h1 style={{ fontSize: template.typography.nameSizePt + 4 }}>
+                      {contact.fullName}
+                    </h1>
+                    <div className="contact-line">
+                      {[
+                        contact.email,
+                        contact.phone,
+                        contact.location,
+                        contact.linkedin,
+                        contact.portfolio,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </div>
+                  </header>
+                );
+              }
               return (
-                <header key={section.id} style={{ textAlign: template.alignment.contact }}>
-                  <h1 style={{ fontSize: template.typography.nameSizePt + 4 }}>
-                    {contact.fullName}
-                  </h1>
-                  <div className="contact-line">
-                    {[
-                      contact.email,
-                      contact.phone,
-                      contact.location,
-                      contact.linkedin,
-                      contact.portfolio,
-                    ]
-                      .filter(Boolean)
-                      .join(" | ")}
-                  </div>
-                </header>
-              );
-            }
-            return (
-              <section key={section.id} className="resume-section">
-                <h2 style={{ fontSize: template.typography.sectionHeadingSizePt }}>
-                  {section.heading}
-                </h2>
-                {section.id === "professional-summary" ? <p>{section.content}</p> : null}
-                {section.id === "skills" ? (
-                  <div className="skills-list">
-                    {section.content.map((category) => (
-                      <div key={category.name}>
-                        <strong>{category.name}:</strong> {category.skills.join(", ")}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {section.id === "professional-experience"
-                  ? section.content.map((entry) => (
-                      <article key={entry.experienceId} className="role-block">
-                        <div className="role-head">
-                          <strong>
-                            {entry.assignedRole} | {entry.companyName}
-                          </strong>
-                          <span>
-                            {entry.startDate} – {entry.endDate}
-                          </span>
+                <section key={section.id} className="resume-section">
+                  <h2 style={{ fontSize: template.typography.sectionHeadingSizePt }}>
+                    {section.heading}
+                  </h2>
+                  {section.id === "professional-summary" ? <p>{section.content}</p> : null}
+                  {section.id === "skills" ? (
+                    <div className="skills-list">
+                      {section.content.map((category) => (
+                        <div key={category.name}>
+                          <strong>{category.name}:</strong> {category.skills.join(", ")}
                         </div>
-                        <ul className="bullet-list">
-                          {entry.bullets.map((bullet, index) => (
-                            <li key={`${entry.experienceId}-${index}`}>{bullet}</li>
-                          ))}
-                        </ul>
-                      </article>
-                    ))
-                  : null}
-                {section.id === "education"
-                  ? section.content.map((entry) => (
-                      <div key={entry.educationId} className="edu-line">
-                        <strong>
-                          {entry.degree} in {entry.field}
-                        </strong>
-                        , {entry.institution}
-                        {formatEducationPeriod(entry)
-                          ? ` | ${formatEducationPeriod(entry)}`
-                          : ""}
-                      </div>
-                    ))
-                  : null}
-              </section>
-            );
-          })}
-        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {section.id === "professional-experience"
+                    ? section.content.map((entry) => (
+                        <article key={entry.experienceId} className="role-block">
+                          <div className="role-head">
+                            <strong>
+                              {entry.assignedRole} | {entry.companyName}
+                            </strong>
+                            <span>
+                              {entry.startDate} – {entry.endDate}
+                            </span>
+                          </div>
+                          <ul className="bullet-list">
+                            {entry.bullets.map((bullet, index) => (
+                              <li key={`${entry.experienceId}-${index}`}>{bullet}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))
+                    : null}
+                  {section.id === "education"
+                    ? section.content.map((entry) => (
+                        <div key={entry.educationId} className="edu-line">
+                          <strong>
+                            {entry.degree} in {entry.field}
+                          </strong>
+                          , {entry.institution}
+                          {formatEducationPeriod(entry)
+                            ? ` | ${formatEducationPeriod(entry)}`
+                            : ""}
+                        </div>
+                      ))
+                    : null}
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="inline-status">
+            Paper preview is hidden. Use Preview when you want to review the resume.
+          </p>
+        )}
       </div>
     </div>
   );
