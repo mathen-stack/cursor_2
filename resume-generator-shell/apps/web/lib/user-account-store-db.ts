@@ -43,7 +43,7 @@ export async function dbListAccounts(): Promise<StoredAccount[]> {
       password_salt,
       updated_at,
       updated_by
-    FROM accounts
+    FROM resume_accounts
     ORDER BY username ASC
   `) as AccountRow[];
   return rows.map(mapAccountRow);
@@ -63,7 +63,7 @@ export async function dbFindAccount(
       password_salt,
       updated_at,
       updated_by
-    FROM accounts
+    FROM resume_accounts
     WHERE username = ${username}
     LIMIT 1
   `) as AccountRow[];
@@ -73,7 +73,7 @@ export async function dbFindAccount(
 
 export async function dbCountAccounts(): Promise<number> {
   const sql = await ensureDatabaseSchema();
-  const rows = (await sql`SELECT COUNT(*)::int AS count FROM accounts`) as Array<{
+  const rows = (await sql`SELECT COUNT(*)::int AS count FROM resume_accounts`) as Array<{
     count: number;
   }>;
   return Number(rows[0]?.count ?? 0);
@@ -82,7 +82,7 @@ export async function dbCountAccounts(): Promise<number> {
 export async function dbInsertAccount(account: StoredAccount): Promise<void> {
   const sql = await ensureDatabaseSchema();
   await sql`
-    INSERT INTO accounts (
+    INSERT INTO resume_accounts (
       username,
       display_name,
       role,
@@ -111,7 +111,7 @@ export async function dbReplaceAccount(
   const sql = await ensureDatabaseSchema();
   if (previousUsername === account.username) {
     await sql`
-      UPDATE accounts
+      UPDATE resume_accounts
       SET
         display_name = ${account.displayName},
         role = ${account.role},
@@ -125,7 +125,7 @@ export async function dbReplaceAccount(
     return;
   }
   await sql`
-    UPDATE accounts
+    UPDATE resume_accounts
     SET
       username = ${account.username},
       display_name = ${account.displayName},
@@ -142,7 +142,7 @@ export async function dbReplaceAccount(
 export async function dbDeleteAccount(username: string): Promise<boolean> {
   const sql = await ensureDatabaseSchema();
   const rows = (await sql`
-    DELETE FROM accounts
+    DELETE FROM resume_accounts
     WHERE username = ${username}
     RETURNING username
   `) as Array<{ username: string }>;

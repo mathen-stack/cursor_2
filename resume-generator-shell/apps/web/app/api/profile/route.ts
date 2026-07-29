@@ -35,24 +35,37 @@ async function requireSession() {
 }
 
 export async function GET(): Promise<Response> {
-  const { session, response } = await requireSession();
-  if (!session || response) return response!;
+  try {
+    const { session, response } = await requireSession();
+    if (!session || response) return response!;
 
-  const record = await readUserProfileRecord(session.username);
-  if (!record) {
-    return Response.json({
-      username: session.username,
-      savedAt: null,
-      updatedBy: null,
-      profile: createEmptyProfile(),
+    const record = await readUserProfileRecord(session.username);
+    if (!record) {
+      return NextResponse.json({
+        username: session.username,
+        savedAt: null,
+        updatedBy: null,
+        profile: createEmptyProfile(),
+      });
+    }
+    return NextResponse.json({
+      username: record.username,
+      savedAt: record.savedAt,
+      updatedBy: record.updatedBy,
+      profile: record.profile,
     });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "PROFILE_LOAD_FAILED",
+          message:
+            error instanceof Error ? error.message : "Could not load profile.",
+        },
+      },
+      { status: 500 },
+    );
   }
-  return Response.json({
-    username: record.username,
-    savedAt: record.savedAt,
-    updatedBy: record.updatedBy,
-    profile: record.profile,
-  });
 }
 
 export async function PUT(request: Request): Promise<Response> {
@@ -62,7 +75,7 @@ export async function PUT(request: Request): Promise<Response> {
 
     const payload = await readJsonWithLimit<{ profile?: UserProfile }>(request);
     if (!payload.profile) {
-      return Response.json(
+      return NextResponse.json(
         {
           error: {
             code: "INVALID_PROFILE",
@@ -73,7 +86,7 @@ export async function PUT(request: Request): Promise<Response> {
       );
     }
     if (!payload.profile.personalInformation?.fullName?.trim()) {
-      return Response.json(
+      return NextResponse.json(
         {
           error: {
             code: "INVALID_PROFILE",
@@ -90,7 +103,7 @@ export async function PUT(request: Request): Promise<Response> {
       updatedBy: session.username,
     });
 
-    return Response.json({
+    return NextResponse.json({
       username: record.username,
       savedAt: record.savedAt,
       updatedBy: record.updatedBy,
@@ -99,7 +112,7 @@ export async function PUT(request: Request): Promise<Response> {
   } catch (error) {
     const limitResponse = requestLimitErrorResponse(error);
     if (limitResponse) return limitResponse;
-    return Response.json(
+    return NextResponse.json(
       {
         error: {
           code: "PROFILE_SAVE_FAILED",

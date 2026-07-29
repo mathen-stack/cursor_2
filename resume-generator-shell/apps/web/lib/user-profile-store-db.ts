@@ -40,7 +40,7 @@ export async function dbReadProfile(
   const sql = await ensureDatabaseSchema();
   const rows = (await sql`
     SELECT username, saved_at, updated_by, profile
-    FROM profiles
+    FROM resume_profiles
     WHERE username = ${username}
     LIMIT 1
   `) as ProfileRow[];
@@ -60,7 +60,7 @@ export async function dbWriteProfile(input: {
   const savedAt = new Date().toISOString();
   const updatedBy = input.updatedBy;
   await sql`
-    INSERT INTO profiles (username, saved_at, updated_by, profile)
+    INSERT INTO resume_profiles (username, saved_at, updated_by, profile)
     VALUES (
       ${input.username},
       ${savedAt},
@@ -84,7 +84,7 @@ export async function dbWriteProfile(input: {
 export async function dbDeleteProfile(username: string): Promise<boolean> {
   const sql = await ensureDatabaseSchema();
   const rows = (await sql`
-    DELETE FROM profiles
+    DELETE FROM resume_profiles
     WHERE username = ${username}
     RETURNING username
   `) as Array<{ username: string }>;
@@ -98,7 +98,7 @@ export async function dbListProfileSummaries(
   const sql = await ensureDatabaseSchema();
   const rows = (await sql`
     SELECT username, saved_at, updated_by, profile
-    FROM profiles
+    FROM resume_profiles
   `) as ProfileRow[];
   const wanted = new Set(usernames);
   const byUsername = new Map(
@@ -134,7 +134,7 @@ export async function dbListProfileSummaries(
 export async function dbListProfileUsernames(): Promise<string[]> {
   const sql = await ensureDatabaseSchema();
   const rows = (await sql`
-    SELECT username FROM profiles ORDER BY username ASC
+    SELECT username FROM resume_profiles ORDER BY username ASC
   `) as Array<{ username: string }>;
   return rows.map((row) => row.username);
 }

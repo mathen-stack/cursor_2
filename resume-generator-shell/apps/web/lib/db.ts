@@ -38,8 +38,9 @@ export async function ensureDatabaseSchema(): Promise<SqlClient> {
   const sql = getSql();
   if (!schemaReady) {
     schemaReady = (async () => {
+      // Dedicated table names so we don't collide with an existing Neon `profiles` table.
       await sql`
-        CREATE TABLE IF NOT EXISTS accounts (
+        CREATE TABLE IF NOT EXISTS resume_accounts (
           username TEXT PRIMARY KEY,
           display_name TEXT NOT NULL,
           role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
@@ -51,8 +52,8 @@ export async function ensureDatabaseSchema(): Promise<SqlClient> {
         )
       `;
       await sql`
-        CREATE TABLE IF NOT EXISTS profiles (
-          username TEXT PRIMARY KEY REFERENCES accounts(username)
+        CREATE TABLE IF NOT EXISTS resume_profiles (
+          username TEXT PRIMARY KEY REFERENCES resume_accounts(username)
             ON DELETE CASCADE ON UPDATE CASCADE,
           saved_at TIMESTAMPTZ NOT NULL,
           updated_by TEXT NOT NULL,

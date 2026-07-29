@@ -633,11 +633,25 @@ export default function ResumeGenerator({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile }),
       });
-      const payload = (await response.json()) as {
+      const raw = await response.text();
+      let payload: {
         profile?: UserProfile;
         savedAt?: string;
         error?: { message?: string };
-      };
+      } = {};
+      if (raw.trim()) {
+        try {
+          payload = JSON.parse(raw) as typeof payload;
+        } catch {
+          throw new Error(
+            response.ok
+              ? "Could not save profile."
+              : `Could not save profile (HTTP ${response.status}).`,
+          );
+        }
+      } else if (!response.ok) {
+        throw new Error(`Could not save profile (HTTP ${response.status}).`);
+      }
       if (!response.ok || !payload.profile) {
         throw new Error(payload.error?.message ?? "Could not save profile.");
       }
