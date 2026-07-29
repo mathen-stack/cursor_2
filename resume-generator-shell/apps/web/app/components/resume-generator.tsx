@@ -566,23 +566,11 @@ export default function ResumeGenerator() {
               {loading ? "Generating…" : "Generate complete resume"}
             </button>
             <p className="inline-status">
-              {loading && generationProgress
-                ? `${generationProgress.percent}% · ${generationProgress.label}`
+              {loading
+                ? "Running JD-isolated resume pipeline…"
                 : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
-          {loading && generationProgress ? (
-            <div
-              className="generation-progress-bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={generationProgress.percent}
-              aria-label={generationProgress.label}
-            >
-              <span style={{ width: `${generationProgress.percent}%` }} />
-            </div>
-          ) : null}
           {error ? <p className="error">{error}</p> : null}
         </section>
 
