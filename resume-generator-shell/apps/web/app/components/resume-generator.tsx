@@ -31,6 +31,51 @@ function formatResultHeadline(role: string, company: string): string {
   return `${role} | ${company || "undefined"}`;
 }
 
+const AUTO_DOWNLOAD_FORMAT = "docx" as const;
+
+function resumeFilenameFromFullName(fullName: string, format: string): string {
+  const stem =
+    fullName
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "resume";
+  return `${stem}.${format}`;
+}
+
+async function downloadGeneratedResume(
+  resume: FinalResumeData,
+  format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
+): Promise<void> {
+  const response = await fetch("/api/resume/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resume, format }),
+  });
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: { message?: string } };
+    throw new Error(payload.error?.message ?? "Resume export failed.");
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const filename =
+    filenameMatch?.[1] ??
+    resumeFilenameFromFullName(
+      resume.profile.personalInformation.fullName,
+      format,
+    );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
 Implement model monitoring, improve inference performance, and automate CI/CD workflows.
@@ -205,6 +250,7 @@ export default function ResumeGenerator() {
   });
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
+  const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
 
   const readyJdCount = useMemo(
     () => jdDrafts.filter((draft) => draft.text.trim().length >= 50).length,
@@ -272,6 +318,31 @@ export default function ResumeGenerator() {
 
     return () => window.clearInterval(timer);
   }, [hasActiveJobs]);
+
+  useEffect(() => {
+    const readyJobs = jobs.filter(
+      (job) =>
+        job.status === "done" &&
+        job.resume &&
+        !autoDownloadedJobIdsRef.current.has(job.id),
+    );
+    if (readyJobs.length === 0) return;
+
+    for (const job of readyJobs) {
+      autoDownloadedJobIdsRef.current.add(job.id);
+      const resume = job.resume;
+      if (!resume) continue;
+      void downloadGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT).catch(
+        (caught) => {
+          console.error(
+            caught instanceof Error
+              ? caught.message
+              : "Automatic resume download failed.",
+          );
+        },
+      );
+    }
+  }, [jobs]);
 
   const profileReady = useMemo(() => {
     const personal = profile.personalInformation;
@@ -395,6 +466,7 @@ export default function ResumeGenerator() {
   }
 
   function closeJob(jobId: string) {
+    autoDownloadedJobIdsRef.current.delete(jobId);
     setJobs((current) => current.filter((job) => job.id !== jobId));
   }
 
@@ -957,27 +1029,7 @@ function ResumePreview({
     setExporting(format);
     setExportError("");
     try {
-      const response = await fetch("/api/resume/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume, format }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: { message?: string } };
-        throw new Error(payload.error?.message ?? "Resume export failed.");
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get("Content-Disposition") ?? "";
-      const filenameMatch = disposition.match(/filename="([^"]+)"/);
-      const filename = filenameMatch?.[1] ?? `resume.${format}`;
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      await downloadGeneratedResume(resume, format);
     } catch (caught) {
       setExportError(caught instanceof Error ? caught.message : "Resume export failed.");
     } finally {

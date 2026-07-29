@@ -41,9 +41,7 @@ function safeFilenamePart(value: string): string {
 }
 
 function filenameStem(data: FinalResumeData): string {
-  const name = safeFilenamePart(data.profile.personalInformation.fullName);
-  const role = safeFilenamePart(data.summary.targetRole.title);
-  return [name || "candidate", role || "resume"].join("-");
+  return safeFilenamePart(data.profile.personalInformation.fullName) || "resume";
 }
 
 export interface ProductionResumeRendererOptions {

@@ -86,6 +86,7 @@ describe("resume rendering and export integrity", () => {
       expect(artifact.byteLength).toBeGreaterThan(100);
       expect(artifact.sourceDocumentFingerprint).toBe(data.document.contentFingerprint);
       expect(artifact.filename.endsWith(`.${format}`)).toBe(true);
+      expect(artifact.filename.startsWith("alex-morgan.")).toBe(true);
     }
   });
 
