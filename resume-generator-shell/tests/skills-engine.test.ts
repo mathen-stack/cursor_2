@@ -203,6 +203,35 @@ Python and REST APIs are required for production delivery.`;
     }
   });
 
+  it("keeps all high-priority explicit skills on dense multi-stack JDs", async () => {
+    const denseJd = `Full Stack Cloud Engineer
+Build Angular frontends and cloud platforms.
+Experience with Angular, React, TypeScript, JavaScript, HTML, CSS, Node.js, Python, Java, Go,
+Kubernetes, Docker, Terraform, Serverless Architecture, AWS, Azure, GCP, CI/CD,
+PostgreSQL, MongoDB, Redis, GraphQL, REST APIs, Microservices, System Design,
+Distributed Systems, Observability, Monitoring, Security, OAuth, Kafka, Spark,
+Airflow, Snowflake, dbt, MLflow, PyTorch, TensorFlow, FastAPI, Spring Boot,
+Linux, Bash, Git, Agile, Stakeholder Management, Technical Leadership.
+Kubernetes, Terraform, Serverless Architecture, and Angular are required.`;
+    const output = await createProductionSkillsEngine().execute(
+      input(denseJd, "DENSE-STACK"),
+    );
+    const names = new Set(output.skills.map((skill) => skill.name));
+
+    expect(output.status).toBe("approved");
+    expect(output.validation.explicitSkillsCovered).toBe(true);
+    for (const required of [
+      "Angular",
+      "Kubernetes",
+      "Serverless Architecture",
+      "Terraform",
+    ]) {
+      expect(names.has(required)).toBe(true);
+    }
+    // Preferred maximum may be exceeded only to cover required JD skills.
+    expect(output.skills.length).toBeGreaterThan(32);
+  });
+
   it("keeps bare CSS when Tailwind CSS and CSS Modules are also required", async () => {
     const frontendJd = `Senior Frontend Engineer
 Build user interfaces with React, TypeScript, and CSS.

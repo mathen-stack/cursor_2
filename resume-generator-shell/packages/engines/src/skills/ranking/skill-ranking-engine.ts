@@ -183,7 +183,13 @@ export class SkillRankingEngine {
         return false;
       }
       if (!allowedCategories.has(candidate.category)) {
-        return false;
+        // Required high-priority explicit skills must never be dropped because
+        // their category was outside the optional category budget.
+        if (forceRequired) {
+          allowedCategories.add(candidate.category);
+        } else {
+          return false;
+        }
       }
       const count = categoryCounts.get(candidate.category) ?? 0;
       if (
@@ -194,7 +200,9 @@ export class SkillRankingEngine {
         return false;
       }
       if (forceRequired && selectedCandidates.length >= input.maximumSkills) {
-        // Make room by dropping the lowest-weight optional skill.
+        // Prefer staying near maximumSkills by dropping optionals first.
+        // If every selected skill is already required, still add this one so
+        // dense JDs never omit high-priority explicit skills.
         const dropIndex = [...selectedCandidates]
           .map((item, index) => ({ item, index }))
           .filter(({ item }) => !isRequiredExplicit(item))
@@ -203,17 +211,16 @@ export class SkillRankingEngine {
               candidateWeight(left.item, experienceEvidenceKeys) -
               candidateWeight(right.item, experienceEvidenceKeys),
           )[0]?.index;
-        if (dropIndex === undefined) {
-          return false;
-        }
-        const dropped = selectedCandidates.splice(dropIndex, 1)[0];
-        if (dropped) {
-          selectedKeys.delete(dropped.key);
-          categoryCounts.set(
-            dropped.category,
-            Math.max(0, (categoryCounts.get(dropped.category) ?? 1) - 1),
-          );
-          omitted.push(dropped.name);
+        if (dropIndex !== undefined) {
+          const dropped = selectedCandidates.splice(dropIndex, 1)[0];
+          if (dropped) {
+            selectedKeys.delete(dropped.key);
+            categoryCounts.set(
+              dropped.category,
+              Math.max(0, (categoryCounts.get(dropped.category) ?? 1) - 1),
+            );
+            omitted.push(dropped.name);
+          }
         }
       }
 

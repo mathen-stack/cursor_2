@@ -157,13 +157,19 @@ export class SkillsValidator {
     }
 
     const skillCount = input.selected.length;
+    // Dense JDs can require more high-priority explicit skills than the
+    // preferred maximum. Allow that overflow so coverage stays enforceable.
+    const effectiveMaximumSkills = Math.max(
+      input.maximumSkills,
+      requiredExplicit.length,
+    );
     const densityApproved =
-      skillCount >= input.minimumSkills && skillCount <= input.maximumSkills;
+      skillCount >= input.minimumSkills && skillCount <= effectiveMaximumSkills;
     if (!densityApproved) {
       issues.push(
         issue(
           "SKILL_DENSITY_OUT_OF_RANGE",
-          skillCount < 4 || skillCount > input.maximumSkills ? "error" : "warning",
+          skillCount < 4 || skillCount > effectiveMaximumSkills ? "error" : "warning",
           `Generated ${skillCount} skills; the target range is ${input.minimumSkills}-${input.maximumSkills}.`,
         ),
       );
