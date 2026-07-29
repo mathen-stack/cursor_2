@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CareerEntry, UserProfile } from "@resume/contracts";
 import { PeriodDateControl } from "../components/period-date-control";
+import { generateStrongPassword } from "../../lib/generate-strong-password";
 import { createEmptyProfile } from "../../lib/saved-profile-store";
 
 type SessionUser = {
@@ -79,6 +80,8 @@ export default function AdminProfilesClient() {
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "user">("user");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showAccountPassword, setShowAccountPassword] = useState(false);
   const [draft, setDraft] = useState<UserProfile>(() => createEmptyProfile());
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [updatedBy, setUpdatedBy] = useState<string | null>(null);
@@ -220,8 +223,33 @@ export default function AdminProfilesClient() {
     if (!selectedUsername) return;
     setAccountUsername(selectedUsername);
     setAccountPassword("");
+    setShowAccountPassword(false);
     setAccountRole(selectedAccount?.role ?? "user");
   }, [selectedUsername, selectedAccount?.role]);
+
+  function fillGeneratedPassword(target: "create" | "account") {
+    const password = generateStrongPassword();
+    if (target === "create") {
+      setNewPassword(password);
+      setShowNewPassword(true);
+    } else {
+      setAccountPassword(password);
+      setShowAccountPassword(true);
+    }
+    setMessage("Generated a strong password. Copy it before saving.");
+    setError("");
+  }
+
+  async function copyPassword(password: string) {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setMessage("Password copied to clipboard.");
+      setError("");
+    } catch {
+      setError("Could not copy password. Select and copy it manually.");
+    }
+  }
 
   async function refreshSummaries() {
     const [listResponse, usersResponse] = await Promise.all([
@@ -607,12 +635,15 @@ export default function AdminProfilesClient() {
               <label className="profile-field">
                 <span>Password</span>
                 <input
-                  type="password"
+                  type={showNewPassword ? "text" : "password"}
                   value={newPassword}
                   placeholder="At least 6 characters"
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    setNewPassword(event.target.value)
-                  }
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    setNewPassword(event.target.value);
+                    setShowNewPassword(false);
+                  }}
                 />
               </label>
               <label className="profile-field">
@@ -629,6 +660,22 @@ export default function AdminProfilesClient() {
               </label>
             </div>
             <div className="section-actions section-actions-end">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={saving}
+                onClick={() => fillGeneratedPassword("create")}
+              >
+                Generate Strong Password
+              </button>
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={saving || newPassword.trim().length < 6}
+                onClick={() => void copyPassword(newPassword)}
+              >
+                Copy Password
+              </button>
               <button
                 type="button"
                 className="secondary-action"
@@ -759,12 +806,15 @@ export default function AdminProfilesClient() {
                     <label className="profile-field">
                       <span>New password</span>
                       <input
-                        type="password"
+                        type={showAccountPassword ? "text" : "password"}
                         value={accountPassword}
                         placeholder="Leave blank to keep current password"
-                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                          setAccountPassword(event.target.value)
-                        }
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                          setAccountPassword(event.target.value);
+                          setShowAccountPassword(false);
+                        }}
                       />
                     </label>
                     <label className="profile-field">
@@ -781,6 +831,22 @@ export default function AdminProfilesClient() {
                     </label>
                   </div>
                   <div className="section-actions section-actions-end">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={saving}
+                      onClick={() => fillGeneratedPassword("account")}
+                    >
+                      Generate Strong Password
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={saving || accountPassword.trim().length < 6}
+                      onClick={() => void copyPassword(accountPassword)}
+                    >
+                      Copy Password
+                    </button>
                     <button
                       type="button"
                       className="secondary-action"
