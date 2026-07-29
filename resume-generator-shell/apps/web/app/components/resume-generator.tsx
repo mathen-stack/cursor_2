@@ -82,6 +82,10 @@ function advanceGenerationProgress(
 type JdDraft = {
   id: string;
   text: string;
+  /** Hiring company that posted this JD (auto-detected when possible). */
+  postingCompany: string;
+  /** True once the user edits the posting-company field manually. */
+  companyTouched: boolean;
 };
 
 type GenerationJob = {
@@ -102,7 +106,23 @@ function createId(prefix: string): string {
 }
 
 function createJdDraft(text = "", id?: string): JdDraft {
-  return { id: id ?? createId("JD"), text };
+  return {
+    id: id ?? createId("JD"),
+    text,
+    postingCompany: detectCompanyNameFromJd(text) ?? "",
+    companyTouched: false,
+  };
+}
+
+function resolveJdLabels(draft: JdDraft, fallbackIndex: number) {
+  const detected = formatJdResultHeadline(draft.text, fallbackIndex);
+  const company = draft.postingCompany.trim() || detected.company;
+  const headline = company ? `${detected.role} · ${company}` : detected.role;
+  return {
+    role: detected.role,
+    company: company || undefined,
+    headline,
+  };
 }
 
 function newCareerEntry(index: number): CareerEntry {
@@ -352,7 +372,25 @@ export default function ResumeGenerator() {
 
   function updateJdDraft(id: string, text: string) {
     setJdDrafts((current) =>
-      current.map((draft) => (draft.id === id ? { ...draft, text } : draft)),
+      current.map((draft) => {
+        if (draft.id !== id) return draft;
+        const detected = detectCompanyNameFromJd(text) ?? "";
+        return {
+          ...draft,
+          text,
+          postingCompany: draft.companyTouched ? draft.postingCompany : detected,
+        };
+      }),
+    );
+  }
+
+  function updateJdPostingCompany(id: string, postingCompany: string) {
+    setJdDrafts((current) =>
+      current.map((draft) =>
+        draft.id === id
+          ? { ...draft, postingCompany, companyTouched: true }
+          : draft,
+      ),
     );
   }
 
@@ -388,7 +426,7 @@ export default function ResumeGenerator() {
     }
 
     const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => {
-      const labels = formatJdResultHeadline(draft.text, index + 1);
+      const labels = resolveJdLabels(draft, index + 1);
       return {
         id: createId("JOB"),
         draftId: draft.id,
@@ -720,9 +758,9 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Add JDs anytime. Company names are detected from the JD when possible
-                for labels; career companies still come from your profile. You can start
-                another generate while earlier resumes are still running.
+                Add JDs anytime. We detect the company that posted each JD when the text
+                has a clear signal; if not, enter it in Posting company. Career history
+                companies still come from your profile.
               </p>
             </div>
           </div>
@@ -730,16 +768,15 @@ export default function ResumeGenerator() {
           {jdDrafts.map((draft, index) => {
             const draftReady = draft.text.trim().length >= 50;
             const draftCanGenerate = profileReady && draftReady;
-            const detectedCompany = detectCompanyNameFromJd(draft.text);
-            const detectedHeadline = formatJdResultHeadline(draft.text, index + 1);
+            const labels = resolveJdLabels(draft, index + 1);
             return (
               <div key={draft.id} className="entry-block">
                 <div className="entry-head">
                   <p className="entry-label">
                     JD {index + 1}
-                    {detectedHeadline.role !== `Job ${index + 1}` || detectedCompany ? (
+                    {labels.role !== `Job ${index + 1}` || labels.company ? (
                       <span className="badge badge-company" style={{ marginLeft: "0.45rem" }}>
-                        {detectedHeadline.headline}
+                        {labels.headline}
                       </span>
                     ) : null}
                     {inFlightDraftIds.has(draft.id) ? (
@@ -766,6 +803,24 @@ export default function ResumeGenerator() {
                       Remove
                     </button>
                   </div>
+                </div>
+                <div className="profile-grid">
+                  <label className="profile-field">
+                    <span>Posting company</span>
+                    <input
+                      type="text"
+                      name={`posting-company-${draft.id}`}
+                      placeholder={
+                        detectCompanyNameFromJd(draft.text)
+                          ? "Detected from JD"
+                          : "Company that posted this JD"
+                      }
+                      value={draft.postingCompany}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateJdPostingCompany(draft.id, event.target.value)
+                      }
+                    />
+                  </label>
                 </div>
                 <label className="profile-field profile-field-full">
                   <span className="manual-jd-label">JD text</span>
