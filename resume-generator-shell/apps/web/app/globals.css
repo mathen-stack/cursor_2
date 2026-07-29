@@ -483,6 +483,10 @@ textarea {
   font-size: 0.88rem;
 }
 
+.pdf-ready-status.is-ready {
+  color: var(--accent);
+}
+
 .pdf-ready-panel .pdf-ready-status {
   margin-top: 0.3rem;
 }
