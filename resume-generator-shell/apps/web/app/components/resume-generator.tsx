@@ -16,8 +16,6 @@ import {
 } from "../lib/detect-company-from-jd";
 import {
   createEmptyProfile,
-  loadSavedProfile,
-  saveProfileToStorage,
 } from "../../lib/saved-profile-store";
 
 function resolveRoleFromResume(
@@ -350,7 +348,7 @@ export default function ResumeGenerator({
   user,
   onLogout,
 }: {
-  user: { username: string; displayName: string };
+  user: { username: string; displayName: string; role: "admin" | "user" };
   onLogout: () => void | Promise<void>;
 }) {
   const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
@@ -366,17 +364,42 @@ export default function ResumeGenerator({
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const saved = loadSavedProfile(user.username);
-    if (saved) {
-      setProfile(saved.profile);
-      setProfileSavedAt(saved.savedAt);
-      setProfileSaveMessage("Saved profile loaded");
-    } else {
-      setProfile(createEmptyProfile());
-      setProfileSavedAt(null);
-      setProfileSaveMessage("");
+    let cancelled = false;
+    async function loadProfile() {
+      setProfileHydrated(false);
+      setProfileSaveError("");
+      try {
+        const response = await fetch("/api/profile", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          profile?: UserProfile;
+          savedAt?: string | null;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.profile) {
+          throw new Error(payload.error?.message ?? "Could not load profile.");
+        }
+        if (cancelled) return;
+        setProfile(payload.profile);
+        setProfileSavedAt(payload.savedAt ?? null);
+        setProfileSaveMessage(
+          payload.savedAt ? "Saved profile loaded" : "",
+        );
+      } catch (caught) {
+        if (cancelled) return;
+        setProfile(createEmptyProfile());
+        setProfileSavedAt(null);
+        setProfileSaveMessage("");
+        setProfileSaveError(
+          caught instanceof Error ? caught.message : "Could not load profile.",
+        );
+      } finally {
+        if (!cancelled) setProfileHydrated(true);
+      }
     }
-    setProfileHydrated(true);
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
   }, [user.username]);
 
   async function runAutoDownload(
@@ -577,15 +600,27 @@ export default function ResumeGenerator({
     }
   }
 
-  function saveProfile() {
+  async function saveProfile() {
     setProfileSaveError("");
     try {
       if (!profile.personalInformation.fullName.trim()) {
         throw new Error("Enter your full name before saving the profile.");
       }
-      const saved = saveProfileToStorage(profile, user.username);
-      setProfile(saved.profile);
-      setProfileSavedAt(saved.savedAt);
+      const response = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile }),
+      });
+      const payload = (await response.json()) as {
+        profile?: UserProfile;
+        savedAt?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.profile) {
+        throw new Error(payload.error?.message ?? "Could not save profile.");
+      }
+      setProfile(payload.profile);
+      setProfileSavedAt(payload.savedAt ?? null);
       setProfileSaveMessage("Profile saved");
     } catch (caught) {
       setProfileSaveError(
@@ -825,6 +860,11 @@ export default function ResumeGenerator({
               </p>
               <p className="header-account">@{user.username}</p>
             </div>
+            {user.role === "admin" ? (
+              <a href="/admin" className="secondary-action topbar-logout">
+                Admin
+              </a>
+            ) : null}
             <button
               type="button"
               className="secondary-action topbar-logout"
@@ -842,8 +882,8 @@ export default function ResumeGenerator({
             <div>
               <h2>User Profile</h2>
               <p className="hint">
-                Save your profile once — it reloads automatically next time you open
-                this page, and Generate uses it for every resume.
+                Save your profile to the server — it reloads when you sign in,
+                and Generate uses it for every resume.
               </p>
             </div>
             {profileHydrated && profileSaveMessage ? (
@@ -1090,7 +1130,7 @@ export default function ResumeGenerator({
             <button
               type="button"
               className="primary"
-              onClick={saveProfile}
+              onClick={() => void saveProfile()}
               disabled={!profile.personalInformation.fullName.trim()}
             >
               Save Profile

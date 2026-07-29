@@ -52,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
       user: {
         username: user.username,
         displayName: user.displayName,
+        role: user.role,
       },
     });
     response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());

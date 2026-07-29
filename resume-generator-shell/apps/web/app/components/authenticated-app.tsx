@@ -7,6 +7,7 @@ import ResumeGenerator from "./resume-generator";
 type SessionUser = {
   username: string;
   displayName: string;
+  role: "admin" | "user";
 };
 
 export default function AuthenticatedApp() {

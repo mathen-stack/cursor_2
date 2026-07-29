@@ -14,6 +14,7 @@ export async function GET(): Promise<Response> {
     user: {
       username: session.username,
       displayName: session.displayName,
+      role: session.role,
     },
   });
 }

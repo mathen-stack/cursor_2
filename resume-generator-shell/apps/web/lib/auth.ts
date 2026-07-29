@@ -3,13 +3,20 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const SESSION_COOKIE_NAME = "resume_tailor_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
+export type UserRole = "admin" | "user";
+
 export type AuthUser = {
   username: string;
   displayName: string;
+  role: UserRole;
 };
 
 export type SessionPayload = AuthUser & {
   exp: number;
+};
+
+type AuthUserRecord = AuthUser & {
+  password: string;
 };
 
 function authSecret(): string {
@@ -20,34 +27,64 @@ function authSecret(): string {
   );
 }
 
-/** Parse `user:pass,user2:pass2` from env, with a built-in demo account. */
-export function listAuthUsers(): Array<{ username: string; password: string; displayName: string }> {
+function parseRole(value: string | undefined): UserRole {
+  return value?.trim().toLowerCase() === "admin" ? "admin" : "user";
+}
+
+/**
+ * Parse `user:pass` or `user:pass:role` from env.
+ * Defaults include demo (user) and admin (admin).
+ */
+export function listAuthUsers(): AuthUserRecord[] {
   const configured = process.env.RESUME_AUTH_USERS?.trim();
-  const users: Array<{ username: string; password: string; displayName: string }> = [];
+  const users: AuthUserRecord[] = [];
 
   if (configured) {
     for (const part of configured.split(",")) {
       const trimmed = part.trim();
       if (!trimmed) continue;
-      const splitAt = trimmed.indexOf(":");
-      if (splitAt <= 0) continue;
-      const username = trimmed.slice(0, splitAt).trim().toLowerCase();
-      const password = trimmed.slice(splitAt + 1);
+      const [usernameRaw, passwordRaw, roleRaw] = trimmed.split(":");
+      const username = usernameRaw?.trim().toLowerCase() ?? "";
+      const password = passwordRaw ?? "";
       if (!username || !password) continue;
       users.push({
         username,
         password,
         displayName: username,
+        role: parseRole(roleRaw),
       });
     }
   }
 
   if (users.length === 0) {
-    users.push({
-      username: "demo",
-      password: "demo123",
-      displayName: "demo",
-    });
+    users.push(
+      {
+        username: "admin",
+        password: "admin123",
+        displayName: "admin",
+        role: "admin",
+      },
+      {
+        username: "demo",
+        password: "demo123",
+        displayName: "demo",
+        role: "user",
+      },
+    );
+  }
+
+  const adminNames = new Set(
+    (process.env.RESUME_AUTH_ADMINS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (adminNames.size > 0) {
+    for (const user of users) {
+      if (adminNames.has(user.username)) {
+        user.role = "admin";
+      }
+    }
   }
 
   return users;
@@ -67,6 +104,7 @@ export function authenticateCredentials(
   return {
     username: match.username,
     displayName: match.displayName,
+    role: match.role,
   };
 }
 
@@ -94,6 +132,7 @@ export function createSessionToken(user: AuthUser): string {
   const payload: SessionPayload = {
     username: user.username,
     displayName: user.displayName,
+    role: user.role,
     exp: Date.now() + SESSION_TTL_MS,
   };
   const body = encodeBase64Url(JSON.stringify(payload));
@@ -101,7 +140,9 @@ export function createSessionToken(user: AuthUser): string {
   return `${body}.${signature}`;
 }
 
-export function verifySessionToken(token: string | undefined | null): SessionPayload | null {
+export function verifySessionToken(
+  token: string | undefined | null,
+): SessionPayload | null {
   if (!token) return null;
   const [body, signature] = token.split(".");
   if (!body || !signature) return null;
@@ -122,13 +163,20 @@ export function verifySessionToken(token: string | undefined | null): SessionPay
       return null;
     }
     if (payload.exp < Date.now()) return null;
-    return payload;
+    return {
+      username: payload.username,
+      displayName: payload.displayName,
+      role: payload.role === "admin" ? "admin" : "user",
+      exp: payload.exp,
+    };
   } catch {
     return null;
   }
 }
 
-export function sessionCookieOptions(maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000)) {
+export function sessionCookieOptions(
+  maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000),
+) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
@@ -136,4 +184,22 @@ export function sessionCookieOptions(maxAgeSeconds = Math.floor(SESSION_TTL_MS /
     path: "/",
     maxAge: maxAgeSeconds,
   };
+}
+
+export async function getSessionFromCookies(
+  cookieStore: { get: (name: string) => { value: string } | undefined },
+): Promise<SessionPayload | null> {
+  return verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+}
+
+export function assertAdmin(session: SessionPayload | null): SessionPayload {
+  if (!session) {
+    throw Object.assign(new Error("Login required."), { status: 401 });
+  }
+  if (session.role !== "admin") {
+    throw Object.assign(new Error("Administrator access required."), {
+      status: 403,
+    });
+  }
+  return session;
 }

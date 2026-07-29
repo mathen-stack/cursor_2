@@ -146,6 +146,61 @@ button:disabled {
   height: 2rem;
   padding: 0 0.75rem;
   font-size: 0.8rem;
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.admin-user-item {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.admin-user-item strong {
+  font-size: 0.9rem;
+}
+
+.admin-user-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.admin-user-item.is-active {
+  border-color: rgba(62, 207, 142, 0.45);
+  background: var(--run-soft);
+}
+
+.admin-editor {
+  min-width: 0;
+}
+
+.admin-subtitle {
+  margin: 1.15rem 0 0.65rem;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 820px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .login-page {

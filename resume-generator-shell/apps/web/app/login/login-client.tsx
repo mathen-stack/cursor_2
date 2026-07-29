@@ -87,7 +87,9 @@ export default function LoginPage() {
           </form>
 
           <p className="login-demo-hint">
-            Demo account: <code>demo</code> / <code>demo123</code>
+            Demo user: <code>demo</code> / <code>demo123</code>
+            <br />
+            Admin: <code>admin</code> / <code>admin123</code>
           </p>
         </section>
       </main>
