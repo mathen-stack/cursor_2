@@ -47,9 +47,9 @@ async function requireAdmin() {
   return assertAdmin(await getSessionFromCookies(jar));
 }
 
-function ensureKnownUser(username: string): string {
+async function ensureKnownUser(username: string): Promise<string> {
   const safe = sanitizeProfileUsername(username);
-  const known = listAuthUsers().some((user) => user.username === safe);
+  const known = (await listAuthUsers()).some((user) => user.username === safe);
   if (!known) {
     throw Object.assign(new Error("Unknown user account."), { status: 404 });
   }
@@ -63,7 +63,7 @@ export async function GET(
   try {
     await requireAdmin();
     const { username: rawUsername } = await context.params;
-    const username = ensureKnownUser(rawUsername);
+    const username = await ensureKnownUser(rawUsername);
     const record = await readUserProfileRecord(username);
     if (!record) {
       return NextResponse.json({
@@ -93,7 +93,7 @@ export async function PUT(
   try {
     const admin = await requireAdmin();
     const { username: rawUsername } = await context.params;
-    const username = ensureKnownUser(rawUsername);
+    const username = await ensureKnownUser(rawUsername);
     const payload = await readJsonWithLimit<{ profile?: UserProfile }>(request);
     if (!payload.profile) {
       return NextResponse.json(
@@ -132,7 +132,7 @@ export async function DELETE(
   try {
     await requireAdmin();
     const { username: rawUsername } = await context.params;
-    const username = ensureKnownUser(rawUsername);
+    const username = await ensureKnownUser(rawUsername);
     const deleted = await deleteUserProfileRecord(username);
     return NextResponse.json({
       username,

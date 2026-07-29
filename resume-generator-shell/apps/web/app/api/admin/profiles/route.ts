@@ -9,7 +9,7 @@ export async function GET(): Promise<Response> {
   try {
     const jar = await cookies();
     const session = assertAdmin(await getSessionFromCookies(jar));
-    const usernames = listAuthUsers().map((user) => user.username);
+    const usernames = (await listAuthUsers()).map((user) => user.username);
     const profiles = await listUserProfileSummaries(usernames);
     return NextResponse.json({
       admin: session.username,

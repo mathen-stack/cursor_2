@@ -1,9 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { UserRole } from "./auth-types";
+import {
+  findStoredAccount,
+  listStoredAccounts,
+  verifyPassword,
+} from "./user-account-store";
+
+export type { UserRole } from "./auth-types";
 
 export const SESSION_COOKIE_NAME = "resume_tailor_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
-
-export type UserRole = "admin" | "user";
 
 export type AuthUser = {
   username: string;
@@ -15,10 +21,6 @@ export type SessionPayload = AuthUser & {
   exp: number;
 };
 
-type AuthUserRecord = AuthUser & {
-  password: string;
-};
-
 function authSecret(): string {
   return (
     process.env.RESUME_AUTH_SECRET?.trim() ||
@@ -27,80 +29,24 @@ function authSecret(): string {
   );
 }
 
-function parseRole(value: string | undefined): UserRole {
-  return value?.trim().toLowerCase() === "admin" ? "admin" : "user";
+export async function listAuthUsers(): Promise<AuthUser[]> {
+  const users = await listStoredAccounts();
+  return users.map((user) => ({
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+  }));
 }
 
-/**
- * Parse `user:pass` or `user:pass:role` from env.
- * Defaults include demo (user) and admin (admin).
- */
-export function listAuthUsers(): AuthUserRecord[] {
-  const configured = process.env.RESUME_AUTH_USERS?.trim();
-  const users: AuthUserRecord[] = [];
-
-  if (configured) {
-    for (const part of configured.split(",")) {
-      const trimmed = part.trim();
-      if (!trimmed) continue;
-      const [usernameRaw, passwordRaw, roleRaw] = trimmed.split(":");
-      const username = usernameRaw?.trim().toLowerCase() ?? "";
-      const password = passwordRaw ?? "";
-      if (!username || !password) continue;
-      users.push({
-        username,
-        password,
-        displayName: username,
-        role: parseRole(roleRaw),
-      });
-    }
-  }
-
-  if (users.length === 0) {
-    users.push(
-      {
-        username: "admin",
-        password: "admin123",
-        displayName: "admin",
-        role: "admin",
-      },
-      {
-        username: "demo",
-        password: "demo123",
-        displayName: "demo",
-        role: "user",
-      },
-    );
-  }
-
-  const adminNames = new Set(
-    (process.env.RESUME_AUTH_ADMINS ?? "")
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  if (adminNames.size > 0) {
-    for (const user of users) {
-      if (adminNames.has(user.username)) {
-        user.role = "admin";
-      }
-    }
-  }
-
-  return users;
-}
-
-export function authenticateCredentials(
+export async function authenticateCredentials(
   username: string,
   password: string,
-): AuthUser | null {
-  const normalized = username.trim().toLowerCase();
-  const match = listAuthUsers().find((user) => user.username === normalized);
+): Promise<AuthUser | null> {
+  const match = await findStoredAccount(username);
   if (!match) return null;
-  const left = Buffer.from(match.password);
-  const right = Buffer.from(password);
-  if (left.length !== right.length) return null;
-  if (!timingSafeEqual(left, right)) return null;
+  if (!verifyPassword(password, match.passwordHash, match.passwordSalt)) {
+    return null;
+  }
   return {
     username: match.username,
     displayName: match.displayName,

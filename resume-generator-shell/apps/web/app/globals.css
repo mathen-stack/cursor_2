@@ -197,6 +197,13 @@ button:disabled {
   font-size: 0.95rem;
 }
 
+.admin-create-card {
+  margin-bottom: 1rem;
+  padding: 0.9rem 0.95rem 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
 @media (max-width: 820px) {
   .admin-layout {
     grid-template-columns: 1fr;

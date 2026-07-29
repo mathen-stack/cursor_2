@@ -14,6 +14,10 @@ import {
   verifySessionToken,
 } from "../apps/web/lib/auth";
 import {
+  createStoredAccount,
+  updateStoredAccount,
+} from "../apps/web/lib/user-account-store";
+import {
   deleteUserProfileRecord,
   listUserProfileSummaries,
   readUserProfileRecord,
@@ -74,25 +78,80 @@ describe("saved profile helpers", () => {
 });
 
 describe("auth roles", () => {
-  it("includes an administrator account by default", () => {
-    const users = listAuthUsers();
-    expect(users.some((user) => user.username === "admin" && user.role === "admin")).toBe(
-      true,
-    );
-    expect(users.some((user) => user.username === "demo" && user.role === "user")).toBe(
-      true,
-    );
+  it("includes an administrator account by default", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-auth-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      const users = await listAuthUsers();
+      expect(
+        users.some((user) => user.username === "admin" && user.role === "admin"),
+      ).toBe(true);
+      expect(
+        users.some((user) => user.username === "demo" && user.role === "user"),
+      ).toBe(true);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
-  it("authenticates admin and encodes role in the session", () => {
-    const user = authenticateCredentials("admin", "admin123");
-    expect(user?.role).toBe("admin");
-    const session = verifySessionToken(createSessionToken(user!));
-    expect(session?.role).toBe("admin");
+  it("authenticates admin and encodes role in the session", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-auth-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      const user = await authenticateCredentials("admin", "admin123");
+      expect(user?.role).toBe("admin");
+      const session = verifySessionToken(createSessionToken(user!));
+      expect(session?.role).toBe("admin");
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
-  it("rejects invalid credentials", () => {
-    expect(authenticateCredentials("demo", "wrong")).toBeNull();
+  it("rejects invalid credentials", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-auth-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      expect(await authenticateCredentials("demo", "wrong")).toBeNull();
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("admin account updates", () => {
+  it("lets an admin change username and password", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-accounts-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      await createStoredAccount({
+        username: "member",
+        password: "secret1",
+        role: "user",
+        updatedBy: "admin",
+      });
+
+      const renamed = await updateStoredAccount({
+        username: "member",
+        nextUsername: "member-two",
+        password: "secret2",
+        updatedBy: "admin",
+      });
+      expect(renamed.account.username).toBe("member-two");
+      expect(renamed.renamedFrom).toBe("member");
+
+      expect(await authenticateCredentials("member", "secret1")).toBeNull();
+      expect(await authenticateCredentials("member-two", "secret2")).not.toBeNull();
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

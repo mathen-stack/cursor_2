@@ -22,6 +22,14 @@ type ProfileSummary = {
   hasProfile: boolean;
 };
 
+type AccountSummary = {
+  username: string;
+  displayName: string;
+  role: "admin" | "user";
+  updatedAt: string;
+  updatedBy: string;
+};
+
 const PLACEHOLDERS = {
   fullName: "Enter full name",
   email: "name@example.com",
@@ -62,7 +70,14 @@ export default function AdminProfilesClient() {
   const router = useRouter();
   const [admin, setAdmin] = useState<SessionUser | null>(null);
   const [summaries, setSummaries] = useState<ProfileSummary[]>([]);
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [selectedUsername, setSelectedUsername] = useState("");
+  const [accountUsername, setAccountUsername] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountRole, setAccountRole] = useState<"admin" | "user">("user");
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "user">("user");
   const [draft, setDraft] = useState<UserProfile>(() => createEmptyProfile());
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [updatedBy, setUpdatedBy] = useState<string | null>(null);
@@ -74,6 +89,10 @@ export default function AdminProfilesClient() {
   const selectedSummary = useMemo(
     () => summaries.find((item) => item.username === selectedUsername) ?? null,
     [summaries, selectedUsername],
+  );
+  const selectedAccount = useMemo(
+    () => accounts.find((item) => item.username === selectedUsername) ?? null,
+    [accounts, selectedUsername],
   );
 
   useEffect(() => {
@@ -106,10 +125,22 @@ export default function AdminProfilesClient() {
         if (!listResponse.ok) {
           throw new Error(listPayload.error?.message ?? "Could not load users.");
         }
+        const usersResponse = await fetch("/api/admin/users", {
+          cache: "no-store",
+        });
+        const usersPayload = (await usersResponse.json()) as {
+          users?: AccountSummary[];
+          error?: { message?: string };
+        };
+        if (!usersResponse.ok) {
+          throw new Error(usersPayload.error?.message ?? "Could not load accounts.");
+        }
         const profiles = listPayload.profiles ?? [];
+        const nextAccounts = usersPayload.users ?? [];
         if (!cancelled) {
           setSummaries(profiles);
-          const first = profiles[0]?.username ?? "";
+          setAccounts(nextAccounts);
+          const first = profiles[0]?.username ?? nextAccounts[0]?.username ?? "";
           setSelectedUsername(first);
         }
       } catch (caught) {
@@ -167,13 +198,29 @@ export default function AdminProfilesClient() {
     };
   }, [selectedUsername]);
 
+  useEffect(() => {
+    if (!selectedUsername) return;
+    setAccountUsername(selectedUsername);
+    setAccountPassword("");
+    setAccountRole(selectedAccount?.role ?? "user");
+  }, [selectedUsername, selectedAccount?.role]);
+
   async function refreshSummaries() {
-    const listResponse = await fetch("/api/admin/profiles", { cache: "no-store" });
+    const [listResponse, usersResponse] = await Promise.all([
+      fetch("/api/admin/profiles", { cache: "no-store" }),
+      fetch("/api/admin/users", { cache: "no-store" }),
+    ]);
     const listPayload = (await listResponse.json()) as {
       profiles?: ProfileSummary[];
     };
+    const usersPayload = (await usersResponse.json()) as {
+      users?: AccountSummary[];
+    };
     if (listResponse.ok) {
       setSummaries(listPayload.profiles ?? []);
+    }
+    if (usersResponse.ok) {
+      setAccounts(usersPayload.users ?? []);
     }
   }
 
@@ -207,6 +254,85 @@ export default function AdminProfilesClient() {
       await refreshSummaries();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAccountCredentials() {
+    if (!selectedUsername) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(selectedUsername)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: accountUsername,
+            role: accountRole,
+            ...(accountPassword.trim()
+              ? { password: accountPassword.trim() }
+              : {}),
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        account?: AccountSummary;
+        renamedFrom?: string | null;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.account) {
+        throw new Error(payload.error?.message ?? "Could not update account.");
+      }
+      setSelectedUsername(payload.account.username);
+      setAccountUsername(payload.account.username);
+      setAccountRole(payload.account.role);
+      setAccountPassword("");
+      setMessage(
+        payload.renamedFrom
+          ? `Renamed @${payload.renamedFrom} to @${payload.account.username}`
+          : `Updated login for @${payload.account.username}`,
+      );
+      await refreshSummaries();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Account update failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createAccount() {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUsername,
+          password: newPassword,
+          role: newRole,
+        }),
+      });
+      const payload = (await response.json()) as {
+        account?: AccountSummary;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.account) {
+        throw new Error(payload.error?.message ?? "Could not create account.");
+      }
+      setNewUsername("");
+      setNewPassword("");
+      setNewRole("user");
+      setSelectedUsername(payload.account.username);
+      setMessage(`Created account @${payload.account.username}`);
+      await refreshSummaries();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Create account failed.");
     } finally {
       setSaving(false);
     }
@@ -305,11 +431,60 @@ export default function AdminProfilesClient() {
         <section className="profile-card">
           <div className="section-head">
             <div>
-              <h2>Manage user profiles</h2>
+              <h2>Manage users & profiles</h2>
               <p className="hint">
-                View and edit saved profiles for every account. Users see these
-                profiles when they sign in and generate resumes.
+                Change usernames and passwords, then edit each user’s saved
+                profile used for resume generation.
               </p>
+            </div>
+          </div>
+
+          <div className="admin-create-card">
+            <h3 className="admin-subtitle">Create account</h3>
+            <div className="profile-grid">
+              <label className="profile-field">
+                <span>Username</span>
+                <input
+                  value={newUsername}
+                  placeholder="new-user"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setNewUsername(event.target.value)
+                  }
+                />
+              </label>
+              <label className="profile-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={newPassword}
+                  placeholder="At least 6 characters"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setNewPassword(event.target.value)
+                  }
+                />
+              </label>
+              <label className="profile-field">
+                <span>Role</span>
+                <select
+                  value={newRole}
+                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                    setNewRole(event.target.value as "admin" | "user")
+                  }
+                >
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+            </div>
+            <div className="section-actions section-actions-end">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={saving || !newUsername.trim() || newPassword.trim().length < 6}
+                onClick={() => void createAccount()}
+              >
+                Create User
+              </button>
             </div>
           </div>
 
@@ -353,6 +528,54 @@ export default function AdminProfilesClient() {
                     </div>
                   </div>
 
+                  <h3 className="admin-subtitle">Login credentials</h3>
+                  <div className="profile-grid">
+                    <label className="profile-field">
+                      <span>Username</span>
+                      <input
+                        value={accountUsername}
+                        placeholder="username"
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          setAccountUsername(event.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="profile-field">
+                      <span>New password</span>
+                      <input
+                        type="password"
+                        value={accountPassword}
+                        placeholder="Leave blank to keep current password"
+                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                          setAccountPassword(event.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="profile-field">
+                      <span>Role</span>
+                      <select
+                        value={accountRole}
+                        onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                          setAccountRole(event.target.value as "admin" | "user")
+                        }
+                      >
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="section-actions section-actions-end">
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={saving || !accountUsername.trim()}
+                      onClick={() => void saveAccountCredentials()}
+                    >
+                      {saving ? "Saving…" : "Save Username & Password"}
+                    </button>
+                  </div>
+
+                  <h3 className="admin-subtitle">Profile details</h3>
                   <div className="profile-grid">
                     <label className="profile-field">
                       <span>Full Name</span>

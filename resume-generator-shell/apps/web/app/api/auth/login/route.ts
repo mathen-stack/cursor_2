@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const user = authenticateCredentials(username, password);
+    const user = await authenticateCredentials(username, password);
     if (!user) {
       return Response.json(
         {
