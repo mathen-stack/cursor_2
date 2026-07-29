@@ -29,6 +29,7 @@ export default function AuthenticatedApp() {
           error?: { message?: string };
         };
         if (!response.ok || !payload.user) {
+          await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
           router.replace("/login");
           return;
         }

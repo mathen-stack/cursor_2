@@ -1,13 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  clearSessionCookie,
+  getRequestSessionState,
+  SESSION_COOKIE_NAME,
+} from "./lib/session-edge";
 
-const SESSION_COOKIE_NAME = "resume_tailor_session";
-
-function hasSessionCookie(request: NextRequest): boolean {
-  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  return Boolean(token && token.includes("."));
-}
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/login";
   const isSignupPage = pathname === "/signup";
@@ -25,9 +23,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const loggedIn = hasSessionCookie(request);
+  const sessionState = await getRequestSessionState(request);
 
-  if (!loggedIn && !isPublicAuthPage) {
+  if (sessionState === "invalid") {
+    const target = isPublicAuthPage
+      ? NextResponse.next()
+      : NextResponse.redirect(
+          new URL(
+            `/login?next=${encodeURIComponent(pathname)}`,
+            request.url,
+          ),
+        );
+    clearSessionCookie(target);
+    return target;
+  }
+
+  if (sessionState === "missing" && !isPublicAuthPage) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         {
@@ -44,7 +55,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (loggedIn && isPublicAuthPage) {
+  if (sessionState === "valid" && isPublicAuthPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
