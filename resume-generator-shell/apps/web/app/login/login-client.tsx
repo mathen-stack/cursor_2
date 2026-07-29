@@ -92,10 +92,6 @@ export default function LoginPage() {
             <Link href="/signup" className="login-inline-link">
               Sign up
             </Link>
-            <br />
-            Demo user: <code>demo</code> / <code>demo123</code>
-            <br />
-            Admin: <code>admin</code> / <code>admin123</code>
           </p>
         </section>
       </main>
