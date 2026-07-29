@@ -44,63 +44,108 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
   return `${stem}.${format}`;
 }
 
+/** Ensure export/download filename uses the profile full name. */
+function resumeWithProfileFullName(
+  resume: FinalResumeData,
+  fullName: string,
+): FinalResumeData {
+  const trimmed = fullName.trim();
+  if (!trimmed) return resume;
+  return {
+    ...resume,
+    profile: {
+      ...resume.profile,
+      personalInformation: {
+        ...resume.profile.personalInformation,
+        fullName: trimmed,
+      },
+    },
+  };
+}
+
 /**
- * Export the resume into download/, then auto-download via a hidden iframe
- * hitting Content-Disposition: attachment. This works after async generate
- * without a second click and without opening a new tab/window.
+ * As soon as a resume exists: export PDF named <full-name>.pdf, save under
+ * download/, and trigger an automatic browser download (no second click).
  */
 async function deliverGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
+  profileFullName?: string,
 ): Promise<{ filename: string }> {
+  const namedResume = resumeWithProfileFullName(
+    resume,
+    profileFullName ?? resume.profile.personalInformation.fullName,
+  );
+  const filename = resumeFilenameFromFullName(
+    namedResume.profile.personalInformation.fullName,
+    format,
+  );
+
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format, saveOnly: true }),
+    // Return PDF bytes (server also writes download/<full-name>.pdf).
+    body: JSON.stringify({ resume: namedResume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
     throw new Error(payload.error?.message ?? "Resume download failed.");
   }
 
-  const saved = (await response.json()) as { filename?: string };
-  const filename =
-    saved.filename ??
-    resumeFilenameFromFullName(
-      resume.profile.personalInformation.fullName,
-      format,
-    );
+  const bytes = await response.arrayBuffer();
+  const savedName =
+    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
+    filename;
 
-  triggerAutoFileDownload(
-    `/api/resume/download/${encodeURIComponent(filename)}`,
-  );
-  return { filename };
+  // Auto-download immediately as <full-name>.pdf in the same tab.
+  triggerBlobAutoDownload(bytes, savedName);
+
+  return { filename: savedName };
 }
 
-/** Hidden iframe download — no window.open, no target=_blank, no second click. */
-function triggerAutoFileDownload(href: string): void {
-  const frame = document.createElement("iframe");
-  frame.src = href;
-  frame.setAttribute("aria-hidden", "true");
-  frame.tabIndex = -1;
-  frame.style.position = "fixed";
-  frame.style.width = "0";
-  frame.style.height = "0";
-  frame.style.border = "0";
-  frame.style.opacity = "0";
-  frame.style.pointerEvents = "none";
-  frame.style.overflow = "hidden";
-  document.body.appendChild(frame);
+function filenameFromContentDisposition(
+  header: string | null,
+): string | undefined {
+  if (!header) return undefined;
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {
+      // fall through
+    }
+  }
+  const plainMatch = /filename="([^"]+)"/i.exec(header);
+  if (plainMatch?.[1]) return plainMatch[1];
+  const bareMatch = /filename=([^;]+)/i.exec(header);
+  return bareMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
+}
+
+function triggerBlobAutoDownload(bytes: ArrayBuffer, filename: string): void {
+  const isPdf = filename.toLowerCase().endsWith(".pdf");
+  const blob = new Blob([bytes], {
+    type: isPdf ? "application/pdf" : "application/octet-stream",
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  // Programmatic click in the Generate() async chain starts the download.
+  anchor.click();
+  anchor.remove();
   window.setTimeout(() => {
-    frame.remove();
-  }, 60_000);
+    URL.revokeObjectURL(objectUrl);
+  }, 10_000);
 }
 
 async function autoDeliverGeneratedResume(
   resume: FinalResumeData,
-  format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
+  profileFullName: string,
 ): Promise<{ filename: string }> {
-  return deliverGeneratedResume(resume, format);
+  return deliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT, profileFullName);
 }
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
@@ -327,6 +372,7 @@ export default function ResumeGenerator() {
   async function runAutoDownload(
     jobId: string,
     resume: FinalResumeData,
+    profileFullName: string,
   ): Promise<void> {
     if (autoDownloadedJobIdsRef.current.has(jobId)) return;
     autoDownloadedJobIdsRef.current.add(jobId);
@@ -341,7 +387,7 @@ export default function ResumeGenerator() {
       ),
     );
     try {
-      await autoDeliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT);
+      await autoDeliverGeneratedResume(resume, profileFullName);
       setJobs((current) =>
         current.map((item) => {
           if (item.id !== jobId) return item;
@@ -678,8 +724,8 @@ export default function ResumeGenerator() {
                 : "Resume generation failed.",
             );
           }
-          // Keep linear generate progress to 100%. Start PDF auto-download
-          // in this Generate click async chain — no second button click.
+          // Resume is ready — immediately export + auto-download
+          // <profile-full-name>.pdf (no second click).
           setJobs((current) =>
             current.map((item) =>
               item.id === job.id
@@ -693,7 +739,11 @@ export default function ResumeGenerator() {
             ),
           );
           try {
-            await runAutoDownload(job.id, payload);
+            await runAutoDownload(
+              job.id,
+              payload,
+              profile.personalInformation.fullName,
+            );
           } catch {
             // Error state already recorded on the job.
           }

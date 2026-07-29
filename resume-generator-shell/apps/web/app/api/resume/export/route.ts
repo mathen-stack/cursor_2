@@ -75,9 +75,10 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(body, {
       status: 200,
       headers: {
-        "Content-Type": artifact.mimeType,
+        "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="${artifact.filename}"`,
         "Content-Length": String(artifact.byteLength),
+        "X-Content-Type-Options": "nosniff",
         "X-Resume-Checksum": artifact.artifactChecksum,
         "X-Resume-Source-Fingerprint": artifact.sourceDocumentFingerprint,
         "X-Resume-Export-Status": artifact.validation.overallStatus,
