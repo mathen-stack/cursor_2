@@ -45,9 +45,8 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
 }
 
 /**
- * Save PDF into download/<full-name>.pdf, then force a browser download via a
- * same-origin GET. Blob+anchor clicks are often blocked after async generate
- * because the original user gesture has expired.
+ * Save into download/<full-name>.<ext>, then trigger a same-tab file download
+ * via a blob URL (never navigates or opens a new window/tab).
  */
 async function autoDeliverGeneratedResume(
   resume: FinalResumeData,
@@ -56,70 +55,62 @@ async function autoDeliverGeneratedResume(
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format, saveOnly: true }),
+    body: JSON.stringify({ resume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
     throw new Error(payload.error?.message ?? "Resume auto-download failed.");
   }
-  const saved = (await response.json()) as { filename?: string };
   const filename =
-    saved.filename ??
+    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
     resumeFilenameFromFullName(
       resume.profile.personalInformation.fullName,
       format,
     );
-
-  triggerBrowserFileDownload(`/api/resume/download/${encodeURIComponent(filename)}`);
+  const blob = await response.blob();
+  triggerBlobFileDownload(blob, filename);
   return { filename };
 }
 
-function triggerBrowserFileDownload(href: string): void {
-  const frame = document.createElement("iframe");
-  frame.src = href;
-  frame.setAttribute("aria-hidden", "true");
-  frame.tabIndex = -1;
-  frame.style.position = "fixed";
-  frame.style.width = "1px";
-  frame.style.height = "1px";
-  frame.style.opacity = "0";
-  frame.style.pointerEvents = "none";
-  document.body.appendChild(frame);
-  window.setTimeout(() => {
-    frame.remove();
-  }, 60_000);
+function filenameFromContentDisposition(
+  header: string | null,
+): string | undefined {
+  if (!header) return undefined;
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {
+      // fall through
+    }
+  }
+  const plainMatch = /filename="([^"]+)"/i.exec(header);
+  if (plainMatch?.[1]) return plainMatch[1];
+  const bareMatch = /filename=([^;]+)/i.exec(header);
+  return bareMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
+}
 
-  // Fallback for browsers that ignore iframe attachment downloads.
+/** Download without navigation or a new browsing context. */
+function triggerBlobFileDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = href;
+  anchor.href = objectUrl;
+  anchor.download = filename;
   anchor.rel = "noopener";
-  anchor.download = "";
+  anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 2_000);
 }
 
 async function downloadGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
 ): Promise<void> {
-  const response = await fetch("/api/resume/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format, saveOnly: true }),
-  });
-  if (!response.ok) {
-    const payload = (await response.json()) as { error?: { message?: string } };
-    throw new Error(payload.error?.message ?? "Resume export failed.");
-  }
-  const saved = (await response.json()) as { filename?: string };
-  const filename =
-    saved.filename ??
-    resumeFilenameFromFullName(
-      resume.profile.personalInformation.fullName,
-      format,
-    );
-  triggerBrowserFileDownload(`/api/resume/download/${encodeURIComponent(filename)}`);
+  await autoDeliverGeneratedResume(resume, format);
 }
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
