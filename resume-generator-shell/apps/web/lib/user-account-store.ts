@@ -3,6 +3,20 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { UserRole } from "./auth-types";
 import { getAccountsDirectory } from "./data-paths";
+import { hasDatabaseUrl } from "./db";
+import {
+  dbDeleteAccount,
+  dbFindAccount,
+  dbInsertAccount,
+  dbReplaceAccount,
+  dbSeedAccountsIfEmpty,
+  toPublicAccount,
+} from "./user-account-store-db";
+import type {
+  AccountStatus,
+  PublicAccount,
+  StoredAccount,
+} from "./user-account-store-types";
 import {
   deleteUserProfileRecord,
   readUserProfileRecord,
@@ -10,46 +24,15 @@ import {
   writeUserProfileRecord,
 } from "./user-profile-store";
 
-export type AccountStatus = "pending" | "approved";
-
-export type StoredAccount = {
-  username: string;
-  displayName: string;
-  role: UserRole;
-  status: AccountStatus;
-  passwordHash: string;
-  passwordSalt: string;
-  updatedAt: string;
-  updatedBy: string;
-};
+export type { AccountStatus, PublicAccount, StoredAccount };
 
 type AccountsFile = {
   version: 1;
   users: StoredAccount[];
 };
 
-export type PublicAccount = {
-  username: string;
-  displayName: string;
-  role: UserRole;
-  status: AccountStatus;
-  updatedAt: string;
-  updatedBy: string;
-};
-
 function normalizeAccountStatus(value: unknown): AccountStatus {
   return value === "pending" ? "pending" : "approved";
-}
-
-function toPublicAccount(account: StoredAccount): PublicAccount {
-  return {
-    username: account.username,
-    displayName: account.displayName,
-    role: account.role,
-    status: account.status,
-    updatedAt: account.updatedAt,
-    updatedBy: account.updatedBy,
-  };
 }
 
 function accountsRootDirectory(): string {
@@ -155,7 +138,7 @@ async function writeAccountsFile(users: StoredAccount[]): Promise<void> {
   await writeFile(accountsFilePath(), JSON.stringify(payload, null, 2), "utf8");
 }
 
-export async function ensureAccountsFile(): Promise<StoredAccount[]> {
+async function ensureAccountsFile(): Promise<StoredAccount[]> {
   try {
     const raw = await readFile(accountsFilePath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<AccountsFile>;
@@ -188,8 +171,16 @@ export async function ensureAccountsFile(): Promise<StoredAccount[]> {
   }
 }
 
+async function ensureAccounts(): Promise<StoredAccount[]> {
+  if (hasDatabaseUrl()) {
+    const seeded = accountsFromEnv() ?? defaultAccounts();
+    return dbSeedAccountsIfEmpty(seeded);
+  }
+  return ensureAccountsFile();
+}
+
 export async function listStoredAccounts(): Promise<StoredAccount[]> {
-  const users = await ensureAccountsFile();
+  const users = await ensureAccounts();
   return users.sort((left, right) => left.username.localeCompare(right.username));
 }
 
@@ -202,6 +193,10 @@ export async function findStoredAccount(
   username: string,
 ): Promise<StoredAccount | null> {
   const safe = sanitizeUsername(username);
+  if (hasDatabaseUrl()) {
+    await ensureAccounts();
+    return dbFindAccount(safe);
+  }
   const users = await listStoredAccounts();
   return users.find((user) => user.username === safe) ?? null;
 }
@@ -222,12 +217,14 @@ export async function createStoredAccount(input: {
       status: 400,
     });
   }
-  const users = await listStoredAccounts();
-  if (users.some((user) => user.username === username)) {
+
+  const existing = await findStoredAccount(username);
+  if (existing) {
     throw Object.assign(new Error("That username is already taken."), {
       status: 409,
     });
   }
+
   const account: StoredAccount = {
     username,
     displayName: username,
@@ -237,6 +234,14 @@ export async function createStoredAccount(input: {
     updatedAt: new Date().toISOString(),
     updatedBy: sanitizeUsername(input.updatedBy) || "system",
   };
+
+  if (hasDatabaseUrl()) {
+    await ensureAccounts();
+    await dbInsertAccount(account);
+    return toPublicAccount(account);
+  }
+
+  const users = await listStoredAccounts();
   users.push(account);
   await writeAccountsFile(users);
   return toPublicAccount(account);
@@ -353,18 +358,22 @@ export async function updateStoredAccount(input: {
     updatedAt: new Date().toISOString(),
     updatedBy: sanitizeUsername(input.updatedBy),
   };
-  users[index] = updated;
-  await writeAccountsFile(users);
 
-  if (nextUsername !== currentUsername) {
-    const existingProfile = await readUserProfileRecord(currentUsername);
-    if (existingProfile) {
-      await writeUserProfileRecord({
-        username: nextUsername,
-        profile: existingProfile.profile,
-        updatedBy: input.updatedBy,
-      });
-      await deleteUserProfileRecord(currentUsername);
+  if (hasDatabaseUrl()) {
+    await dbReplaceAccount(currentUsername, updated);
+  } else {
+    users[index] = updated;
+    await writeAccountsFile(users);
+    if (nextUsername !== currentUsername) {
+      const existingProfile = await readUserProfileRecord(currentUsername);
+      if (existingProfile) {
+        await writeUserProfileRecord({
+          username: nextUsername,
+          profile: existingProfile.profile,
+          updatedBy: input.updatedBy,
+        });
+        await deleteUserProfileRecord(currentUsername);
+      }
     }
   }
 
@@ -405,9 +414,14 @@ export async function deleteStoredAccount(input: {
       );
     }
   }
-  users.splice(index, 1);
-  await writeAccountsFile(users);
-  await deleteUserProfileRecord(username);
+
+  if (hasDatabaseUrl()) {
+    await dbDeleteAccount(username);
+  } else {
+    users.splice(index, 1);
+    await writeAccountsFile(users);
+    await deleteUserProfileRecord(username);
+  }
   return toPublicAccount(current);
 }
 

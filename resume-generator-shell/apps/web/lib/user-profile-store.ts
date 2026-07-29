@@ -2,27 +2,24 @@ import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { UserProfile } from "@resume/contracts";
 import { getProfilesDirectory } from "./data-paths";
+import { hasDatabaseUrl } from "./db";
 import {
   createEmptyProfile,
   normalizeStoredProfile,
 } from "./saved-profile-store";
+import {
+  dbDeleteProfile,
+  dbListProfileSummaries,
+  dbListProfileUsernames,
+  dbReadProfile,
+  dbWriteProfile,
+} from "./user-profile-store-db";
+import type {
+  StoredUserProfileRecord,
+  UserProfileSummary,
+} from "./user-profile-store-types";
 
-export type StoredUserProfileRecord = {
-  version: 1;
-  username: string;
-  savedAt: string;
-  updatedBy: string;
-  profile: UserProfile;
-};
-
-export type UserProfileSummary = {
-  username: string;
-  savedAt: string;
-  updatedBy: string;
-  fullName: string;
-  email: string;
-  hasProfile: boolean;
-};
+export type { StoredUserProfileRecord, UserProfileSummary };
 
 function profilesRootDirectory(): string {
   return getProfilesDirectory();
@@ -45,7 +42,7 @@ function profileFilePath(username: string): string {
   );
 }
 
-export async function readUserProfileRecord(
+async function readUserProfileRecordFromFile(
   username: string,
 ): Promise<StoredUserProfileRecord | null> {
   try {
@@ -71,21 +68,37 @@ export async function readUserProfileRecord(
   }
 }
 
+export async function readUserProfileRecord(
+  username: string,
+): Promise<StoredUserProfileRecord | null> {
+  const safe = sanitizeProfileUsername(username);
+  if (hasDatabaseUrl()) return dbReadProfile(safe);
+  return readUserProfileRecordFromFile(safe);
+}
+
 export async function writeUserProfileRecord(input: {
   username: string;
   profile: UserProfile;
   updatedBy: string;
 }): Promise<StoredUserProfileRecord> {
   const username = sanitizeProfileUsername(input.username);
+  const updatedBy = sanitizeProfileUsername(input.updatedBy);
+  if (hasDatabaseUrl()) {
+    return dbWriteProfile({
+      username,
+      profile: input.profile,
+      updatedBy,
+    });
+  }
+
   const profile =
-    normalizeStoredProfile(input.profile) ??
-    createEmptyProfile();
+    normalizeStoredProfile(input.profile) ?? createEmptyProfile();
   profile.profileId = `PROFILE-${username.toUpperCase()}`;
   const record: StoredUserProfileRecord = {
     version: 1,
     username,
     savedAt: new Date().toISOString(),
-    updatedBy: sanitizeProfileUsername(input.updatedBy),
+    updatedBy,
     profile,
   };
   const directory = profilesRootDirectory();
@@ -95,8 +108,10 @@ export async function writeUserProfileRecord(input: {
 }
 
 export async function deleteUserProfileRecord(username: string): Promise<boolean> {
+  const safe = sanitizeProfileUsername(username);
+  if (hasDatabaseUrl()) return dbDeleteProfile(safe);
   try {
-    await unlink(profileFilePath(username));
+    await unlink(profileFilePath(safe));
     return true;
   } catch {
     return false;
@@ -110,9 +125,13 @@ export async function listUserProfileSummaries(
     new Set(usernames.map((name) => sanitizeProfileUsername(name))),
   ).filter(Boolean);
 
+  if (hasDatabaseUrl()) {
+    return dbListProfileSummaries(unique);
+  }
+
   const summaries = await Promise.all(
     unique.map(async (username) => {
-      const record = await readUserProfileRecord(username);
+      const record = await readUserProfileRecordFromFile(username);
       if (!record) {
         return {
           username,
@@ -137,8 +156,9 @@ export async function listUserProfileSummaries(
   return summaries.sort((left, right) => left.username.localeCompare(right.username));
 }
 
-/** Used by tests / diagnostics — list files currently on disk. */
+/** Used by tests / diagnostics — list currently stored profile usernames. */
 export async function listStoredProfileUsernames(): Promise<string[]> {
+  if (hasDatabaseUrl()) return dbListProfileUsernames();
   try {
     const files = await readdir(profilesRootDirectory());
     return files

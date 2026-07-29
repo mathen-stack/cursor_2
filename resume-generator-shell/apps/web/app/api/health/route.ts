@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadExperienceModelProviderConfig } from "@resume/engines";
+import { getDatabasePersistenceLabel } from "../../../lib/db";
 
 export const runtime = "nodejs";
 
@@ -11,12 +12,17 @@ export async function GET(): Promise<NextResponse> {
       service: "resume-generator",
       experienceEngine: "0.9.0",
       modelProvider: provider.provider,
-      persistence: process.env.GENERATION_STORE_FILE ? "json-file" : "memory",
+      persistence: {
+        accountsProfiles: getDatabasePersistenceLabel(),
+        generations: process.env.GENERATION_STORE_FILE ? "json-file" : "memory",
+      },
       readiness: {
         engine: "resume-worded-readiness-engine",
         internalTarget: 95,
         externalTarget: 90,
-        calibrationPersistence: process.env.RESUME_CALIBRATION_STORE_FILE ? "json-file" : "memory",
+        calibrationPersistence: process.env.RESUME_CALIBRATION_STORE_FILE
+          ? "json-file"
+          : "memory",
       },
       resumeRendering: {
         formats: ["html", "txt", "docx", "pdf"],
@@ -27,7 +33,8 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json(
       {
         status: "misconfigured",
-        message: error instanceof Error ? error.message : "Unknown configuration error.",
+        message:
+          error instanceof Error ? error.message : "Unknown configuration error.",
       },
       { status: 500 },
     );

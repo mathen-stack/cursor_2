@@ -8,13 +8,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@resume/contracts": "workspace:*",
     "@resume/core": "workspace:*",
+    "@resume/engines": "workspace:*",
+    "@resume/rendering": "workspace:*",
     "next": "^15.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@resume/engines": "workspace:*",
-    "@resume/rendering": "workspace:*"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
