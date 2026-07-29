@@ -12,6 +12,7 @@ import {
   ensureAllocatedOpeningVerb,
   finalizeComposedBullet,
   containsVagueBuzzwords,
+  hasCompositionCommunicationSignal,
   isBrokenBulletWording,
   isJdMarketingOrMetaScope,
   highCollisionMethodRepresented,

@@ -95,8 +95,8 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createJdDraft(text = ""): JdDraft {
-  return { id: createId("JD"), text };
+function createJdDraft(text = "", id?: string): JdDraft {
+  return { id: id ?? createId("JD"), text };
 }
 
 function titleFromJdText(text: string, fallbackIndex: number): string {
@@ -146,7 +146,7 @@ function atsScoreClass(score: number): string {
 
 export default function ResumeGenerator() {
   const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
-    createJdDraft(SAMPLE_JD),
+    createJdDraft(SAMPLE_JD, "JD-001"),
   ]);
   const [profile, setProfile] = useState<UserProfile>({
     profileId: "PROFILE-DEMO",
@@ -190,6 +190,13 @@ export default function ResumeGenerator() {
   );
   const hasActiveJobs = jobs.some(
     (job) => job.status === "running" || job.status === "finishing",
+  );
+  const activeJobCount = useMemo(
+    () =>
+      jobs.filter(
+        (job) => job.status === "running" || job.status === "finishing",
+      ).length,
+    [jobs],
   );
 
   useEffect(() => {
@@ -738,7 +745,7 @@ export default function ResumeGenerator() {
             </button>
             <p className="inline-status">
               {hasActiveJobs
-                ? `Running ${jobs.filter((job) => job.status === "running" || job.status === "finishing").length} JD-isolated resume pipeline${readyJdCount === 1 ? "" : "s"}…`
+                ? `Running ${activeJobCount} JD-isolated resume pipeline${activeJobCount === 1 ? "" : "s"}…`
                 : readyJdCount > 1
                   ? `${readyJdCount} JDs ready. Generate will run them in parallel.`
                   : "Ready when profile, career history, education, and JD are filled in."}

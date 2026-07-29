@@ -167,6 +167,9 @@ export function validateKeywordAllocation(input: {
     ],
   ).filter((entry) => {
     const [experienceId, ...keyParts] = entry.split(":");
+    if (!experienceId) {
+      return true;
+    }
     const key = keyParts.join(":");
     return (
       !isControlledReuse(experienceId, key, input.controlledDirectKeywordReuse) &&
