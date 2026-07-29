@@ -14,6 +14,11 @@ import {
   formatJdResultHeadline,
   isFallbackJobRole,
 } from "../lib/detect-company-from-jd";
+import {
+  createEmptyProfile,
+  loadSavedProfile,
+  saveProfileToStorage,
+} from "../../lib/saved-profile-store";
 
 function resolveRoleFromResume(
   resume: FinalResumeData,
@@ -345,20 +350,24 @@ export default function ResumeGenerator() {
   const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
     createJdDraft("", "JD-001"),
   ]);
-  const [profile, setProfile] = useState<UserProfile>({
-    profileId: "PROFILE-DEMO",
-    personalInformation: {
-      fullName: "",
-      email: "",
-      phone: "",
-      location: "",
-    },
-    careerHistory: [newCareerEntry(0)],
-    education: [newEducationEntry(0)],
-  });
+  const [profile, setProfile] = useState<UserProfile>(() => createEmptyProfile());
+  const [profileHydrated, setProfileHydrated] = useState(false);
+  const [profileSavedAt, setProfileSavedAt] = useState<string | null>(null);
+  const [profileSaveMessage, setProfileSaveMessage] = useState("");
+  const [profileSaveError, setProfileSaveError] = useState("");
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const saved = loadSavedProfile();
+    if (saved) {
+      setProfile(saved.profile);
+      setProfileSavedAt(saved.savedAt);
+      setProfileSaveMessage("Saved profile loaded");
+    }
+    setProfileHydrated(true);
+  }, []);
 
   async function runAutoDownload(
     jobId: string,
@@ -551,10 +560,35 @@ export default function ResumeGenerator() {
 
   const canGenerate = profileReady && readyJdCount > 0;
 
+  function markProfileEdited() {
+    setProfileSaveError("");
+    if (profileSaveMessage === "Profile saved" || profileSaveMessage === "Saved profile loaded") {
+      setProfileSaveMessage(profileSavedAt ? "Unsaved changes" : "");
+    }
+  }
+
+  function saveProfile() {
+    setProfileSaveError("");
+    try {
+      if (!profile.personalInformation.fullName.trim()) {
+        throw new Error("Enter your full name before saving the profile.");
+      }
+      const saved = saveProfileToStorage(profile);
+      setProfile(saved.profile);
+      setProfileSavedAt(saved.savedAt);
+      setProfileSaveMessage("Profile saved");
+    } catch (caught) {
+      setProfileSaveError(
+        caught instanceof Error ? caught.message : "Could not save profile.",
+      );
+    }
+  }
+
   function updatePersonal(
     field: keyof UserProfile["personalInformation"],
     value: string,
   ) {
+    markProfileEdited();
     setProfile((current) => {
       const personalInformation = { ...current.personalInformation };
       if (field === "linkedin" || field === "portfolio") {
@@ -568,6 +602,7 @@ export default function ResumeGenerator() {
   }
 
   function updateCareer(index: number, field: keyof CareerEntry, value: string) {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       careerHistory: current.careerHistory.map((entry, entryIndex) =>
@@ -577,6 +612,7 @@ export default function ResumeGenerator() {
   }
 
   function addCareer() {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       careerHistory: [
@@ -587,6 +623,7 @@ export default function ResumeGenerator() {
   }
 
   function removeCareer(index: number) {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       careerHistory: current.careerHistory
@@ -603,6 +640,7 @@ export default function ResumeGenerator() {
     field: keyof UserProfile["education"][number],
     value: string,
   ) {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       education: current.education.map((entry, entryIndex) =>
@@ -612,6 +650,7 @@ export default function ResumeGenerator() {
   }
 
   function addEducation() {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       education: [...current.education, newEducationEntry(current.education.length)],
@@ -619,6 +658,7 @@ export default function ResumeGenerator() {
   }
 
   function removeEducation(index: number) {
+    markProfileEdited();
     setProfile((current) => ({
       ...current,
       education: current.education
@@ -777,7 +817,23 @@ export default function ResumeGenerator() {
           <div className="section-head">
             <div>
               <h2>User Profile</h2>
+              <p className="hint">
+                Save your profile once — it reloads automatically next time you open
+                this page, and Generate uses it for every resume.
+              </p>
             </div>
+            {profileHydrated && profileSaveMessage ? (
+              <p
+                className={`profile-save-status${
+                  profileSaveMessage === "Unsaved changes" ? " is-dirty" : ""
+                }`}
+              >
+                {profileSaveMessage}
+                {profileSavedAt && profileSaveMessage !== "Unsaved changes"
+                  ? ` · ${new Date(profileSavedAt).toLocaleString()}`
+                  : ""}
+              </p>
+            ) : null}
           </div>
 
           <div className="profile-grid">
@@ -1007,7 +1063,16 @@ export default function ResumeGenerator() {
             <button type="button" className="secondary-action" onClick={addEducation}>
               Add Education
             </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={saveProfile}
+              disabled={!profile.personalInformation.fullName.trim()}
+            >
+              Save Profile
+            </button>
           </div>
+          {profileSaveError ? <p className="error">{profileSaveError}</p> : null}
         </section>
 
         <section className="composer">
