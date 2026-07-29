@@ -182,11 +182,6 @@ button:disabled {
   gap: 0.75rem;
 }
 
-.jd-card-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;

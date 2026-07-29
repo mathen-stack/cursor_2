@@ -394,10 +394,6 @@ export default function ResumeGenerator() {
     );
   }
 
-  function addJdDraft() {
-    setJdDrafts((current) => [...current, createJdDraft("")]);
-  }
-
   function closeJob(jobId: string) {
     setJobs((current) => current.filter((job) => job.id !== jobId));
   }
@@ -751,45 +747,25 @@ export default function ResumeGenerator() {
           <div className="section-head">
             <div>
               <h2>Job Description</h2>
-              <p className="hint">Paste a JD and generate. Add more JDs anytime.</p>
+              <p className="hint">Paste a JD, then generate the resume.</p>
             </div>
           </div>
 
-          {jdDrafts.map((draft) => {
-            const draftReady = draft.text.trim().length >= 50;
-            const draftCanGenerate = profileReady && draftReady;
-            return (
-              <div key={draft.id} className="entry-block jd-card">
-                <div className="jd-card-actions">
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={!draftCanGenerate}
-                    onClick={() => generate([draft.id])}
-                  >
-                    Generate
-                  </button>
-                </div>
-                <label className="profile-field profile-field-full">
-                  <span className="sr-only">Job description</span>
-                  <textarea
-                    name={`jobDescription-${draft.id}`}
-                    value={draft.text}
-                    onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                      updateJdDraft(draft.id, event.target.value)
-                    }
-                    placeholder="Paste the full job description here"
-                  />
-                </label>
-              </div>
-            );
-          })}
-
-          <div className="section-actions section-actions-end">
-            <button type="button" className="secondary-action" onClick={addJdDraft}>
-              Add JD
-            </button>
-          </div>
+          {jdDrafts.map((draft) => (
+            <div key={draft.id} className="entry-block jd-card">
+              <label className="profile-field profile-field-full">
+                <span className="sr-only">Job description</span>
+                <textarea
+                  name={`jobDescription-${draft.id}`}
+                  value={draft.text}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                    updateJdDraft(draft.id, event.target.value)
+                  }
+                  placeholder="Paste the full job description here"
+                />
+              </label>
+            </div>
+          ))}
 
           <div className="composer-footer">
             <button
@@ -798,20 +774,12 @@ export default function ResumeGenerator() {
               disabled={!canGenerate}
               onClick={() => generate()}
             >
-              {hasActiveJobs
-                ? readyJdCount > 1
-                  ? `Generate ${readyJdCount} more resumes`
-                  : "Generate another resume"
-                : readyJdCount > 1
-                  ? `Generate ${readyJdCount} resumes`
-                  : "Generate complete resume"}
+              {hasActiveJobs ? "Generate another resume" : "Generate complete resume"}
             </button>
             <p className="inline-status">
               {hasActiveJobs
-                ? `${activeJobCount} running. Generate stays available — start more anytime.`
-                : readyJdCount > 1
-                  ? `${readyJdCount} JDs ready. Generate will run them in parallel.`
-                  : "Ready when profile, career history, education, and JD are filled in."}
+                ? `${activeJobCount} running. You can generate again when ready.`
+                : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
         </section>
@@ -831,11 +799,11 @@ export default function ResumeGenerator() {
 
           {jobs.length === 0 ? (
             <div className="empty-board">
-              <p>No resumes yet. Add JDs, then generate — you can start more while others run.</p>
+              <p>No resumes yet. Paste a JD and generate to see results here.</p>
               <ol>
                 <li>Confirm profile, career history, and education</li>
-                <li>Paste one or more target job descriptions</li>
-                <li>Generate anytime; parallel jobs appear in Result as they finish</li>
+                <li>Paste the target job description</li>
+                <li>Generate — finished resumes appear here</li>
               </ol>
             </div>
           ) : (
