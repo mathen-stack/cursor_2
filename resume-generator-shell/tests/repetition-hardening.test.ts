@@ -1,0 +1,877 @@
+import { describe, expect, it } from "vitest";
+import { createGenerationContext, createJobDescription } from "@resume/core";
+import {
+  actionScopeFingerprint,
+  createProductionExperienceEngine,
+  ensureAllocatedOpeningVerb,
+  ensureMinimumBulletWords,
+  ensureUniqueActionScopeBullet,
+  extractActionObjectScope,
+  finalizeComposedBullet,
+  isBrokenBulletWording,
+  isJdMarketingOrMetaScope,
+  normalizeBulletSentence,
+  repairBrokenBulletWording,
+  stripIntraBulletRepetition,
+  substantiveKeyword,
+} from "@resume/engines";
+
+const REFERENCE_DATE = new Date("2026-07-27T00:00:00.000Z");
+
+describe("repetition hardening", () => {
+  it("scrubs filler and self-congratulatory wording from bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Successfully delivered various platform upgrades very effectively, reducing incidents by 24%.",
+      ),
+    ).not.toMatch(/\b(?:successfully|various|very|effectively|really|numerous)\b/i);
+  });
+
+  it("restores allocated opening action verbs after repair or uniqueify damage", () => {
+    expect(
+      ensureAllocatedOpeningVerb(
+        "cross-functional delivery priorities with product stakeholders, reducing cycle time by 24%.",
+        "Collaborated",
+      ),
+    ).toMatch(/^Collaborated\s+/);
+    expect(
+      ensureAllocatedOpeningVerb(
+        "Collaborated, reducing delivery cycle time by 24%.",
+        "Collaborated",
+      ),
+    ).toMatch(/^Collaborated\s+\S+/);
+    expect(
+      ensureAllocatedOpeningVerb(
+        "reviews and solution design, reducing deployment cycle time by 47%.",
+        "Deployed",
+      ),
+    ).toMatch(/^Deployed\s+/);
+    // Comma-led / empty-object openings must still pass startsWithVerb (space after verb).
+    const repaired = ensureAllocatedOpeningVerb(
+      ", reducing delivery cycle time by 24% and improving stakeholder alignment.",
+      "Collaborated",
+    );
+    expect(repaired.toLocaleLowerCase().startsWith("collaborated ")).toBe(true);
+    expect(repaired).toMatch(/^Collaborated\s+\S+/);
+  });
+
+  it("scrubs vague resume buzzwords into concrete evidence wording", () => {
+    expect(
+      normalizeBulletSentence(
+        "Delivered dynamic problem solver and strategic thinker through adapter development, reducing cycle time by 31%.",
+      ),
+    ).not.toMatch(
+      /\b(?:dynamic|strategic thinker|passionate|motivated|communication skills|team player|proven track record)\b/i,
+    );
+    expect(
+      normalizeBulletSentence(
+        "Led proven track record and soft skills with product partners, increasing alignment by 18%.",
+      ),
+    ).toMatch(/demonstrated delivery outcomes|cross-functional collaboration|stakeholder communication/i);
+  });
+
+  it("approves buzzword-heavy JDs without ats-language buzzword rejects", async () => {
+    const jobDescription = createJobDescription(
+      `Senior Software Engineer
+We need a passionate, motivated, proactive engineer with a proven track record.
+Be a team player with strong communication skills and soft skills.
+Dynamic problem solver and strategic thinker.
+Build scalable backend services with Node.js.
+Collaborate with product stakeholders.
+Lead technical design.
+Mentor engineers.
+Optimize system performance.
+Deploy with Kubernetes.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-BUZZWORD-JD", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example AI Company",
+          startDate: "2022-01",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Prior Labs",
+          startDate: "2015-01",
+          endDate: "2017-07",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    expect(
+      result.validation.diagnostics.filter((item) =>
+        item.errors.some((error) => /buzzword/i.test(error)),
+      ),
+    ).toEqual([]);
+    for (const experience of result.experiences) {
+      for (const bullet of experience.bullets) {
+        expect(bullet.finalBullet).not.toMatch(
+          /\b(?:dynamic|proactive|passionate|motivated|strategic thinker|team player|communication skills|proven track record|soft skills)\b/i,
+        );
+      }
+    }
+  });
+
+  it("pads bullets that become too short after covering-clause repair", () => {
+    const repaired = repairBrokenBulletWording(
+      "Mentored engineers covering capability building, increasing supported workload scale by 22%.",
+    );
+    expect(repaired.split(/\s+/).length).toBeLessThan(16);
+    const padded = ensureMinimumBulletWords(repaired, 16, "EXP-003-B-001");
+    expect(padded.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(padded).not.toMatch(/\b(?:successfully|effectively|various|covering)\b/i);
+    expect(isBrokenBulletWording(padded)).toBe(false);
+  });
+
+  it("uniqueify preserves minimum length while rewriting cloned scopes", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Stabilized security mindset through least-privilege access, maintaining 99.94% availability.",
+      actionVerb: "Stabilized",
+      bulletId: "EXP-001-B-006",
+      usedScopeKeys: used,
+      minimumWords: 16,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Governed security mindset through penetration testing, increasing control coverage by 94%.",
+      actionVerb: "Governed",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+    });
+    expect(first.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(second.split(/\s+/).filter(Boolean).length).toBeGreaterThanOrEqual(16);
+    expect(
+      actionScopeFingerprint(extractActionObjectScope(first, "Stabilized")),
+    ).not.toBe(actionScopeFingerprint(extractActionObjectScope(second, "Governed")));
+  });
+
+  it("rewrites cloned multi-word action scopes to unique fingerprints", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Terraform, reducing incidents by 24%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Kubernetes, reducing downtime by 18%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-002-B-001",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Delivered platform reliability improvements through Prometheus, reducing alerts by 21%.",
+      actionVerb: "Delivered",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+    });
+
+    const keys = [first, second, third].map((bullet) =>
+      actionScopeFingerprint(extractActionObjectScope(bullet, "Delivered")),
+    );
+    expect(new Set(keys).size).toBe(3);
+    expect(second).not.toBe(first);
+    expect(third).not.toBe(first);
+    expect(third).not.toBe(second);
+    // Must replace the stem — not just append "across …".
+    expect(second.toLowerCase()).not.toContain("platform reliability improvements");
+    expect(third.toLowerCase()).not.toContain("platform reliability improvements");
+  });
+
+  it("replaces cloned scalable ML model stems instead of suffixing them", () => {
+    const used = new Set<string>();
+    const phrase = "scalable machine learning models in production environments";
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet: `Instrumented ${phrase} through incident response, maintaining 99.91% availability.`,
+      actionVerb: "Instrumented",
+      bulletId: "EXP-002-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet: `Accelerated ${phrase} through query optimization, reducing latency by 43%.`,
+      actionVerb: "Accelerated",
+      bulletId: "EXP-002-B-002",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet: `Launched ${phrase} through containerization, reducing release failures by 31%.`,
+      actionVerb: "Launched",
+      bulletId: "EXP-002-B-003",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toContain(phrase);
+    expect(second.toLowerCase()).not.toContain(phrase);
+    expect(third.toLowerCase()).not.toContain(phrase);
+    expect(second.toLowerCase()).not.toContain(
+      "scalable machine learning models in production",
+    );
+    expect(third.toLowerCase()).not.toContain(
+      "scalable machine learning models in production",
+    );
+  });
+
+  it("uniqueifies short two-word action scopes like security mindset", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Stabilized security mindset through least-privilege access, maintaining 99.94% availability.",
+      actionVerb: "Stabilized",
+      bulletId: "EXP-001-B-006",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Governed security mindset through penetration testing, increasing control coverage by 94%.",
+      actionVerb: "Governed",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Automated security mindset through remediation workflows, reducing manual effort by 43%.",
+      actionVerb: "Automated",
+      bulletId: "EXP-003-B-004",
+      usedScopeKeys: used,
+    });
+    const keys = [
+      actionScopeFingerprint(extractActionObjectScope(first, "Stabilized")),
+      actionScopeFingerprint(extractActionObjectScope(second, "Governed")),
+      actionScopeFingerprint(extractActionObjectScope(third, "Automated")),
+    ];
+    expect(new Set(keys).size).toBe(3);
+    expect(
+      [first, second, third].filter((bullet) => {
+        const scope = extractActionObjectScope(
+          bullet,
+          bullet.split(/\s+/)[0]!,
+        );
+        return /^security mindset$/i.test(scope);
+      }).length,
+    ).toBe(1);
+  });
+
+  it("approves three-career Platform Engineer generation without action-scope or filler rejects", async () => {
+    const jobDescription = createJobDescription(
+      `Platform Engineer
+Standardize market launches — build repeatable infrastructure provisioning so new markets can launch quickly.
+Design scalable cloud platforms on AWS and Kubernetes.
+Launch CI/CD pipelines with Terraform.
+Secure harden security posture with cloud security posture management.
+Accelerate inference performance and reduce latency.
+Instrument monitoring with Prometheus.
+Orchestrate security mindset — experience with access control best practices through penetration testing.
+Collaborate with product and engineering stakeholders.
+Lead technical strategy.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-THREE-CAREER-REP", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Company",
+          startDate: "2017-08",
+          endDate: "2018-02",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Prior Labs",
+          startDate: "2015-01",
+          endDate: "2017-07",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    expect(
+      result.validation.issues.filter(
+        (issue) =>
+          issue.issueCode === "action-scope-repetition" &&
+          issue.severity === "error",
+      ),
+    ).toEqual([]);
+    expect(
+      result.validation.diagnostics.filter((item) =>
+        item.errors.some((error) => /filler|self-congratulatory/i.test(error)),
+      ),
+    ).toEqual([]);
+
+    const scopes = result.experiences.flatMap((experience) =>
+      experience.bullets
+        .map((bullet) => {
+          const scope = extractActionObjectScope(
+            bullet.finalBullet,
+            bullet.actionVerb,
+          );
+          if (scope.split(/\s+/).filter(Boolean).length < 2) {
+            return null;
+          }
+          return actionScopeFingerprint(scope);
+        })
+        .filter((scope): scope is string => Boolean(scope)),
+    );
+    expect(new Set(scopes).size).toBe(scopes.length);
+
+    const exactSecurityMindset = result.experiences.flatMap((experience) =>
+      experience.bullets.filter((bullet) => {
+        const scope = extractActionObjectScope(
+          bullet.finalBullet,
+          bullet.actionVerb,
+        );
+        return /^security mindset$/i.test(scope);
+      }),
+    );
+    expect(exactSecurityMindset).toHaveLength(1);
+  });
+
+  it("removes within-bullet verb and measure echoes", () => {
+    expect(
+      stripIntraBulletRepetition(
+        "Coordinated stakeholder alignment and delivery coordination through dependency coordination",
+      ),
+    ).not.toMatch(/\bcoordination\b/i);
+    expect(
+      stripIntraBulletRepetition(
+        "Automated stakeholder alignment and delivery coordination through shared roadmap reviews",
+      ),
+    ).toMatch(/cross-functional/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Accelerated backend services, increasing throughput by 2.6x and improving request throughput",
+      ),
+    ).not.toMatch(/throughput.*throughput/i);
+  });
+
+  it("rejects JD marketing fragments as action scopes", () => {
+    expect(
+      isJdMarketingOrMetaScope("this is a freelance role for a tandem"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope(
+        "this part-time remote opportunity is ideal for technical",
+      ),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope(
+        "the mindrift platform connects specialists with AI projects",
+      ),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("✅ you'd rather have real ownership"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("bonus points if you've shipped production APIs"),
+    ).toBe(true);
+    expect(
+      isJdMarketingOrMetaScope("you'd report straight to the founder"),
+    ).toBe(true);
+    expect(isJdMarketingOrMetaScope("machine learning models")).toBe(false);
+  });
+
+  it("scrubs emoji and hiring meta copy out of visible resume bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Improved ✅ you'd rather have real ownership effectiveness, reducing manual processing by 22%.",
+      ),
+    ).not.toMatch(/✅|you'd rather|real ownership effectiveness/i);
+    expect(
+      normalizeBulletSentence(
+        "Coordinated stakeholder communication covering you'd report straight to the four, reducing handoff delays by 18%.",
+      ),
+    ).not.toMatch(/you'd report|straight to the four/i);
+    expect(
+      normalizeBulletSentence(
+        "Standardized ✅ bonus points if you've reducing defect rate by 34%.",
+      ),
+    ).not.toMatch(/✅|bonus points|if you've/i);
+    expect(
+      normalizeBulletSentence(
+        "Standardized ✅ bonus points if you've reducing defect rate by 34%.",
+      ),
+    ).toMatch(/reducing defect rate by 34%/i);
+  });
+
+  it("rewrites soft-skill buzzphrases out of generated bullet text", () => {
+    expect(
+      normalizeBulletSentence(
+        "Led strong verbal and written communication skills with product stakeholders, increasing delivery alignment by 18%",
+      ),
+    ).not.toMatch(/\bcommunication skills\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Facilitated communication skills across engineering partners, reducing handoff delays by 22%",
+      ),
+    ).toMatch(/stakeholder communication/i);
+  });
+
+  it("strips internal bullet identifiers and experience-with prefixes from visible text", () => {
+    expect(
+      normalizeBulletSentence(
+        "Instrumented incident response and observability for exp-002-b-001, maintaining 99.91% service availability.",
+      ),
+    ).not.toMatch(/\bexp-\d+-b-\d+\b/i);
+    expect(
+      substantiveKeyword("Experience with AWS"),
+    ).toBe("AWS");
+    expect(
+      substantiveKeyword("collaborate with product stakeholders"),
+    ).toBe("product stakeholders");
+    expect(
+      substantiveKeyword("collaborate with teams"),
+    ).toMatch(/collaboration with teams|collaborate with teams/i);
+    expect(
+      stripIntraBulletRepetition(
+        "Mentored mentoring and roadmap planning, increasing supported workload scale by 22%",
+      ),
+    ).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
+  });
+
+  it("repairs broken wording instead of failing composition", () => {
+    const broken =
+      "Implemented standardize market launches — build repeatable infrastructure provisioning so new using go through delivery planning covering repeatable infrastructure provisioning so new markets can to strengthen integration reliability, reducing manual processing effort by 29%.";
+    const repaired = repairBrokenBulletWording(broken);
+    expect(repaired).not.toMatch(/standardize|—|using go through|covering repeatable|markets can to/i);
+    expect(isBrokenBulletWording(repaired)).toBe(false);
+    expect(repaired).toMatch(/^Implemented\b/);
+    expect(repaired).toMatch(/29%/);
+  });
+
+  it("scrubs imperative echoes, em-dash JD glue, and duplicated scopes from bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Implemented standardize market launches — build repeatable infrastructure provisioning so new using go through delivery planning covering repeatable infrastructure provisioning so new markets can to strengthen integration reliability, reducing manual processing effort by 29%.",
+      ),
+    ).not.toMatch(
+      /standardize|—|using go through|covering repeatable|markets can to|so new/i,
+    );
+    expect(
+      normalizeBulletSentence(
+        "Secured harden security posture with cloud security posture through access controls, reducing security findings by 38%.",
+      ),
+    ).not.toMatch(/\bharden\b|security posture with cloud security posture/i);
+    expect(
+      normalizeBulletSentence(
+        "Accelerated accelerate inference performance and reduce latency through profiling, reducing latency by 42%.",
+      ),
+    ).not.toMatch(/\bAccelerated accelerate\b|\band reduce\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Stabilized orchestrate security mindset — experience with access control best through penetration testing, delivering a 28% reduction in incident detection time.",
+      ),
+    ).not.toMatch(/\borchestrate\b|experience with|best through|—/i);
+  });
+
+  it("does not repeat feature-adoption metrics or cloned stakeholder scopes across roles", async () => {
+    const jobDescription = createJobDescription(
+      `Senior Machine Learning Engineer
+Build and deploy scalable machine learning models in production environments.
+Implement model monitoring, improve inference performance, and automate CI/CD workflows.
+Collaborate with product, data, and platform teams to translate business requirements into technical solutions.
+Mentor engineers and communicate architecture decisions to technical and non-technical stakeholders.
+Experience with Python, Docker, Kubernetes, MLflow, AWS, and distributed systems is required.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-REPETITION", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example AI Company",
+          startDate: "2022-01",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Company",
+          startDate: "2017-08",
+          endDate: "2018-02",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    const bullets = result.experiences.flatMap((experience) =>
+      experience.bullets.map((bullet) => bullet.finalBullet),
+    );
+
+    const featureAdoption = bullets.filter((bullet) =>
+      /feature adoption/i.test(bullet),
+    );
+    expect(featureAdoption.length).toBeLessThanOrEqual(1);
+
+    const stakeholderScope = bullets.filter((bullet) =>
+      /stakeholder alignment and delivery coordination/i.test(bullet),
+    );
+    expect(stakeholderScope.length).toBeLessThanOrEqual(1);
+
+    const deliveryPlanningScope = bullets.filter((bullet) =>
+      /cross-functional collaboration and delivery planning(?:\s+required)?/i.test(
+        bullet,
+      ),
+    );
+    expect(deliveryPlanningScope.length).toBeLessThanOrEqual(1);
+
+    // No 4+ word action-object phrase should be cloned across bullets.
+    const actionScopes = bullets.map((bullet) => {
+      const withoutVerb = bullet.replace(/^[A-Za-z-]+\s+/, "");
+      return withoutVerb
+        .replace(/\s+(?:using|through|,)\s+.+$/i, "")
+        .toLowerCase()
+        .trim();
+    });
+    const multiWordScopes = actionScopes.filter(
+      (scope) => scope.split(/\s+/).length >= 4,
+    );
+    expect(new Set(multiWordScopes).size).toBe(multiWordScopes.length);
+
+    const scalableMlHits = bullets.filter((bullet) =>
+      /scalable machine learning models in production/i.test(bullet),
+    );
+    expect(scalableMlHits.length).toBeLessThanOrEqual(1);
+
+    for (const bullet of bullets) {
+      expect(bullet).not.toMatch(/\bCoordinat\w*\b.*\bcoordination\b/i);
+      expect(bullet).not.toMatch(/\bMentor\w*\b.*\bmentoring\b/i);
+      expect(bullet).not.toMatch(/\bthroughput\b.*\bthroughput\b/i);
+      expect(bullet).not.toMatch(/\bdelivery planning required\b/i);
+      expect(bullet).not.toMatch(/\bdynamic\b/i);
+      expect(bullet).not.toMatch(/\bproactive\b/i);
+      expect(bullet).not.toMatch(/\b(?:verbal and written\s+)?communication skills\b/i);
+      expect(bullet).not.toMatch(/\bexp-\d+-b-\d+\b/i);
+      expect(bullet).not.toMatch(/\bExperience with\b/i);
+      expect(bullet).not.toMatch(/\bLed collaborate\b/i);
+    }
+
+    const percentAmounts = bullets
+      .flatMap((bullet) => [...bullet.matchAll(/\b(\d+(?:\.\d+)?)%/g)].map((match) => match[1]))
+      .filter((value): value is string => Boolean(value));
+    expect(new Set(percentAmounts).size).toBe(percentAmounts.length);
+
+    const deliveringStems = bullets.filter((bullet) =>
+      /delivering a \d+(?:\.\d+)?% reduction/i.test(bullet),
+    );
+    const deliveringValues = deliveringStems.map(
+      (bullet) => bullet.match(/delivering a (\d+(?:\.\d+)?%) reduction/i)?.[1],
+    );
+    expect(new Set(deliveringValues).size).toBe(deliveringValues.length);
+  });
+
+  it("never ships the Platform Engineer screenshot repetition failures", async () => {
+    const jobDescription = createJobDescription(
+      `Platform Engineer
+Standardize market launches — build repeatable infrastructure provisioning so new markets can launch quickly.
+Design scalable cloud platforms on AWS and Kubernetes.
+Launch CI/CD pipelines with Terraform.
+Secure harden security posture with cloud security posture management.
+Accelerate inference performance and reduce latency.
+Instrument monitoring with Prometheus.
+Orchestrate security mindset — experience with access control best practices through penetration testing.
+Collaborate with product and engineering stakeholders.
+Lead technical strategy.`,
+    );
+    const result = await createProductionExperienceEngine({
+      role: { referenceDate: REFERENCE_DATE },
+    }).engine.execute({
+      context: createGenerationContext("PROFILE-SCREENSHOT-REP", jobDescription),
+      jobDescription,
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Example Software Company",
+          startDate: "2018-03",
+          endDate: "2021-12",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Company",
+          startDate: "2017-08",
+          endDate: "2018-02",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    const bullets = result.experiences.flatMap((experience) =>
+      experience.bullets.map((bullet) => bullet.finalBullet),
+    );
+
+    for (const bullet of bullets) {
+      expect(bullet).not.toMatch(
+        /\b(?:Implemented standardize|Secured harden|Accelerated accelerate|Stabilized orchestrate)\b/i,
+      );
+      expect(bullet).not.toMatch(/[–—]/);
+      expect(bullet).not.toMatch(
+        /\b(?:using go through|can to|so new markets?|experience with|and'?re in the middle)\b/i,
+      );
+      expect(bullet).not.toMatch(
+        /repeatable infrastructure provisioning[\s\S]*repeatable infrastructure provisioning/i,
+      );
+      expect(bullet).not.toMatch(
+        /stronger delivery outcomes for product and engineering stakeholders/i,
+      );
+    }
+
+    const endingCounts = new Map<string, number>();
+    for (const bullet of bullets) {
+      const ending = bullet
+        .toLocaleLowerCase()
+        .match(
+          /,\s*((?:enabling|while|that improved|and strengthening|while reinforcing|while advancing|while strengthening|while supporting)\s+.+)\.?$/,
+        )?.[1];
+      if (!ending) continue;
+      endingCounts.set(ending, (endingCounts.get(ending) ?? 0) + 1);
+    }
+    for (const [ending, count] of endingCounts) {
+      expect({ ending, count }).toEqual({ ending, count: 1 });
+    }
+  });
+
+  it("scrubs REST alias twins, directed/direction tautologies, and content-noun echoes", () => {
+    expect(
+      normalizeBulletSentence(
+        "Designed RESTful APIs and REST APIs through design reviews, reducing cycle time by 27%.",
+      ),
+    ).not.toMatch(/\bREST(?:ful)?\s+APIs?\s+and\s+REST(?:ful)?\s+APIs?\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Designed RESTful APIs and REST APIs through design reviews, reducing cycle time by 27%.",
+      ),
+    ).toMatch(/RESTful APIs/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Directed technical direction for engineering standards and execution planning, increasing velocity by 26%.",
+      ),
+    ).not.toMatch(/\bDirected\s+technical\s+direction\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Directed technical direction for engineering standards and execution planning, increasing velocity by 26%.",
+      ),
+    ).toMatch(/^Directed\s+engineering standards/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Facilitated cross-functional collaboration through cross-team agreements and cross-functional planning, reducing rework by 25%.",
+      ),
+    ).not.toMatch(/\bcross-functional\b[\s\S]*\bcross-functional\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Scaled microservices for high-performance distributed systems through distributed processing, delivering a 3.2x reduction in peak-time errors.",
+      ),
+    ).not.toMatch(/\bdistributed\b[\s\S]*\bdistributed\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Secured system reliability through access controls, reducing security findings by 33% and improving security posture.",
+      ),
+    ).not.toMatch(/\bsecurity\b[\s\S]*\bsecurity\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Consolidated query optimization, reducing infrastructure cost by 24% while strengthening cloud cost efficiency.",
+      ),
+    ).not.toMatch(/\bcost\b[\s\S]*\bcost\b/i);
+
+    expect(
+      normalizeBulletSentence(
+        "Launched genai releases, delivering a 23% reduction in release failures and strengthening release reliability.",
+      ),
+    ).not.toMatch(/\brelease failures\b[\s\S]*\brelease reliability\b/i);
+  });
+
+  it("diversifies distributed across bullets while keeping the first occurrence", () => {
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Designed RESTful APIs through distributed systems and design reviews, reducing cycle time by 27%.",
+      actionVerb: "Designed",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Optimized distributed systems through adaptive batching, increasing throughput by 31%.",
+      actionVerb: "Optimized",
+      bulletId: "EXP-001-B-003",
+      usedScopeKeys: used,
+    });
+    const third = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Scaled microservices for high-performance distributed systems through parallel workers, delivering a 3.2x error reduction.",
+      actionVerb: "Scaled",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toMatch(/\bdistributed\b/);
+    expect(second.toLowerCase()).not.toMatch(/\bdistributed\b/);
+    expect(third.toLowerCase()).not.toMatch(/\bdistributed\b/);
+    expect(isBrokenBulletWording(first)).toBe(false);
+    expect(isBrokenBulletWording(second)).toBe(false);
+    expect(isBrokenBulletWording(third)).toBe(false);
+  });
+
+  it("scrubs years-of-experience JD tenure and diversifies delivery planning across bullets", () => {
+    expect(
+      normalizeBulletSentence(
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      ),
+    ).not.toMatch(/\b\d+\+?\s*years?(?:\s+of)?\s+experience\b/i);
+    expect(
+      normalizeBulletSentence(
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      ),
+    ).toMatch(/^Collaborated\s+/i);
+    expect(isJdMarketingOrMetaScope("10+ years of experience")).toBe(true);
+    expect(
+      isBrokenBulletWording(
+        "Collaborated 10+ years of experience through workshops, reducing rework by 12%.",
+      ),
+    ).toBe(true);
+
+    const used = new Set<string>();
+    const first = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Implemented products through automated testing and delivery planning, reducing manual processing effort by 44%.",
+      actionVerb: "Implemented",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+    });
+    const second = ensureUniqueActionScopeBullet({
+      finalBullet:
+        "Facilitated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and delivery planning, reducing requirements rework by 25%.",
+      actionVerb: "Facilitated",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+    });
+
+    expect(first.toLowerCase()).toMatch(/\bdelivery planning\b/);
+    expect(second.toLowerCase()).not.toMatch(/\bdelivery planning\b/);
+    expect(second.toLowerCase()).toMatch(
+      /\b(?:execution|release|roadmap|rollout)\s+planning\b/,
+    );
+    expect(
+      [first, second].filter((bullet) =>
+        /and delivery planning,\s*reducing/i.test(bullet),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("finalizeComposedBullet enforces scrub, uniqueness, and word limits in one pass", () => {
+    const used = new Set<string>();
+    const first = finalizeComposedBullet({
+      finalBullet:
+        "Implemented products through automated testing and delivery planning, reducing manual processing effort by 44% and improving integration reliability across many partner surfaces during extended release windows.",
+      actionVerb: "Implemented",
+      bulletId: "EXP-001-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+      preserveKeywords: ["delivery planning", "44%"],
+    });
+    const second = finalizeComposedBullet({
+      finalBullet:
+        "Facilitated cross-functional collaboration with product and engineering stakeholders through cross-team interface agreements and delivery planning, reducing requirements rework by 25%.",
+      actionVerb: "Facilitated",
+      bulletId: "EXP-002-B-004",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+      communicationFocused: true,
+      preserveKeywords: ["cross-functional collaboration", "25%"],
+    });
+    const tenure = finalizeComposedBullet({
+      finalBullet:
+        "Collaborated 10+ years of experience through architecture workshops, increasing alignment by 18%.",
+      actionVerb: "Collaborated",
+      bulletId: "EXP-003-B-001",
+      usedScopeKeys: used,
+      minimumWords: 16,
+      maximumWords: 46,
+    });
+
+    expect(first.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    expect(second.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    expect(second.toLowerCase()).not.toMatch(/\bdelivery planning\b/);
+    expect(tenure).not.toMatch(/\b\d+\+?\s*years?(?:\s+of)?\s+experience\b/i);
+    expect(tenure).toMatch(/^Collaborated\b/);
+    expect(isBrokenBulletWording(first)).toBe(false);
+    expect(isBrokenBulletWording(second)).toBe(false);
+    expect(isBrokenBulletWording(tenure)).toBe(false);
+  });
+
+  it("finalizeComposedBullet always ends with the allocated opening verb", () => {
+    const used = new Set<string>();
+    // Verb-less / comma-led openings and max-word compression must still leave
+    // the allocated verb as the first token after the closed finalizer.
+    const cases = [
+      {
+        verb: "Collaborated",
+        text: ", reducing delivery cycle time by 24% and improving stakeholder alignment across engineering partners during peak demand.",
+      },
+      {
+        verb: "Deployed",
+        text: "reviews and solution design through automated testing and delivery planning, reducing manual processing effort by 44% and improving integration reliability across many partner surfaces during extended release windows for customer workloads.",
+      },
+      {
+        verb: "Implemented",
+        text: "10+ years of experience through architecture workshops with product stakeholders, increasing alignment by 18% and improving delivery predictability for engineering partners.",
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const finalized = finalizeComposedBullet({
+        finalBullet: item.text,
+        actionVerb: item.verb,
+        bulletId: "EXP-002-B-003",
+        usedScopeKeys: used,
+        minimumWords: 16,
+        maximumWords: 46,
+        communicationFocused: true,
+        preserveKeywords: ["architecture workshops", "delivery planning"],
+      });
+      expect(finalized.toLocaleLowerCase().startsWith(`${item.verb.toLocaleLowerCase()} `)).toBe(
+        true,
+      );
+      expect(finalized.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    }
+  });
+});
