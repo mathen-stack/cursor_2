@@ -556,6 +556,18 @@ textarea {
 
 .job-close {
   justify-self: end;
+  width: 1.65rem;
+  min-width: 1.65rem;
+  padding: 0;
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.job-close span {
+  display: block;
+  transform: translateY(-0.05em);
 }
 
 .job-index {

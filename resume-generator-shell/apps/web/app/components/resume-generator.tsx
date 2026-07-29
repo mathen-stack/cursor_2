@@ -857,10 +857,11 @@ export default function ResumeGenerator() {
                           <button
                             type="button"
                             className="secondary-action entry-remove job-close"
-                            aria-label={`Close result for ${job.title}`}
+                            aria-label={`Dismiss result for ${job.title}`}
+                            title="Dismiss"
                             onClick={() => closeJob(job.id)}
                           >
-                            Close
+                            <span aria-hidden>×</span>
                           </button>
                         </div>
                         <GenerationProgressPanel progress={job.progress} />
@@ -885,10 +886,11 @@ export default function ResumeGenerator() {
                         <button
                           type="button"
                           className="secondary-action entry-remove job-close"
-                          aria-label={`Close result for ${job.title}`}
+                          aria-label={`Dismiss result for ${job.title}`}
+                          title="Dismiss"
                           onClick={() => closeJob(job.id)}
                         >
-                          Close
+                          <span aria-hidden>×</span>
                         </button>
                       </div>
                     </div>
@@ -1087,10 +1089,11 @@ function ResumePreview({
           <button
             type="button"
             className="secondary-action entry-remove job-close"
-            aria-label={`Close result for ${title}`}
+            aria-label={`Dismiss result for ${title}`}
+            title="Dismiss"
             onClick={onClose}
           >
-            Close
+            <span aria-hidden>×</span>
           </button>
         </div>
 
