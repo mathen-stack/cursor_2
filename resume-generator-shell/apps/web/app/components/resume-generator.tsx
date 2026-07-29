@@ -117,7 +117,7 @@ function createJdDraft(text = "", id?: string): JdDraft {
 function resolveJdLabels(draft: JdDraft, fallbackIndex: number) {
   const detected = formatJdResultHeadline(draft.text, fallbackIndex);
   const company = draft.postingCompany.trim() || detected.company;
-  const headline = company ? `${detected.role} · ${company}` : detected.role;
+  const headline = company ? `${company} | ${detected.role}` : detected.role;
   return {
     role: detected.role,
     company: company || undefined,

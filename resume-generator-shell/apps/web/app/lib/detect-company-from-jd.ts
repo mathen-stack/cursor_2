@@ -75,14 +75,42 @@ function cleanRoleCandidate(raw: string): string | undefined {
     .replace(/[\s.|:;,\-–—]+$/g, "")
     .trim();
 
+  // Pull a title out of "As a Senior Software Engineer, you will..."
+  const asRole = value.match(/^As an?\s+(.+)$/i);
+  if (asRole?.[1]) {
+    value = asRole[1].split(",")[0]?.trim() ?? value;
+  }
+
   value = value.replace(/\s+at\s+.+$/i, "").trim();
   value = value.split(/\s*[|\-–—]\s*/)[0]?.trim() ?? value;
+  value = value.split(",")[0]?.trim() ?? value;
 
-  if (value.length < 3 || value.length > 80) return undefined;
+  if (value.length < 3 || value.length > 70) return undefined;
   if (SECTION_HEADER.test(value)) return undefined;
   if (FALSE_POSITIVE.has(value.toLocaleLowerCase())) return undefined;
   if (!/[A-Za-z]/.test(value)) return undefined;
+  if (looksLikeProseRole(value)) return undefined;
+
+  const words = value.split(/\s+/);
+  if (words.length > 8) return undefined;
   return value;
+}
+
+function looksLikeProseRole(value: string): boolean {
+  if (
+    /\b(?:you will|you'?ll|we are|we'?re|will be|part of|responsible for|looking for|join our|cross[- ]functional)\b/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+  if (/^(?:as an?|we(?:'re| are)|you(?:'ll| will)|looking for)\b/i.test(value)) {
+    return true;
+  }
+  // Prefer title-like casing; reject long lowercase glue phrases.
+  const lowercaseGlue = (value.match(/\b(?:the|and|with|for|from|into|our|your|a|an)\b/gi) ?? [])
+    .length;
+  return lowercaseGlue >= 3;
 }
 
 function nonEmptyLines(text: string): string[] {
@@ -95,7 +123,7 @@ function nonEmptyLines(text: string): string[] {
 
 /**
  * Best-effort target role detection from JD text for UI labeling.
- * Skips section headers like "About the job".
+ * Skips section headers and prose like "As a Senior Engineer, you will...".
  */
 export function detectRoleFromJd(text: string): string | undefined {
   const cleaned = text.replace(/\r\n/g, "\n").trim();
@@ -109,7 +137,7 @@ export function detectRoleFromJd(text: string): string | undefined {
     if (role) return role;
   }
 
-  for (const line of nonEmptyLines(cleaned).slice(0, 12)) {
+  for (const line of nonEmptyLines(cleaned).slice(0, 16)) {
     if (SECTION_HEADER.test(line)) continue;
     if (/^(?:company|employer|organization|organisation)\s*[:\-–—]/i.test(line)) {
       continue;
@@ -119,12 +147,24 @@ export function detectRoleFromJd(text: string): string | undefined {
       continue;
     }
 
+    // "As a Senior Software Engineer, you will be part of a cross..."
+    const asMatch = line.match(/^As an?\s+([^,]{3,70}),/i);
+    if (asMatch?.[1]) {
+      const role = cleanRoleCandidate(asMatch[1]);
+      if (role && ROLE_HINT.test(role)) return role;
+    }
+
     const atSplit = line.match(
       /^(.+?)\s+at\s+[A-Z][A-Za-z0-9&.,'"’\-\s]{1,60}$/,
     );
     if (atSplit?.[1]) {
       const role = cleanRoleCandidate(atSplit[1]);
       if (role && ROLE_HINT.test(role)) return role;
+    }
+
+    // Prefer short title lines over sentences.
+    if (/[.!?]$/.test(line) || /\b(?:you will|will be|we are|looking for)\b/i.test(line)) {
+      continue;
     }
 
     const role = cleanRoleCandidate(line);
@@ -217,6 +257,7 @@ export function formatJdResultHeadline(
 ): { role: string; company?: string; headline: string } {
   const role = detectRoleFromJd(text) ?? `Job ${fallbackIndex}`;
   const company = detectCompanyNameFromJd(text);
-  const headline = company ? `${role} · ${company}` : role;
+  // Prefer "[company] | [role]" when the posting company is known.
+  const headline = company ? `${company} | ${role}` : role;
   return { role, company, headline };
 }

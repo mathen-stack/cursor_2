@@ -50,7 +50,7 @@ Build React apps with TypeScript for customer-facing products.`;
     expect(formatJdResultHeadline(jd, 1)).toEqual({
       role: "Senior Frontend Engineer",
       company: "Contoso Labs",
-      headline: "Senior Frontend Engineer · Contoso Labs",
+      headline: "Contoso Labs | Senior Frontend Engineer",
     });
   });
 
@@ -62,6 +62,19 @@ Experience with Python, Docker, Kubernetes, and AWS is required.`;
       role: "Senior Machine Learning Engineer",
       company: undefined,
       headline: "Senior Machine Learning Engineer",
+    });
+  });
+
+  it("extracts role from As a ... prose instead of the whole sentence", () => {
+    const jd = `About the job
+As a Senior Software Engineer, you will be part of a cross-functional team building products.
+Company: Northwind Labs
+Experience with TypeScript and React is required for this role.`;
+    expect(detectRoleFromJd(jd)).toBe("Senior Software Engineer");
+    expect(formatJdResultHeadline(jd, 1)).toEqual({
+      role: "Senior Software Engineer",
+      company: "Northwind Labs",
+      headline: "Northwind Labs | Senior Software Engineer",
     });
   });
 
