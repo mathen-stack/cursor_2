@@ -774,7 +774,7 @@ export default function ResumeGenerator() {
               disabled={!canGenerate}
               onClick={() => generate()}
             >
-              {hasActiveJobs ? "Generate another resume" : "Generate complete resume"}
+              Generate
             </button>
             <p className="inline-status">
               {hasActiveJobs
