@@ -2,7 +2,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { assertAdmin, getSessionFromCookies } from "../../../../../lib/auth";
 import type { UserRole } from "../../../../../lib/auth-types";
-import { updateStoredAccount } from "../../../../../lib/user-account-store";
+import type { AccountStatus } from "../../../../../lib/user-account-store";
+import {
+  deleteStoredAccount,
+  updateStoredAccount,
+} from "../../../../../lib/user-account-store";
 import {
   readJsonWithLimit,
   requestLimitErrorResponse,
@@ -48,6 +52,7 @@ export async function PATCH(
       username?: string;
       password?: string;
       role?: UserRole;
+      status?: AccountStatus;
     }>(request);
 
     const result = await updateStoredAccount({
@@ -56,12 +61,31 @@ export async function PATCH(
       ...(payload.username ? { nextUsername: payload.username } : {}),
       ...(payload.password ? { password: payload.password } : {}),
       ...(payload.role ? { role: payload.role } : {}),
+      ...(payload.status ? { status: payload.status } : {}),
     });
 
     return NextResponse.json(result);
   } catch (error) {
     const limitResponse = requestLimitErrorResponse(error);
     if (limitResponse) return limitResponse;
+    return errorResponse(error);
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ username: string }> },
+): Promise<Response> {
+  try {
+    const jar = await cookies();
+    const admin = assertAdmin(await getSessionFromCookies(jar));
+    const { username } = await context.params;
+    const account = await deleteStoredAccount({
+      username,
+      deletedBy: admin.username,
+    });
+    return NextResponse.json({ account });
+  } catch (error) {
     return errorResponse(error);
   }
 }

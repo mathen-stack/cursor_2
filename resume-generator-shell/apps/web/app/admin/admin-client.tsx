@@ -26,6 +26,7 @@ type AccountSummary = {
   username: string;
   displayName: string;
   role: "admin" | "user";
+  status: "pending" | "approved";
   updatedAt: string;
   updatedBy: string;
 };
@@ -94,6 +95,10 @@ export default function AdminProfilesClient() {
   const selectedAccount = useMemo(
     () => accounts.find((item) => item.username === selectedUsername) ?? null,
     [accounts, selectedUsername],
+  );
+  const pendingAccounts = useMemo(
+    () => accounts.filter((account) => account.status === "pending"),
+    [accounts],
   );
   const filteredSummaries = useMemo(() => {
     const query = usernameSearch.trim().toLowerCase();
@@ -351,6 +356,76 @@ export default function AdminProfilesClient() {
     }
   }
 
+  async function approveAccount(username: string) {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(username)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "approved" }),
+        },
+      );
+      const payload = (await response.json()) as {
+        account?: AccountSummary;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.account) {
+        throw new Error(payload.error?.message ?? "Could not approve account.");
+      }
+      setSelectedUsername(payload.account.username);
+      setMessage(`Approved @${payload.account.username}`);
+      await refreshSummaries();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Account approval failed.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rejectAccount(username: string) {
+    if (
+      !window.confirm(
+        `Reject and remove signup for @${username}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(username)}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.json()) as {
+        account?: AccountSummary;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.account) {
+        throw new Error(payload.error?.message ?? "Could not reject account.");
+      }
+      setMessage(`Rejected signup @${username}`);
+      await refreshSummaries();
+      if (selectedUsername === username) {
+        const remaining = accounts.filter((item) => item.username !== username);
+        setSelectedUsername(remaining[0]?.username ?? "");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Account rejection failed.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function clearSelectedProfile() {
     if (!selectedUsername) return;
     if (
@@ -446,11 +521,48 @@ export default function AdminProfilesClient() {
             <div>
               <h2>Database</h2>
               <p className="hint">
-                Change usernames and passwords, then edit each user’s saved
-                profile used for resume generation.
+                Change usernames and passwords, approve new signups, then edit
+                each user’s saved profile used for resume generation.
               </p>
             </div>
           </div>
+
+          {pendingAccounts.length > 0 ? (
+            <div className="admin-create-card">
+              <h3 className="admin-subtitle">Pending signups</h3>
+              <p className="hint">
+                New accounts stay locked until you approve them.
+              </p>
+              <ul className="admin-pending-list">
+                {pendingAccounts.map((account) => (
+                  <li key={account.username} className="admin-pending-item">
+                    <div>
+                      <strong>@{account.username}</strong>
+                      <span className="hint">Waiting for approval</span>
+                    </div>
+                    <div className="section-actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={saving}
+                        onClick={() => void approveAccount(account.username)}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        disabled={saving}
+                        onClick={() => void rejectAccount(account.username)}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="admin-create-card">
             <h3 className="admin-subtitle">Create account</h3>
@@ -532,7 +644,11 @@ export default function AdminProfilesClient() {
               {filteredSummaries.length === 0 ? (
                 <p className="hint admin-user-empty">No users match that username.</p>
               ) : (
-                filteredSummaries.map((summary) => (
+                filteredSummaries.map((summary) => {
+                  const account = accounts.find(
+                    (item) => item.username === summary.username,
+                  );
+                  return (
                   <button
                     key={summary.username}
                     type="button"
@@ -541,14 +657,18 @@ export default function AdminProfilesClient() {
                     }`}
                     onClick={() => setSelectedUsername(summary.username)}
                   >
-                    <strong>@{summary.username}</strong>
+                    <strong>
+                      @{summary.username}
+                      {account?.status === "pending" ? " · pending" : ""}
+                    </strong>
                     <span>
                       {summary.hasProfile
                         ? summary.fullName || "Profile saved"
                         : "No profile yet"}
                     </span>
                   </button>
-                ))
+                  );
+                })
               )}
             </aside>
 
@@ -572,6 +692,32 @@ export default function AdminProfilesClient() {
                   </div>
 
                   <h3 className="admin-subtitle">Login credentials</h3>
+                  {selectedAccount?.status === "pending" ? (
+                    <div className="admin-pending-banner">
+                      <p className="hint">
+                        This account is waiting for administrator approval and
+                        cannot sign in yet.
+                      </p>
+                      <div className="section-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={saving}
+                          onClick={() => void approveAccount(selectedUsername)}
+                        >
+                          Approve Account
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-action"
+                          disabled={saving}
+                          onClick={() => void rejectAccount(selectedUsername)}
+                        >
+                          Reject Signup
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="profile-grid">
                     <label className="profile-field">
                       <span>Username</span>

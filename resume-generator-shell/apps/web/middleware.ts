@@ -10,6 +10,8 @@ function hasSessionCookie(request: NextRequest): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/login";
+  const isSignupPage = pathname === "/signup";
+  const isPublicAuthPage = isLoginPage || isSignupPage;
   const isAuthApi = pathname.startsWith("/api/auth/");
   const isHealth = pathname === "/api/health";
   const isPublicAsset =
@@ -25,7 +27,7 @@ export function middleware(request: NextRequest) {
 
   const loggedIn = hasSessionCookie(request);
 
-  if (!loggedIn && !isLoginPage) {
+  if (!loggedIn && !isPublicAuthPage) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         {
@@ -42,7 +44,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (loggedIn && isLoginPage) {
+  if (loggedIn && isPublicAuthPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

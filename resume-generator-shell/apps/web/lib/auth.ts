@@ -41,16 +41,25 @@ export async function listAuthUsers(): Promise<AuthUser[]> {
 export async function authenticateCredentials(
   username: string,
   password: string,
-): Promise<AuthUser | null> {
+): Promise<
+  | { ok: true; user: AuthUser }
+  | { ok: false; reason: "invalid" | "pending" }
+> {
   const match = await findStoredAccount(username);
-  if (!match) return null;
+  if (!match) return { ok: false, reason: "invalid" };
   if (!verifyPassword(password, match.passwordHash, match.passwordSalt)) {
-    return null;
+    return { ok: false, reason: "invalid" };
+  }
+  if (match.status === "pending") {
+    return { ok: false, reason: "pending" };
   }
   return {
-    username: match.username,
-    displayName: match.displayName,
-    role: match.role,
+    ok: true,
+    user: {
+      username: match.username,
+      displayName: match.displayName,
+      role: match.role,
+    },
   };
 }
 

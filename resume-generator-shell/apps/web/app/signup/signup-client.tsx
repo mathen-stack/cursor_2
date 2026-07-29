@@ -1,43 +1,48 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const nextPath = useMemo(() => {
-    const value = searchParams.get("next");
-    return value && value.startsWith("/") ? value : "/";
-  }, [searchParams]);
-
+export default function SignupPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setSuccess("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
       const payload = (await response.json()) as {
         error?: { message?: string };
-        user?: { username: string };
+        message?: string;
+        account?: { username: string };
       };
-      if (!response.ok || !payload.user) {
-        throw new Error(payload.error?.message ?? "Login failed.");
+      if (!response.ok || !payload.account) {
+        throw new Error(payload.error?.message ?? "Sign up failed.");
       }
-      router.replace(nextPath);
-      router.refresh();
+      setUsername("");
+      setPassword("");
+      setConfirmPassword("");
+      setSuccess(
+        payload.message ??
+          "Account created. Wait for an administrator to approve it, then sign in.",
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Login failed.");
+      setError(caught instanceof Error ? caught.message : "Sign up failed.");
     } finally {
       setSubmitting(false);
     }
@@ -47,11 +52,12 @@ export default function LoginPage() {
     <div className="page login-page">
       <div className="atmosphere" aria-hidden />
       <main className="login-main">
-        <section className="login-card" aria-labelledby="login-title">
+        <section className="login-card" aria-labelledby="signup-title">
           <p className="brand login-brand">Resume Tailor</p>
-          <h1 id="login-title">Sign in</h1>
+          <h1 id="signup-title">Create account</h1>
           <p className="hint">
-            Log in to load your saved profile and generate resumes.
+            Sign up for an account. An administrator must approve it before you
+            can sign in.
           </p>
 
           <form className="login-form" onSubmit={onSubmit}>
@@ -61,7 +67,7 @@ export default function LoginPage() {
                 type="text"
                 name="username"
                 autoComplete="username"
-                placeholder="Enter your username"
+                placeholder="Choose a username"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 required
@@ -72,30 +78,41 @@ export default function LoginPage() {
               <input
                 type="password"
                 name="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
+                autoComplete="new-password"
+                placeholder="At least 6 characters"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                minLength={6}
+                required
+              />
+            </label>
+            <label className="profile-field">
+              <span>Confirm password</span>
+              <input
+                type="password"
+                name="confirmPassword"
+                autoComplete="new-password"
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                minLength={6}
                 required
               />
             </label>
 
             {error ? <p className="error">{error}</p> : null}
+            {success ? <p className="profile-save-status">{success}</p> : null}
 
             <button type="submit" className="primary" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting ? "Creating…" : "Create account"}
             </button>
           </form>
 
           <p className="login-demo-hint">
-            Need an account?{" "}
-            <Link href="/signup" className="login-inline-link">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="login-inline-link">
+              Sign in
             </Link>
-            <br />
-            Demo user: <code>demo</code> / <code>demo123</code>
-            <br />
-            Admin: <code>admin</code> / <code>admin123</code>
           </p>
         </section>
       </main>

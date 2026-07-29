@@ -34,8 +34,20 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const user = await authenticateCredentials(username, password);
-    if (!user) {
+    const result = await authenticateCredentials(username, password);
+    if (!result.ok) {
+      if (result.reason === "pending") {
+        return Response.json(
+          {
+            error: {
+              code: "PENDING_APPROVAL",
+              message:
+                "Your account is waiting for administrator approval before you can sign in.",
+            },
+          },
+          { status: 403 },
+        );
+      }
       return Response.json(
         {
           error: {
@@ -47,12 +59,12 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const token = createSessionToken(user);
+    const token = createSessionToken(result.user);
     const response = NextResponse.json({
       user: {
-        username: user.username,
-        displayName: user.displayName,
-        role: user.role,
+        username: result.user.username,
+        displayName: result.user.displayName,
+        role: result.user.role,
       },
     });
     response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());

@@ -230,6 +230,37 @@ button:disabled {
   background: var(--surface-2);
 }
 
+.admin-pending-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-pending-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 96%, black);
+}
+
+.admin-pending-item > div:first-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-pending-banner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 90%, black);
+}
+
 @media (max-width: 820px) {
   .admin-layout {
     grid-template-columns: 1fr;
@@ -286,6 +317,16 @@ button:disabled {
 .login-demo-hint code {
   color: var(--ink);
   font-size: 0.8rem;
+}
+
+.login-inline-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.login-inline-link:hover {
+  color: var(--accent);
 }
 
 .main {

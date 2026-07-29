@@ -10,10 +10,13 @@ import {
   writeUserProfileRecord,
 } from "./user-profile-store";
 
+export type AccountStatus = "pending" | "approved";
+
 export type StoredAccount = {
   username: string;
   displayName: string;
   role: UserRole;
+  status: AccountStatus;
   passwordHash: string;
   passwordSalt: string;
   updatedAt: string;
@@ -29,9 +32,25 @@ export type PublicAccount = {
   username: string;
   displayName: string;
   role: UserRole;
+  status: AccountStatus;
   updatedAt: string;
   updatedBy: string;
 };
+
+function normalizeAccountStatus(value: unknown): AccountStatus {
+  return value === "pending" ? "pending" : "approved";
+}
+
+function toPublicAccount(account: StoredAccount): PublicAccount {
+  return {
+    username: account.username,
+    displayName: account.displayName,
+    role: account.role,
+    status: account.status,
+    updatedAt: account.updatedAt,
+    updatedBy: account.updatedBy,
+  };
+}
 
 function accountsRootDirectory(): string {
   const cwd = process.cwd();
@@ -85,6 +104,7 @@ function defaultAccounts(): StoredAccount[] {
       username: "admin",
       displayName: "admin",
       role: "admin",
+      status: "approved",
       ...createPasswordRecord("admin123"),
       updatedAt: now,
       updatedBy: "system",
@@ -93,6 +113,7 @@ function defaultAccounts(): StoredAccount[] {
       username: "demo",
       displayName: "demo",
       role: "user",
+      status: "approved",
       ...createPasswordRecord("demo123"),
       updatedAt: now,
       updatedBy: "system",
@@ -116,6 +137,7 @@ function accountsFromEnv(): StoredAccount[] | null {
       username,
       displayName: username,
       role: roleRaw?.trim().toLowerCase() === "admin" ? "admin" : "user",
+      status: "approved",
       ...createPasswordRecord(password),
       updatedAt: now,
       updatedBy: "env",
@@ -154,6 +176,7 @@ export async function ensureAccountsFile(): Promise<StoredAccount[]> {
           ? user.displayName.trim()
           : sanitizeUsername(user.username),
       role: user.role === "admin" ? "admin" : "user",
+      status: normalizeAccountStatus(user.status),
       passwordHash: String(user.passwordHash ?? ""),
       passwordSalt: String(user.passwordSalt ?? ""),
       updatedAt:
@@ -179,13 +202,7 @@ export async function listStoredAccounts(): Promise<StoredAccount[]> {
 
 export async function listPublicAccounts(): Promise<PublicAccount[]> {
   const users = await listStoredAccounts();
-  return users.map((user) => ({
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    updatedAt: user.updatedAt,
-    updatedBy: user.updatedBy,
-  }));
+  return users.map(toPublicAccount);
 }
 
 export async function findStoredAccount(
@@ -200,6 +217,7 @@ export async function createStoredAccount(input: {
   username: string;
   password: string;
   role?: UserRole;
+  status?: AccountStatus;
   updatedBy: string;
 }): Promise<PublicAccount> {
   const username = sanitizeUsername(input.username);
@@ -221,19 +239,27 @@ export async function createStoredAccount(input: {
     username,
     displayName: username,
     role: input.role === "admin" ? "admin" : "user",
+    status: input.status === "pending" ? "pending" : "approved",
     ...createPasswordRecord(input.password),
     updatedAt: new Date().toISOString(),
-    updatedBy: sanitizeUsername(input.updatedBy),
+    updatedBy: sanitizeUsername(input.updatedBy) || "system",
   };
   users.push(account);
   await writeAccountsFile(users);
-  return {
-    username: account.username,
-    displayName: account.displayName,
-    role: account.role,
-    updatedAt: account.updatedAt,
-    updatedBy: account.updatedBy,
-  };
+  return toPublicAccount(account);
+}
+
+export async function signUpStoredAccount(input: {
+  username: string;
+  password: string;
+}): Promise<PublicAccount> {
+  return createStoredAccount({
+    username: input.username,
+    password: input.password,
+    role: "user",
+    status: "pending",
+    updatedBy: "signup",
+  });
 }
 
 export async function updateStoredAccount(input: {
@@ -241,6 +267,7 @@ export async function updateStoredAccount(input: {
   nextUsername?: string;
   password?: string;
   role?: UserRole;
+  status?: AccountStatus;
   updatedBy: string;
 }): Promise<{ account: PublicAccount; renamedFrom: string | null }> {
   const currentUsername = sanitizeUsername(input.username);
@@ -279,7 +306,33 @@ export async function updateStoredAccount(input: {
     input.role === "admin" || input.role === "user" ? input.role : current.role;
   if (current.role === "admin" && nextRole !== "admin") {
     const remainingAdmins = users.filter(
-      (user, userIndex) => userIndex !== index && user.role === "admin",
+      (user, userIndex) =>
+        userIndex !== index &&
+        user.role === "admin" &&
+        user.status === "approved",
+    );
+    if (remainingAdmins.length === 0) {
+      throw Object.assign(
+        new Error("At least one administrator account is required."),
+        { status: 400 },
+      );
+    }
+  }
+
+  const nextStatus =
+    input.status === "pending" || input.status === "approved"
+      ? input.status
+      : current.status;
+  if (
+    current.role === "admin" &&
+    current.status === "approved" &&
+    nextStatus === "pending"
+  ) {
+    const remainingAdmins = users.filter(
+      (user, userIndex) =>
+        userIndex !== index &&
+        user.role === "admin" &&
+        user.status === "approved",
     );
     if (remainingAdmins.length === 0) {
       throw Object.assign(
@@ -302,6 +355,7 @@ export async function updateStoredAccount(input: {
     username: nextUsername,
     displayName: nextUsername,
     role: nextRole,
+    status: nextStatus,
     ...passwordRecord,
     updatedAt: new Date().toISOString(),
     updatedBy: sanitizeUsername(input.updatedBy),
@@ -323,14 +377,39 @@ export async function updateStoredAccount(input: {
 
   return {
     renamedFrom: nextUsername !== currentUsername ? currentUsername : null,
-    account: {
-      username: updated.username,
-      displayName: updated.displayName,
-      role: updated.role,
-      updatedAt: updated.updatedAt,
-      updatedBy: updated.updatedBy,
-    },
+    account: toPublicAccount(updated),
   };
+}
+
+export async function deleteStoredAccount(input: {
+  username: string;
+  deletedBy: string;
+}): Promise<PublicAccount> {
+  const username = sanitizeUsername(input.username);
+  const users = await listStoredAccounts();
+  const index = users.findIndex((user) => user.username === username);
+  if (index < 0) {
+    throw Object.assign(new Error("Unknown user account."), { status: 404 });
+  }
+  const current = users[index]!;
+  if (current.role === "admin" && current.status === "approved") {
+    const remainingAdmins = users.filter(
+      (user, userIndex) =>
+        userIndex !== index &&
+        user.role === "admin" &&
+        user.status === "approved",
+    );
+    if (remainingAdmins.length === 0) {
+      throw Object.assign(
+        new Error("At least one administrator account is required."),
+        { status: 400 },
+      );
+    }
+  }
+  users.splice(index, 1);
+  await writeAccountsFile(users);
+  await deleteUserProfileRecord(username);
+  return toPublicAccount(current);
 }
 
 /** Stable fingerprint for tests — not a secret. */

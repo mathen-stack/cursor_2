@@ -15,6 +15,7 @@ import {
 } from "../apps/web/lib/auth";
 import {
   createStoredAccount,
+  signUpStoredAccount,
   updateStoredAccount,
 } from "../apps/web/lib/user-account-store";
 import {
@@ -101,9 +102,11 @@ describe("auth roles", () => {
     const previousCwd = process.cwd();
     process.chdir(tempRoot);
     try {
-      const user = await authenticateCredentials("admin", "admin123");
-      expect(user?.role).toBe("admin");
-      const session = verifySessionToken(createSessionToken(user!));
+      const result = await authenticateCredentials("admin", "admin123");
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("expected admin auth");
+      expect(result.user.role).toBe("admin");
+      const session = verifySessionToken(createSessionToken(result.user));
       expect(session?.role).toBe("admin");
     } finally {
       process.chdir(previousCwd);
@@ -116,7 +119,10 @@ describe("auth roles", () => {
     const previousCwd = process.cwd();
     process.chdir(tempRoot);
     try {
-      expect(await authenticateCredentials("demo", "wrong")).toBeNull();
+      expect(await authenticateCredentials("demo", "wrong")).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
     } finally {
       process.chdir(previousCwd);
       await rm(tempRoot, { recursive: true, force: true });
@@ -146,8 +152,43 @@ describe("admin account updates", () => {
       expect(renamed.account.username).toBe("member-two");
       expect(renamed.renamedFrom).toBe("member");
 
-      expect(await authenticateCredentials("member", "secret1")).toBeNull();
-      expect(await authenticateCredentials("member-two", "secret2")).not.toBeNull();
+      expect(await authenticateCredentials("member", "secret1")).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+      const next = await authenticateCredentials("member-two", "secret2");
+      expect(next.ok).toBe(true);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("signup approval", () => {
+  it("keeps self-signup accounts pending until an admin approves them", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "resume-signup-"));
+    const previousCwd = process.cwd();
+    process.chdir(tempRoot);
+    try {
+      const pending = await signUpStoredAccount({
+        username: "newcomer",
+        password: "secret99",
+      });
+      expect(pending.status).toBe("pending");
+      expect(await authenticateCredentials("newcomer", "secret99")).toEqual({
+        ok: false,
+        reason: "pending",
+      });
+
+      const approved = await updateStoredAccount({
+        username: "newcomer",
+        status: "approved",
+        updatedBy: "admin",
+      });
+      expect(approved.account.status).toBe("approved");
+      const result = await authenticateCredentials("newcomer", "secret99");
+      expect(result.ok).toBe(true);
     } finally {
       process.chdir(previousCwd);
       await rm(tempRoot, { recursive: true, force: true });
