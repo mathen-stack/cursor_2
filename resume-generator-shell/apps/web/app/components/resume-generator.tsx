@@ -45,37 +45,78 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
 }
 
 /**
- * Write the resume into resume-generator-shell/download/ only.
- * No browser Save As dialog and no new window/tab.
+ * Export the resume (also writes resume-generator-shell/download/), then
+ * start a browser file download in the same tab — no new window/tab.
  */
-async function saveGeneratedResumeToDownloadFolder(
+async function deliverGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
 ): Promise<{ filename: string }> {
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume, format, saveOnly: true }),
+    // Return file bytes so the browser can download them. Server still saves
+    // a copy under download/.
+    body: JSON.stringify({ resume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
-    throw new Error(payload.error?.message ?? "Resume save failed.");
+    throw new Error(payload.error?.message ?? "Resume download failed.");
   }
-  const saved = (await response.json()) as { filename?: string };
+
   const filename =
-    saved.filename ??
+    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
     resumeFilenameFromFullName(
       resume.profile.personalInformation.fullName,
       format,
     );
+
+  // Force a downloadable blob so PDF viewers do not open a new tab.
+  const raw = await response.arrayBuffer();
+  const blob = new Blob([raw], { type: "application/octet-stream" });
+  triggerBrowserDownload(blob, filename);
   return { filename };
+}
+
+function filenameFromContentDisposition(
+  header: string | null,
+): string | undefined {
+  if (!header) return undefined;
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {
+      // fall through
+    }
+  }
+  const plainMatch = /filename="([^"]+)"/i.exec(header);
+  if (plainMatch?.[1]) return plainMatch[1];
+  const bareMatch = /filename=([^;]+)/i.exec(header);
+  return bareMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
+}
+
+/** Same-tab download only — never target=_blank / window.open / iframe nav. */
+function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 4_000);
 }
 
 async function autoDeliverGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
 ): Promise<{ filename: string }> {
-  return saveGeneratedResumeToDownloadFolder(resume, format);
+  return deliverGeneratedResume(resume, format);
 }
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
@@ -1209,7 +1250,7 @@ function ResumePreview({
     setExportError("");
     setExportSavedAs("");
     try {
-      const saved = await saveGeneratedResumeToDownloadFolder(resume, format);
+      const saved = await deliverGeneratedResume(resume, format);
       setExportSavedAs(saved.filename);
     } catch (caught) {
       setExportError(caught instanceof Error ? caught.message : "Resume export failed.");
@@ -1312,12 +1353,23 @@ function ResumePreview({
             </strong>
             <p className="pdf-ready-status">
               {pdfReady.phase === "ready"
-                ? `Saved to download/${resumeFilenameFromFullName(
+                ? `Download started: ${resumeFilenameFromFullName(
                     resume.profile.personalInformation.fullName,
                     "pdf",
                   )}`
                 : pdfReady.label}
             </p>
+            {pdfReady.phase === "ready" || pdfReady.phase === "error" ? (
+              <button
+                type="button"
+                className="download-btn zip"
+                style={{ marginTop: "0.55rem" }}
+                disabled={exporting !== null}
+                onClick={() => exportResume("pdf")}
+              >
+                {exporting === "pdf" ? "Downloading PDF…" : "Download PDF"}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1341,7 +1393,7 @@ function ResumePreview({
                 onClick={() => exportResume(format)}
               >
                 {exporting === format
-                  ? `Saving ${format.toUpperCase()}…`
+                  ? `Downloading ${format.toUpperCase()}…`
                   : format.toUpperCase()}
               </button>
             ))}
@@ -1349,12 +1401,12 @@ function ResumePreview({
         </div>
         {exportSavedAs ? (
           <p className="pdf-ready-status is-ready">
-            Saved to download/{exportSavedAs}
+            Downloaded {exportSavedAs}
           </p>
         ) : null}
         {exportError ? <p className="error">{exportError}</p> : null}
         {autoDownloadError ? (
-          <p className="error">Auto-save failed: {autoDownloadError}</p>
+          <p className="error">Auto-download failed: {autoDownloadError}</p>
         ) : null}
 
         {resume.readiness ? (
