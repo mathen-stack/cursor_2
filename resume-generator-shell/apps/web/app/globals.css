@@ -663,14 +663,14 @@ textarea {
   justify-self: end;
   display: inline-grid;
   place-items: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2rem;
+  height: 2rem;
   margin: 0;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 0.35rem;
-  background: transparent;
-  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--surface) 78%, var(--ink));
+  color: var(--ink);
   cursor: pointer;
   transition:
     color 140ms ease,
@@ -680,14 +680,14 @@ textarea {
 
 .job-close svg {
   display: block;
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .job-close:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: white;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line-strong));
+  background: color-mix(in srgb, var(--danger-soft) 80%, var(--surface-2));
 }
 
 .job-close:focus-visible {
