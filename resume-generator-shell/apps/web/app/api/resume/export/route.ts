@@ -13,9 +13,13 @@ const FORMATS = new Set<ResumeExportFormat>(["html", "txt", "docx", "pdf"]);
 interface ExportPayload {
   resume?: FinalResumeData;
   format?: ResumeExportFormat;
+  /** When true, write to download/ and return JSON — no browser Save As dialog. */
+  saveOnly?: boolean;
 }
 
-function isExportPayload(value: unknown): value is Required<ExportPayload> {
+function isExportPayload(
+  value: unknown,
+): value is Required<Pick<ExportPayload, "resume" | "format">> & ExportPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as ExportPayload;
   return Boolean(
@@ -45,13 +49,34 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     const artifact = await getResumeRenderer().export(payload.resume, payload.format);
-    const body = Buffer.from(artifact.bytes);
     const savedPath = await saveResumeToDownloadFolder(artifact.filename, artifact.bytes);
+
+    if (payload.saveOnly) {
+      return Response.json(
+        {
+          saved: true,
+          filename: artifact.filename,
+          savedPath,
+          format: artifact.format,
+          byteLength: artifact.byteLength,
+          artifactChecksum: artifact.artifactChecksum,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-Resume-Saved-Path": savedPath,
+          },
+        },
+      );
+    }
+
+    const body = Buffer.from(artifact.bytes);
     return new Response(body, {
       status: 200,
       headers: {
         "Content-Type": artifact.mimeType,
-        "Content-Disposition": `attachment; filename="download/${artifact.filename}"`,
+        "Content-Disposition": `attachment; filename="${artifact.filename}"`,
         "Content-Length": String(artifact.byteLength),
         "X-Resume-Checksum": artifact.artifactChecksum,
         "X-Resume-Source-Fingerprint": artifact.sourceDocumentFingerprint,

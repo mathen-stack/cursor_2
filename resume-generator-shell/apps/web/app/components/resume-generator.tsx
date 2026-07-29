@@ -44,6 +44,22 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
   return `${stem}.${format}`;
 }
 
+/** Quietly write PDF into download/ — no browser Save As dialog. */
+async function autoSaveGeneratedResume(
+  resume: FinalResumeData,
+  format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
+): Promise<void> {
+  const response = await fetch("/api/resume/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resume, format, saveOnly: true }),
+  });
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: { message?: string } };
+    throw new Error(payload.error?.message ?? "Resume auto-save failed.");
+  }
+}
+
 async function downloadGeneratedResume(
   resume: FinalResumeData,
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
@@ -60,12 +76,12 @@ async function downloadGeneratedResume(
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const filenameMatch = disposition.match(/filename="([^"]+)"/);
-  const fallbackName = resumeFilenameFromFullName(
-    resume.profile.personalInformation.fullName,
-    format,
-  );
-  // Prefer download/<full-name>.ext so the browser saves under a download folder.
-  const filename = filenameMatch?.[1] ?? `download/${fallbackName}`;
+  const filename =
+    filenameMatch?.[1] ??
+    resumeFilenameFromFullName(
+      resume.profile.personalInformation.fullName,
+      format,
+    );
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -332,12 +348,12 @@ export default function ResumeGenerator() {
       autoDownloadedJobIdsRef.current.add(job.id);
       const resume = job.resume;
       if (!resume) continue;
-      void downloadGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT).catch(
+      void autoSaveGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT).catch(
         (caught) => {
           console.error(
             caught instanceof Error
               ? caught.message
-              : "Automatic resume download failed.",
+              : "Automatic resume save failed.",
           );
         },
       );
