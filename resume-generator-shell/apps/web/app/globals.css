@@ -491,6 +491,11 @@ textarea {
   font-size: 0.88rem;
 }
 
+.job-board {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .job-row {
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -500,6 +505,29 @@ textarea {
 .job-row.status-done {
   border-color: rgba(62, 207, 142, 0.4);
   background: var(--ok-soft);
+}
+
+.job-row.status-run {
+  border-color: rgba(62, 207, 142, 0.28);
+  background: var(--run-soft);
+}
+
+.job-row.status-error {
+  border-color: rgba(240, 113, 120, 0.4);
+  background: var(--danger-soft);
+}
+
+.job-row .generation-progress {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  animation: none;
+}
+
+.badge-error {
+  border-color: rgba(240, 113, 120, 0.45);
+  color: var(--danger);
+  background: rgba(240, 113, 120, 0.12);
 }
 
 .job-list-main {

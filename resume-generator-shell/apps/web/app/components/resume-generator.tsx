@@ -75,6 +75,39 @@ function advanceGenerationProgress(
   );
 }
 
+type JdDraft = {
+  id: string;
+  text: string;
+};
+
+type GenerationJob = {
+  id: string;
+  draftId: string;
+  title: string;
+  status: "running" | "finishing" | "done" | "error";
+  progress: GenerationProgress | null;
+  pendingResume: FinalResumeData | null;
+  resume: FinalResumeData | null;
+  error: string;
+};
+
+function createId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createJdDraft(text = ""): JdDraft {
+  return { id: createId("JD"), text };
+}
+
+function titleFromJdText(text: string, fallbackIndex: number): string {
+  const firstLine = text
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) return `Job ${fallbackIndex}`;
+  return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine;
+}
+
 function newCareerEntry(index: number): CareerEntry {
   return {
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
@@ -112,7 +145,9 @@ function atsScoreClass(score: number): string {
 }
 
 export default function ResumeGenerator() {
-  const [jobDescriptionText, setJobDescriptionText] = useState(SAMPLE_JD);
+  const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
+    createJdDraft(SAMPLE_JD),
+  ]);
   const [profile, setProfile] = useState<UserProfile>({
     profileId: "PROFILE-DEMO",
     personalInformation: {
@@ -147,57 +182,55 @@ export default function ResumeGenerator() {
       },
     ],
   });
-  const [resume, setResume] = useState<FinalResumeData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [finishingProgress, setFinishingProgress] = useState(false);
-  const [pendingResume, setPendingResume] = useState<FinalResumeData | null>(
-    null,
+  const [jobs, setJobs] = useState<GenerationJob[]>([]);
+
+  const readyJdCount = useMemo(
+    () => jdDrafts.filter((draft) => draft.text.trim().length >= 50).length,
+    [jdDrafts],
   );
-  const [error, setError] = useState("");
-  const [generationProgress, setGenerationProgress] =
-    useState<GenerationProgress | null>(null);
-
-  const showGenerationProgress = loading || finishingProgress;
+  const hasActiveJobs = jobs.some(
+    (job) => job.status === "running" || job.status === "finishing",
+  );
 
   useEffect(() => {
-    if (!loading) return;
+    if (!hasActiveJobs) return;
 
-    setGenerationProgress(initialGenerationProgress());
     const timer = window.setInterval(() => {
-      setGenerationProgress((current) =>
-        advanceGenerationProgress(current, PROGRESS_HOLD_PERCENT),
+      setJobs((current) =>
+        current.map((job) => {
+          if (job.status === "running") {
+            return {
+              ...job,
+              progress: advanceGenerationProgress(
+                job.progress,
+                PROGRESS_HOLD_PERCENT,
+              ),
+            };
+          }
+          if (job.status === "finishing") {
+            const nextProgress = advanceGenerationProgress(job.progress, 100);
+            if (nextProgress.percent >= 100 && job.pendingResume) {
+              return {
+                ...job,
+                status: "done" as const,
+                progress: null,
+                resume: job.pendingResume,
+                pendingResume: null,
+              };
+            }
+            return { ...job, progress: nextProgress };
+          }
+          return job;
+        }),
       );
     }, PROGRESS_TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [loading]);
+  }, [hasActiveJobs]);
 
-  useEffect(() => {
-    if (!finishingProgress || !pendingResume) return;
-
-    const timer = window.setInterval(() => {
-      setGenerationProgress((current) =>
-        advanceGenerationProgress(current, 100),
-      );
-    }, PROGRESS_TICK_MS);
-
-    return () => window.clearInterval(timer);
-  }, [finishingProgress, pendingResume]);
-
-  useEffect(() => {
-    if (!finishingProgress || !pendingResume) return;
-    if (!generationProgress || generationProgress.percent < 100) return;
-
-    setResume(pendingResume);
-    setPendingResume(null);
-    setFinishingProgress(false);
-    setGenerationProgress(null);
-  }, [finishingProgress, pendingResume, generationProgress]);
-
-  const canGenerate = useMemo(() => {
+  const profileReady = useMemo(() => {
     const personal = profile.personalInformation;
     return (
-      jobDescriptionText.trim().length >= 50 &&
       profile.profileId.trim().length > 0 &&
       personal.fullName.trim().length > 0 &&
       personal.email.trim().length > 0 &&
@@ -220,7 +253,9 @@ export default function ResumeGenerator() {
           entry.endDate.trim(),
       )
     );
-  }, [jobDescriptionText, profile]);
+  }, [profile]);
+
+  const canGenerate = profileReady && readyJdCount > 0;
 
   function updatePersonal(
     field: keyof UserProfile["personalInformation"],
@@ -301,44 +336,97 @@ export default function ResumeGenerator() {
     }));
   }
 
+  function updateJdDraft(id: string, text: string) {
+    setJdDrafts((current) =>
+      current.map((draft) => (draft.id === id ? { ...draft, text } : draft)),
+    );
+  }
+
+  function addJdDraft() {
+    setJdDrafts((current) => [...current, createJdDraft("")]);
+  }
+
+  function removeJdDraft(id: string) {
+    setJdDrafts((current) =>
+      current.length <= 1 ? current : current.filter((draft) => draft.id !== id),
+    );
+  }
+
   async function generate() {
-    setLoading(true);
-    setFinishingProgress(false);
-    setPendingResume(null);
-    setError("");
-    setResume(null);
-    setGenerationProgress(initialGenerationProgress());
-    try {
-      const response = await fetch("/api/resume/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobDescriptionText,
-          profile,
-          locale: "en-US",
-        }),
-      });
-      const payload = (await response.json()) as
-        | FinalResumeData
-        | { error?: { message?: string } };
-      if (!response.ok || !("document" in payload)) {
-        throw new Error(
-          "error" in payload
-            ? payload.error?.message ?? "Resume generation failed."
-            : "Resume generation failed.",
-        );
-      }
-      // Keep the same constant progress speed through 100% instead of jumping.
-      setPendingResume(payload);
-      setFinishingProgress(true);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Resume generation failed.");
-      setGenerationProgress(null);
-      setPendingResume(null);
-      setFinishingProgress(false);
-    } finally {
-      setLoading(false);
-    }
+    const readyDrafts = jdDrafts
+      .map((draft, index) => ({ draft, index }))
+      .filter(({ draft }) => draft.text.trim().length >= 50);
+    if (!canGenerate || readyDrafts.length === 0 || hasActiveJobs) return;
+
+    const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => ({
+      id: createId("JOB"),
+      draftId: draft.id,
+      title: titleFromJdText(draft.text, index + 1),
+      status: "running",
+      progress: initialGenerationProgress(),
+      pendingResume: null,
+      resume: null,
+      error: "",
+    }));
+    setJobs(nextJobs);
+
+    // Fire every ready JD at once; each job updates independently.
+    await Promise.all(
+      nextJobs.map(async (job) => {
+        const draft = readyDrafts.find((item) => item.draft.id === job.draftId)?.draft;
+        if (!draft) return;
+        try {
+          const response = await fetch("/api/resume/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobDescriptionText: draft.text,
+              profile,
+              locale: "en-US",
+            }),
+          });
+          const payload = (await response.json()) as
+            | FinalResumeData
+            | { error?: { message?: string } };
+          if (!response.ok || !("document" in payload)) {
+            throw new Error(
+              "error" in payload
+                ? payload.error?.message ?? "Resume generation failed."
+                : "Resume generation failed.",
+            );
+          }
+          setJobs((current) =>
+            current.map((item) =>
+              item.id === job.id
+                ? {
+                    ...item,
+                    status: "finishing",
+                    pendingResume: payload,
+                  }
+                : item,
+            ),
+          );
+        } catch (caught) {
+          setJobs((current) =>
+            current.map((item) =>
+              item.id === job.id
+                ? {
+                    ...item,
+                    status: "error",
+                    progress: null,
+                    pendingResume: null,
+                    resume: null,
+                    error:
+                      caught instanceof Error
+                        ? caught.message
+                        : "Resume generation failed.",
+                  }
+                : item,
+            ),
+          );
+        }
+      }),
+    );
   }
 
   return (
@@ -591,62 +679,149 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Paste one JD. Summary, skills, experience, and template engines each
-                process it independently.
+                Add one or more JDs. Generate runs them at the same time with the same
+                profile — each JD stays isolated in its own resume pipeline.
               </p>
             </div>
           </div>
 
-          <label className="profile-field profile-field-full">
-            <span className="manual-jd-label">JD text</span>
-            <textarea
-              name="jobDescription"
-              value={jobDescriptionText}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                setJobDescriptionText(event.target.value)
-              }
-              placeholder="Paste the full job description here"
-            />
-          </label>
+          {jdDrafts.map((draft, index) => (
+            <div key={draft.id} className="entry-block">
+              <div className="entry-head">
+                <p className="entry-label">JD {index + 1}</p>
+                <button
+                  type="button"
+                  className="secondary-action entry-remove"
+                  disabled={jdDrafts.length === 1 || hasActiveJobs}
+                  onClick={() => removeJdDraft(draft.id)}
+                >
+                  Remove
+                </button>
+              </div>
+              <label className="profile-field profile-field-full">
+                <span className="manual-jd-label">JD text</span>
+                <textarea
+                  name={`jobDescription-${draft.id}`}
+                  value={draft.text}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                    updateJdDraft(draft.id, event.target.value)
+                  }
+                  placeholder="Paste the full job description here"
+                />
+              </label>
+            </div>
+          ))}
+
+          <div className="section-actions section-actions-end">
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={hasActiveJobs}
+              onClick={addJdDraft}
+            >
+              Add JD
+            </button>
+          </div>
 
           <div className="composer-footer">
             <button
               type="button"
               className="primary"
-              disabled={!canGenerate || loading || finishingProgress}
+              disabled={!canGenerate || hasActiveJobs}
               onClick={generate}
             >
-              {loading || finishingProgress ? "Generating…" : "Generate complete resume"}
+              {hasActiveJobs
+                ? "Generating…"
+                : readyJdCount > 1
+                  ? `Generate ${readyJdCount} resumes`
+                  : "Generate complete resume"}
             </button>
             <p className="inline-status">
-              {loading || finishingProgress
-                ? "Running JD-isolated resume pipeline…"
-                : "Ready when profile, career history, education, and JD are filled in."}
+              {hasActiveJobs
+                ? `Running ${jobs.filter((job) => job.status === "running" || job.status === "finishing").length} JD-isolated resume pipeline${readyJdCount === 1 ? "" : "s"}…`
+                : readyJdCount > 1
+                  ? `${readyJdCount} JDs ready. Generate will run them in parallel.`
+                  : "Ready when profile, career history, education, and JD are filled in."}
             </p>
           </div>
-          {error ? <p className="error">{error}</p> : null}
         </section>
 
         <section className="board" aria-live="polite">
           <div className="section-head">
             <div>
               <h2>Result</h2>
+              {jobs.length > 0 ? (
+                <p className="hint">
+                  {jobs.filter((job) => job.status === "done").length}/{jobs.length}{" "}
+                  complete
+                </p>
+              ) : null}
             </div>
           </div>
 
-          {showGenerationProgress && generationProgress ? (
-            <GenerationProgressPanel progress={generationProgress} />
-          ) : !resume ? (
+          {jobs.length === 0 ? (
             <div className="empty-board">
-              <p>No resume yet. Generate once, then preview and export.</p>
+              <p>No resumes yet. Add JDs, then generate one or several at once.</p>
               <ol>
                 <li>Confirm profile, career history, and education</li>
-                <li>Paste the target job description</li>
-                <li>Generate, open Preview when you want to review, then export</li>
+                <li>Paste one or more target job descriptions</li>
+                <li>Generate in parallel, open Preview per result, then export</li>
               </ol>
             </div>
           ) : (
-            <ResumePreview resume={resume} />
+            <div className="job-board">
+              {jobs.map((job, index) => {
+                if (job.status === "done" && job.resume) {
+                  return (
+                    <ResumePreview
+                      key={job.id}
+                      resume={job.resume}
+                      index={index + 1}
+                      title={job.title}
+                    />
+                  );
+                }
+                if (
+                  (job.status === "running" || job.status === "finishing") &&
+                  job.progress
+                ) {
+                  return (
+                    <div key={job.id} className="job-row status-run">
+                      <div className="job-list-main">
+                        <div className="job-list-head">
+                          <div className="job-index">{index + 1}</div>
+                          <div>
+                            <div className="job-title-row">
+                              <strong>{job.title}</strong>
+                              <span className="badge">Running</span>
+                            </div>
+                          </div>
+                        </div>
+                        <GenerationProgressPanel progress={job.progress} />
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={job.id} className="job-row status-error">
+                    <div className="job-list-main">
+                      <div className="job-list-head">
+                        <div className="job-index">{index + 1}</div>
+                        <div>
+                          <div className="job-title-row">
+                            <strong>{job.title}</strong>
+                            <span className="badge badge-error">Failed</span>
+                          </div>
+                          <p className="error" style={{ marginTop: "0.65rem" }}>
+                            {job.error || "Resume generation failed."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
       </main>
@@ -696,7 +871,15 @@ function GenerationProgressPanel({
   );
 }
 
-function ResumePreview({ resume }: { resume: FinalResumeData }) {
+function ResumePreview({
+  resume,
+  index,
+  title,
+}: {
+  resume: FinalResumeData;
+  index: number;
+  title: string;
+}) {
   const template = resume.template.template;
   const [showPreview, setShowPreview] = useState(false);
   const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
@@ -806,10 +989,10 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
     <div className="job-row status-done">
       <div className="job-list-main">
         <div className="job-list-head">
-          <div className="job-index">1</div>
+          <div className="job-index">{index}</div>
           <div>
             <div className="job-title-row">
-              <strong>{resume.context.generationId}</strong>
+              <strong>{title}</strong>
               <span className="badge badge-done">
                 {resume.assemblyValidation.overallStatus}
               </span>
@@ -821,7 +1004,8 @@ function ResumePreview({ resume }: { resume: FinalResumeData }) {
             </div>
             {assignedRole ? <p className="job-role">{assignedRole}</p> : null}
             <p className="job-role">
-              {template.templateName} · {resume.orchestration.totalDurationMs} ms
+              {resume.context.generationId} · {template.templateName} ·{" "}
+              {resume.orchestration.totalDurationMs} ms
             </p>
           </div>
         </div>
