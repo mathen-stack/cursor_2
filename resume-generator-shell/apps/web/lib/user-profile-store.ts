@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import type { UserProfile } from "@resume/contracts";
+import { getProfilesDirectory } from "./data-paths";
 import {
   createEmptyProfile,
   normalizeStoredProfile,
@@ -25,14 +25,7 @@ export type UserProfileSummary = {
 };
 
 function profilesRootDirectory(): string {
-  const cwd = process.cwd();
-  if (/[/\\]apps[/\\]web$/.test(cwd)) {
-    return path.resolve(cwd, "..", "..", "data", "profiles");
-  }
-  if (existsSync(path.join(cwd, "resume-generator-shell", "package.json"))) {
-    return path.resolve(cwd, "resume-generator-shell", "data", "profiles");
-  }
-  return path.resolve(cwd, "data", "profiles");
+  return getProfilesDirectory();
 }
 
 export function sanitizeProfileUsername(username: string): string {

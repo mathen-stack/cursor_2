@@ -1,8 +1,8 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { UserRole } from "./auth-types";
+import { getAccountsDirectory } from "./data-paths";
 import {
   deleteUserProfileRecord,
   readUserProfileRecord,
@@ -53,14 +53,7 @@ function toPublicAccount(account: StoredAccount): PublicAccount {
 }
 
 function accountsRootDirectory(): string {
-  const cwd = process.cwd();
-  if (/[/\\]apps[/\\]web$/.test(cwd)) {
-    return path.resolve(cwd, "..", "..", "data", "users");
-  }
-  if (existsSync(path.join(cwd, "resume-generator-shell", "package.json"))) {
-    return path.resolve(cwd, "resume-generator-shell", "data", "users");
-  }
-  return path.resolve(cwd, "data", "users");
+  return getAccountsDirectory();
 }
 
 function accountsFilePath(): string {

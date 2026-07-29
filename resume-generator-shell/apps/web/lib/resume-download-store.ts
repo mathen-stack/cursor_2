@@ -1,20 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import path from "node:path";
+import { getDownloadDirectory } from "./data-paths";
 
 /**
- * Project-local folder where finished resumes are written:
- * `resume-generator-shell/download`.
+ * Folder where finished resumes are written.
+ * On Vercel this uses /tmp because the deployment filesystem is read-only.
  */
 export function getResumeDownloadDirectory(): string {
-  const cwd = process.cwd();
-  if (/[/\\]apps[/\\]web$/.test(cwd)) {
-    return path.resolve(cwd, "..", "..", "download");
-  }
-  if (existsSync(path.join(cwd, "resume-generator-shell", "package.json"))) {
-    return path.resolve(cwd, "resume-generator-shell", "download");
-  }
-  return path.resolve(cwd, "download");
+  return getDownloadDirectory();
 }
 
 export async function saveResumeToDownloadFolder(
