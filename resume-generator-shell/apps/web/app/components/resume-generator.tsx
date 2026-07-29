@@ -1132,10 +1132,6 @@ function ResumePreview({
                 </span>
               ) : null}
             </div>
-            <p className="job-role">
-              {resume.context.generationId} · {template.templateName} ·{" "}
-              {resume.orchestration.totalDurationMs} ms
-            </p>
           </div>
           <button
             type="button"
