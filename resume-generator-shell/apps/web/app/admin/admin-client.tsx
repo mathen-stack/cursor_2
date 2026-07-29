@@ -405,7 +405,7 @@ export default function AdminProfilesClient() {
       <div className="page">
         <div className="atmosphere" aria-hidden />
         <main className="main">
-          <p className="hint">Loading administrator console…</p>
+          <p className="hint">Loading database…</p>
         </main>
       </div>
     );
@@ -430,11 +430,11 @@ export default function AdminProfilesClient() {
           <p className="brand">Resume Tailor</p>
           <div className="topbar-user">
             <div className="topbar-user-copy">
-              <p className="header-username">Administrator</p>
+              <p className="header-username">Database</p>
               <p className="header-account">@{admin.username}</p>
             </div>
             <Link href="/" className="secondary-action topbar-logout">
-              Generator
+              Home
             </Link>
           </div>
         </div>
@@ -444,7 +444,7 @@ export default function AdminProfilesClient() {
         <section className="profile-card">
           <div className="section-head">
             <div>
-              <h2>Manage users & profiles</h2>
+              <h2>Database</h2>
               <p className="hint">
                 Change usernames and passwords, then edit each user’s saved
                 profile used for resume generation.

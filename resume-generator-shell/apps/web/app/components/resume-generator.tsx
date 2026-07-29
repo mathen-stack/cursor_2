@@ -862,7 +862,7 @@ export default function ResumeGenerator({
             </div>
             {user.role === "admin" ? (
               <a href="/admin" className="secondary-action topbar-logout">
-                Admin
+                Database
               </a>
             ) : null}
             <button
