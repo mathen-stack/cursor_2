@@ -659,27 +659,40 @@ textarea {
   min-width: 0;
 }
 
-.secondary-action.entry-remove.job-close {
-  width: 2.35rem;
-  min-width: 2.35rem;
-  height: 2.35rem;
-  min-height: 2.35rem;
-  max-height: 2.35rem;
-  margin-left: 0;
-  padding: 0;
-  font-size: 1.85rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .job-close {
   justify-self: end;
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
-.job-close span {
+.job-close svg {
   display: block;
-  transform: translateY(-0.08em);
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.job-close:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.job-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .badge-company {

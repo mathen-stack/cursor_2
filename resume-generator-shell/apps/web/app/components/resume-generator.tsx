@@ -1109,15 +1109,10 @@ export default function ResumeGenerator() {
                             </div>
                             <strong className="job-headline">{job.title}</strong>
                           </div>
-                          <button
-                            type="button"
-                            className="secondary-action entry-remove job-close"
-                            aria-label={`Dismiss result for ${job.title}`}
-                            title="Dismiss"
+                          <JobCloseButton
+                            label={`Close result for ${job.title}`}
                             onClick={() => closeJob(job.id)}
-                          >
-                            <span aria-hidden>×</span>
-                          </button>
+                          />
                         </div>
                         <GenerationProgressPanel progress={job.progress} />
                       </div>
@@ -1138,15 +1133,10 @@ export default function ResumeGenerator() {
                             {job.error || "Resume generation failed."}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          className="secondary-action entry-remove job-close"
-                          aria-label={`Dismiss result for ${job.title}`}
-                          title="Dismiss"
+                        <JobCloseButton
+                          label={`Close result for ${job.title}`}
                           onClick={() => closeJob(job.id)}
-                        >
-                          <span aria-hidden>×</span>
-                        </button>
+                        />
                       </div>
                     </div>
                   </div>
@@ -1157,6 +1147,31 @@ export default function ResumeGenerator() {
         </section>
       </main>
     </div>
+  );
+}
+
+function JobCloseButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="job-close"
+      aria-label={label}
+      title="Close"
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path
+          d="M4.2 4.2a.75.75 0 0 1 1.06 0L8 6.94l2.74-2.74a.75.75 0 1 1 1.06 1.06L9.06 8l2.74 2.74a.75.75 0 1 1-1.06 1.06L8 9.06l-2.74 2.74a.75.75 0 1 1-1.06-1.06L6.94 8 4.2 5.26a.75.75 0 0 1 0-1.06Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
   );
 }
 
@@ -1370,15 +1385,10 @@ function ResumePreview({
             </div>
             <strong className="job-headline">{title}</strong>
           </div>
-          <button
-            type="button"
-            className="secondary-action entry-remove job-close"
-            aria-label={`Dismiss result for ${title}`}
-            title="Dismiss"
+          <JobCloseButton
+            label={`Close result for ${title}`}
             onClick={onClose}
-          >
-            <span aria-hidden>×</span>
-          </button>
+          />
         </div>
         <div className="pdf-ready-panel" aria-live="polite">
           <RoundPdfProgress pdfReady={pdfReady} size={88} />
