@@ -731,14 +731,15 @@ export default function ResumeGenerator() {
             const draftReady = draft.text.trim().length >= 50;
             const draftCanGenerate = profileReady && draftReady;
             const detectedCompany = detectCompanyNameFromJd(draft.text);
+            const detectedHeadline = formatJdResultHeadline(draft.text, index + 1);
             return (
               <div key={draft.id} className="entry-block">
                 <div className="entry-head">
                   <p className="entry-label">
                     JD {index + 1}
-                    {detectedCompany ? (
-                      <span className="badge" style={{ marginLeft: "0.45rem" }}>
-                        {detectedCompany}
+                    {detectedHeadline.role !== `Job ${index + 1}` || detectedCompany ? (
+                      <span className="badge badge-company" style={{ marginLeft: "0.45rem" }}>
+                        {detectedHeadline.headline}
                       </span>
                     ) : null}
                     {inFlightDraftIds.has(draft.id) ? (
@@ -844,8 +845,6 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
-                      role={job.role}
-                      company={job.company}
                       onClose={() => closeJob(job.id)}
                     />
                   );
@@ -962,15 +961,11 @@ function ResumePreview({
   resume,
   index,
   title,
-  role,
-  company,
   onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
-  role: string;
-  company?: string;
   onClose: () => void;
 }) {
   const template = resume.template.template;
