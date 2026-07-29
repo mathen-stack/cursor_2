@@ -6,6 +6,10 @@ coverage
 artifacts
 download/*
 !download/.gitkeep
+data/users/*
+!data/users/.gitkeep
+data/profiles/*
+!data/profiles/.gitkeep
 *.tsbuildinfo
 .env
 .env.*
