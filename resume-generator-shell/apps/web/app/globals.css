@@ -554,18 +554,22 @@ textarea {
   min-width: 0;
 }
 
-.job-close {
-  justify-self: end;
+.secondary-action.entry-remove.job-close {
   width: 2.35rem;
   min-width: 2.35rem;
   height: 2.35rem;
   min-height: 2.35rem;
   max-height: 2.35rem;
+  margin-left: 0;
   padding: 0;
   font-size: 1.85rem;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
+}
+
+.job-close {
+  justify-self: end;
 }
 
 .job-close span {
