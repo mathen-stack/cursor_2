@@ -9,6 +9,7 @@ import type {
   UserProfile,
 } from "@resume/contracts";
 import { PeriodDateControl } from "./period-date-control";
+import { detectCompanyNameFromJd } from "../lib/detect-company-from-jd";
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
@@ -104,8 +105,17 @@ function titleFromJdText(text: string, fallbackIndex: number): string {
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean);
-  if (!firstLine) return `Job ${fallbackIndex}`;
-  return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine;
+  const role = firstLine
+    ? firstLine.length > 72
+      ? `${firstLine.slice(0, 72)}…`
+      : firstLine
+    : `Job ${fallbackIndex}`;
+  const company = detectCompanyNameFromJd(text);
+  if (company && !role.toLocaleLowerCase().includes(company.toLocaleLowerCase())) {
+    const combined = `${role} · ${company}`;
+    return combined.length > 88 ? `${combined.slice(0, 88)}…` : combined;
+  }
+  return role;
 }
 
 function newCareerEntry(index: number): CareerEntry {
@@ -718,8 +728,9 @@ export default function ResumeGenerator() {
             <div>
               <h2>Job Description</h2>
               <p className="hint">
-                Add JDs anytime. You can start another generate while earlier resumes are
-                still running — each JD stays isolated in its own pipeline.
+                Add JDs anytime. Company names are detected from the JD when possible
+                for labels; career companies still come from your profile. You can start
+                another generate while earlier resumes are still running.
               </p>
             </div>
           </div>
@@ -727,11 +738,17 @@ export default function ResumeGenerator() {
           {jdDrafts.map((draft, index) => {
             const draftReady = draft.text.trim().length >= 50;
             const draftCanGenerate = profileReady && draftReady;
+            const detectedCompany = detectCompanyNameFromJd(draft.text);
             return (
               <div key={draft.id} className="entry-block">
                 <div className="entry-head">
                   <p className="entry-label">
                     JD {index + 1}
+                    {detectedCompany ? (
+                      <span className="badge" style={{ marginLeft: "0.45rem" }}>
+                        {detectedCompany}
+                      </span>
+                    ) : null}
                     {inFlightDraftIds.has(draft.id) ? (
                       <span className="badge" style={{ marginLeft: "0.45rem" }}>
                         Generating
