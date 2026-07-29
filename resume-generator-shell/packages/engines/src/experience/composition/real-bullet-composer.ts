@@ -11,6 +11,8 @@ import {
   ensureCompositionCommunicationSignal,
   ensureAllocatedOpeningVerb,
   finalizeComposedBullet,
+  actionScopeFingerprint,
+  actionScopePhraseKeys,
   containsVagueBuzzwords,
   hasCompositionCommunicationSignal,
   isBrokenBulletWording,
@@ -525,17 +527,125 @@ export class RealBulletComposer implements BulletComposer {
 
     let validation = runValidation();
 
+    const isFixableSentenceStrengthError = (error: string): boolean =>
+      /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|word limit|too long|scan-friendly|exceeds|buzzword|filler|weak language|personal pronoun|first-person|years-of-experience|job-posting|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
+        error,
+      );
+
     // One closed retry for fixable sentence-strength / coverage failures.
     if (validation.overallStatus !== "approved") {
       const fixable = validation.diagnostics.some((item) =>
-        item.errors.some((error) =>
-          /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|word limit|too long|scan-friendly|exceeds|buzzword|filler|weak language|personal pronoun|first-person|years-of-experience|job-posting|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
-            error,
-          ),
-        ),
+        item.errors.some(isFixableSentenceStrengthError),
       );
       if (fixable) {
         drafts = enforceDocumentCompositionInvariants(drafts);
+        validation = runValidation();
+      }
+    }
+
+    // Last-resort: bullets that still lack their allocated opening verb get a
+    // deterministic rebuild so generation does not fail closed on recoverable
+    // sentence-strength damage after uniqueify/normalize.
+    if (validation.overallStatus !== "approved") {
+      const openingFailures = new Set(
+        validation.diagnostics
+          .filter((item) =>
+            item.errors.some((error) =>
+              /allocated action verb|active voice/i.test(error),
+            ),
+          )
+          .map((item) => item.bulletId),
+      );
+      if (openingFailures.size > 0) {
+        const usedScopeKeys = new Set<string>();
+        // Claim scopes from healthy bullets first so rebuilt siblings stay unique.
+        for (const draft of drafts) {
+          if (openingFailures.has(draft.bulletId)) continue;
+          const scope = draft.finalBullet
+            .replace(/[.!?]+$/g, "")
+            .replace(
+              new RegExp(
+                `^${draft.actionVerb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+`,
+                "i",
+              ),
+              "",
+            )
+            .replace(/\s+(?:using|through|,)\s+[\s\S]*$/i, "")
+            .trim();
+          const fingerprint = actionScopeFingerprint(scope);
+          if (fingerprint) usedScopeKeys.add(fingerprint);
+          for (const phraseKey of actionScopePhraseKeys(scope)) {
+            usedScopeKeys.add(phraseKey);
+          }
+        }
+
+        drafts = drafts.map((draft) => {
+          if (!openingFailures.has(draft.bulletId)) {
+            return draft;
+          }
+
+          const original = packagesByBullet.get(draft.bulletId);
+          const plan = plansByBullet.get(draft.bulletId);
+          const story = storiesByBullet.get(draft.bulletId);
+          const verb = (original?.actionVerb ?? draft.actionVerb).trim();
+          const support = joinNatural(
+            (original?.supportingKeywords ?? draft.supportingKeywords)
+              .map((keyword) => stripFirstPersonPronouns(keyword))
+              .filter(
+                (keyword) =>
+                  Boolean(keyword) &&
+                  !isJdMarketingOrMetaScope(keyword) &&
+                  !containsVagueBuzzwords(keyword),
+              )
+              .slice(0, 2),
+          );
+          const directScope =
+            (original?.directKeywords ?? draft.directKeywords)
+              .map((keyword) =>
+                substantiveKeyword(stripFirstPersonPronouns(keyword)),
+              )
+              .find(
+                (scope) =>
+                  Boolean(scope) &&
+                  !isJdMarketingOrMetaScope(scope) &&
+                  !isBrokenBulletWording(scope),
+              ) ||
+            substantiveKeyword(plan?.roleFocusArea || "") ||
+            "production delivery outcomes";
+          const metric = story?.metrics[0];
+          const metricClause = metric
+            ? metricAsGerund(metric)
+            : "improving delivery predictability by 20%";
+          const rebuilt = normalizeBulletSentence(
+            `${verb} ${stripTerminal(directScope)}${
+              support ? ` through ${stripTerminal(support)}` : ""
+            }${
+              plan?.communicationFocused
+                ? " with product and engineering stakeholders"
+                : ""
+            }, ${metricClause}`,
+          );
+          const preserve = [
+            ...(original?.directKeywords ?? draft.directKeywords),
+            ...(original?.supportingKeywords ?? draft.supportingKeywords),
+            ...(original?.outcomeKeywords ?? draft.outcomeKeywords),
+          ];
+          const finalized = finalizeComposedBullet({
+            finalBullet: ensureAllocatedOpeningVerb(rebuilt, verb),
+            actionVerb: verb,
+            bulletId: draft.bulletId,
+            usedScopeKeys,
+            minimumWords,
+            maximumWords,
+            communicationFocused: Boolean(plan?.communicationFocused),
+            preserveKeywords: preserve,
+          });
+          return syncClaimedKeywords({
+            ...draft,
+            actionVerb: verb,
+            finalBullet: finalized,
+          });
+        });
         validation = runValidation();
       }
     }

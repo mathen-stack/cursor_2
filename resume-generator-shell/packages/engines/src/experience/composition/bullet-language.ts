@@ -487,9 +487,10 @@ export function finalizeComposedBullet(input: {
   }
   if (bulletWordCount(text) > input.maximumWords) {
     text = ensureMaximumBulletWords(text, input.maximumWords, preserve);
-    text = ensureAllocatedOpeningVerb(text, input.actionVerb);
   }
-  return text;
+  // Opening verb must be the final mutation — normalize/max-word passes can
+  // otherwise leave a verb-less opening that fails sentence-strength checks.
+  return ensureAllocatedOpeningVerb(text, input.actionVerb);
 }
 
 function escapeRegExpLiteral(value: string): string {

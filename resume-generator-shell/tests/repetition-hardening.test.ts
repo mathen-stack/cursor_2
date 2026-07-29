@@ -837,4 +837,41 @@ Lead technical strategy.`,
     expect(isBrokenBulletWording(second)).toBe(false);
     expect(isBrokenBulletWording(tenure)).toBe(false);
   });
+
+  it("finalizeComposedBullet always ends with the allocated opening verb", () => {
+    const used = new Set<string>();
+    // Verb-less / comma-led openings and max-word compression must still leave
+    // the allocated verb as the first token after the closed finalizer.
+    const cases = [
+      {
+        verb: "Collaborated",
+        text: ", reducing delivery cycle time by 24% and improving stakeholder alignment across engineering partners during peak demand.",
+      },
+      {
+        verb: "Deployed",
+        text: "reviews and solution design through automated testing and delivery planning, reducing manual processing effort by 44% and improving integration reliability across many partner surfaces during extended release windows for customer workloads.",
+      },
+      {
+        verb: "Implemented",
+        text: "10+ years of experience through architecture workshops with product stakeholders, increasing alignment by 18% and improving delivery predictability for engineering partners.",
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const finalized = finalizeComposedBullet({
+        finalBullet: item.text,
+        actionVerb: item.verb,
+        bulletId: "EXP-002-B-003",
+        usedScopeKeys: used,
+        minimumWords: 16,
+        maximumWords: 46,
+        communicationFocused: true,
+        preserveKeywords: ["architecture workshops", "delivery planning"],
+      });
+      expect(finalized.toLocaleLowerCase().startsWith(`${item.verb.toLocaleLowerCase()} `)).toBe(
+        true,
+      );
+      expect(finalized.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(46);
+    }
+  });
 });
