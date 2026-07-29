@@ -1089,7 +1089,7 @@ export default function ResumeGenerator() {
                 return (
                   <div key={job.id} className="job-row status-error">
                     <div className="job-list-main">
-                      <div className="job-list-head">
+                      <div className="job-list-head job-list-head--compact">
                         <div className="job-index">{index + 1}</div>
                         <div className="job-list-copy">
                           <div className="job-status-row">
