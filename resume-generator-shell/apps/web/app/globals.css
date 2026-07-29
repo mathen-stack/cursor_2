@@ -167,8 +167,25 @@ button:disabled {
   margin: 0;
 }
 
+.admin-user-search-shell {
+  position: relative;
+  display: block;
+}
+
+.admin-user-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
 .admin-user-search input {
   width: 100%;
+  padding-left: 2.15rem;
 }
 
 .admin-user-empty {

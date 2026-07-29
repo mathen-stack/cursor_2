@@ -505,15 +505,28 @@ export default function AdminProfilesClient() {
             <aside className="admin-user-list" aria-label="Users">
               <label className="profile-field admin-user-search">
                 <span className="sr-only">Search username</span>
-                <input
-                  type="search"
-                  value={usernameSearch}
-                  placeholder="Search username…"
-                  aria-label="Search username"
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    setUsernameSearch(event.target.value)
-                  }
-                />
+                <span className="admin-user-search-shell">
+                  <svg
+                    className="admin-user-search-icon"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M6.75 2a4.75 4.75 0 1 1 0 9.5 4.75 4.75 0 0 1 0-9.5Zm0 1.4a3.35 3.35 0 1 0 0 6.7 3.35 3.35 0 0 0 0-6.7Zm5.02 7.12 2.35 2.35a.7.7 0 0 1-.99.99l-2.35-2.35a.7.7 0 0 1 .99-.99Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  <input
+                    type="search"
+                    value={usernameSearch}
+                    placeholder="Search username…"
+                    aria-label="Search username"
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setUsernameSearch(event.target.value)
+                    }
+                  />
+                </span>
               </label>
               {filteredSummaries.length === 0 ? (
                 <p className="hint admin-user-empty">No users match that username.</p>
