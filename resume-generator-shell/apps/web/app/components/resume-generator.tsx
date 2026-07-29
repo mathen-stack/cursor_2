@@ -369,6 +369,10 @@ export default function ResumeGenerator() {
     );
   }
 
+  function closeJob(jobId: string) {
+    setJobs((current) => current.filter((job) => job.id !== jobId));
+  }
+
   async function generate(draftIds?: readonly string[]) {
     const readyDrafts = jdDrafts
       .map((draft, index) => ({ draft, index }))
@@ -831,6 +835,7 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      onClose={() => closeJob(job.id)}
                     />
                   );
                 }
@@ -843,12 +848,20 @@ export default function ResumeGenerator() {
                       <div className="job-list-main">
                         <div className="job-list-head">
                           <div className="job-index">{index + 1}</div>
-                          <div>
+                          <div className="job-list-copy">
                             <div className="job-title-row">
                               <strong>{job.title}</strong>
                               <span className="badge">Running</span>
                             </div>
                           </div>
+                          <button
+                            type="button"
+                            className="secondary-action entry-remove job-close"
+                            aria-label={`Close result for ${job.title}`}
+                            onClick={() => closeJob(job.id)}
+                          >
+                            Close
+                          </button>
                         </div>
                         <GenerationProgressPanel progress={job.progress} />
                       </div>
@@ -860,7 +873,7 @@ export default function ResumeGenerator() {
                     <div className="job-list-main">
                       <div className="job-list-head">
                         <div className="job-index">{index + 1}</div>
-                        <div>
+                        <div className="job-list-copy">
                           <div className="job-title-row">
                             <strong>{job.title}</strong>
                             <span className="badge badge-error">Failed</span>
@@ -869,6 +882,14 @@ export default function ResumeGenerator() {
                             {job.error || "Resume generation failed."}
                           </p>
                         </div>
+                        <button
+                          type="button"
+                          className="secondary-action entry-remove job-close"
+                          aria-label={`Close result for ${job.title}`}
+                          onClick={() => closeJob(job.id)}
+                        >
+                          Close
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -928,10 +949,12 @@ function ResumePreview({
   resume,
   index,
   title,
+  onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
+  onClose: () => void;
 }) {
   const template = resume.template.template;
   const [showPreview, setShowPreview] = useState(false);
@@ -1043,7 +1066,7 @@ function ResumePreview({
       <div className="job-list-main">
         <div className="job-list-head">
           <div className="job-index">{index}</div>
-          <div>
+          <div className="job-list-copy">
             <div className="job-title-row">
               <strong>{title}</strong>
               <span className="badge badge-done">
@@ -1061,6 +1084,14 @@ function ResumePreview({
               {resume.orchestration.totalDurationMs} ms
             </p>
           </div>
+          <button
+            type="button"
+            className="secondary-action entry-remove job-close"
+            aria-label={`Close result for ${title}`}
+            onClick={onClose}
+          >
+            Close
+          </button>
         </div>
 
         <div className="download-row">

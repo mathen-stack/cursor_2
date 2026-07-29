@@ -545,9 +545,17 @@ textarea {
 
 .job-list-head {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: start;
+}
+
+.job-list-copy {
+  min-width: 0;
+}
+
+.job-close {
+  justify-self: end;
 }
 
 .job-index {
