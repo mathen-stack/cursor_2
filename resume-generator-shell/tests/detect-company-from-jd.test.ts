@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { detectCompanyNameFromJd } from "../apps/web/app/lib/detect-company-from-jd";
+import {
+  detectCompanyNameFromJd,
+  detectRoleFromJd,
+  formatJdResultHeadline,
+} from "../apps/web/app/lib/detect-company-from-jd";
 import { SOFTWARE_MIND_SENIOR_FRONTEND_JD } from "./fixtures/software-mind-senior-frontend";
 
 describe("detectCompanyNameFromJd", () => {
@@ -33,5 +37,26 @@ Design Spark pipelines and warehouse models for analytics teams.`;
 Build and deploy scalable machine learning models in production environments.
 Experience with Python, Docker, Kubernetes, and AWS is required.`;
     expect(detectCompanyNameFromJd(jd)).toBeUndefined();
+  });
+});
+
+describe("detectRoleFromJd", () => {
+  it("skips About the job headers and finds the real role", () => {
+    const jd = `About the job
+Senior Frontend Engineer
+Company: Contoso Labs
+Build React apps with TypeScript for customer-facing products.`;
+    expect(detectRoleFromJd(jd)).toBe("Senior Frontend Engineer");
+    expect(formatJdResultHeadline(jd, 1)).toEqual({
+      role: "Senior Frontend Engineer",
+      company: "Contoso Labs",
+      headline: "Senior Frontend Engineer · Contoso Labs",
+    });
+  });
+
+  it("reads Software Mind role from the opening title line", () => {
+    expect(detectRoleFromJd(SOFTWARE_MIND_SENIOR_FRONTEND_JD)).toBe(
+      "Senior Frontend Engineer",
+    );
   });
 });

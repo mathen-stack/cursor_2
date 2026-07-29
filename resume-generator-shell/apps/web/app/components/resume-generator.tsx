@@ -9,7 +9,10 @@ import type {
   UserProfile,
 } from "@resume/contracts";
 import { PeriodDateControl } from "./period-date-control";
-import { detectCompanyNameFromJd } from "../lib/detect-company-from-jd";
+import {
+  detectCompanyNameFromJd,
+  formatJdResultHeadline,
+} from "../lib/detect-company-from-jd";
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
@@ -85,6 +88,7 @@ type GenerationJob = {
   id: string;
   draftId: string;
   title: string;
+  role: string;
   company?: string;
   status: "running" | "finishing" | "done" | "error";
   progress: GenerationProgress | null;
@@ -99,15 +103,6 @@ function createId(prefix: string): string {
 
 function createJdDraft(text = "", id?: string): JdDraft {
   return { id: id ?? createId("JD"), text };
-}
-
-function titleFromJdText(text: string, fallbackIndex: number): string {
-  const firstLine = text
-    .split("\n")
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!firstLine) return `Job ${fallbackIndex}`;
-  return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine;
 }
 
 function newCareerEntry(index: number): CareerEntry {
@@ -392,17 +387,21 @@ export default function ResumeGenerator() {
       launchingDraftIdsRef.current.add(draft.id);
     }
 
-    const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => ({
-      id: createId("JOB"),
-      draftId: draft.id,
-      title: titleFromJdText(draft.text, index + 1),
-      company: detectCompanyNameFromJd(draft.text),
-      status: "running",
-      progress: initialGenerationProgress(),
-      pendingResume: null,
-      resume: null,
-      error: "",
-    }));
+    const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => {
+      const labels = formatJdResultHeadline(draft.text, index + 1);
+      return {
+        id: createId("JOB"),
+        draftId: draft.id,
+        title: labels.headline,
+        role: labels.role,
+        company: labels.company,
+        status: "running" as const,
+        progress: initialGenerationProgress(),
+        pendingResume: null,
+        resume: null,
+        error: "",
+      };
+    });
     // Keep in-progress and completed jobs; append the new parallel batch.
     setJobs((current) => [...current, ...nextJobs]);
 
@@ -845,6 +844,7 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      role={job.role}
                       company={job.company}
                       onClose={() => closeJob(job.id)}
                     />
@@ -861,10 +861,7 @@ export default function ResumeGenerator() {
                           <div className="job-index">{index + 1}</div>
                           <div className="job-list-copy">
                             <div className="job-title-row">
-                              <strong>{job.title}</strong>
-                              {job.company ? (
-                                <span className="badge badge-company">{job.company}</span>
-                              ) : null}
+                              <strong className="job-headline">{job.title}</strong>
                               <span className="badge">Running</span>
                             </div>
                           </div>
@@ -890,10 +887,7 @@ export default function ResumeGenerator() {
                         <div className="job-index">{index + 1}</div>
                         <div className="job-list-copy">
                           <div className="job-title-row">
-                            <strong>{job.title}</strong>
-                            {job.company ? (
-                              <span className="badge badge-company">{job.company}</span>
-                            ) : null}
+                            <strong className="job-headline">{job.title}</strong>
                             <span className="badge badge-error">Failed</span>
                           </div>
                           <p className="error" style={{ marginTop: "0.65rem" }}>
@@ -968,12 +962,14 @@ function ResumePreview({
   resume,
   index,
   title,
+  role,
   company,
   onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
+  role: string;
   company?: string;
   onClose: () => void;
 }) {
@@ -1074,13 +1070,6 @@ function ResumePreview({
   }
 
   const readinessScore = resume.readiness?.internalScore;
-  const firstExperience = resume.document.sections.find(
-    (section) => section.id === "professional-experience",
-  );
-  const assignedRole =
-    firstExperience && firstExperience.id === "professional-experience"
-      ? firstExperience.content[0]?.assignedRole
-      : undefined;
 
   return (
     <div className="job-row status-done">
@@ -1089,8 +1078,7 @@ function ResumePreview({
           <div className="job-index">{index}</div>
           <div className="job-list-copy">
             <div className="job-title-row">
-              <strong>{title}</strong>
-              {company ? <span className="badge badge-company">{company}</span> : null}
+              <strong className="job-headline">{title}</strong>
               <span className="badge badge-done">
                 {resume.assemblyValidation.overallStatus}
               </span>
@@ -1100,7 +1088,6 @@ function ResumePreview({
                 </span>
               ) : null}
             </div>
-            {assignedRole ? <p className="job-role">{assignedRole}</p> : null}
             <p className="job-role">
               {resume.context.generationId} · {template.templateName} ·{" "}
               {resume.orchestration.totalDurationMs} ms

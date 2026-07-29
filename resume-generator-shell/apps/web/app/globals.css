@@ -605,8 +605,11 @@ textarea {
   flex-wrap: wrap;
 }
 
-.job-title-row strong {
-  font-size: 1rem;
+.job-title-row strong,
+.job-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .badge {
