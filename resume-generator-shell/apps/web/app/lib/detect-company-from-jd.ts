@@ -254,10 +254,9 @@ export function detectCompanyNameFromJd(text: string): string | undefined {
 export function formatJdResultHeadline(
   text: string,
   fallbackIndex: number,
-): { role: string; company?: string; headline: string } {
+): { role: string; company: string; headline: string } {
   const role = detectRoleFromJd(text) ?? `Job ${fallbackIndex}`;
-  const company = detectCompanyNameFromJd(text);
-  // Prefer "[company] | [role]" when the posting company is known.
-  const headline = company ? `${company} | ${role}` : role;
+  const company = detectCompanyNameFromJd(text) ?? "undefined";
+  const headline = `${company} | ${role}`;
   return { role, company, headline };
 }
