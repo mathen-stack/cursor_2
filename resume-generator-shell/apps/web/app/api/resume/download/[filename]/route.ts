@@ -6,20 +6,6 @@ export const runtime = "nodejs";
 
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".html"]);
 
-function contentTypeFor(filename: string): string {
-  const extension = path.extname(filename).toLowerCase();
-  switch (extension) {
-    case ".pdf":
-      return "application/pdf";
-    case ".docx":
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case ".html":
-      return "text/html; charset=utf-8";
-    default:
-      return "text/plain; charset=utf-8";
-  }
-}
-
 export async function GET(
   _request: Request,
   context: { params: Promise<{ filename: string }> },
@@ -46,9 +32,11 @@ export async function GET(
     return new Response(bytes, {
       status: 200,
       headers: {
-        "Content-Type": contentTypeFor(filename),
+        // octet-stream + attachment forces a file download (no PDF tab/window).
+        "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(bytes.byteLength),
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
       },
     });

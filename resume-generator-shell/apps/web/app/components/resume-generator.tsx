@@ -45,8 +45,9 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
 }
 
 /**
- * Export the resume (also writes resume-generator-shell/download/), then
- * start a browser file download in the same tab — no new window/tab.
+ * Export the resume into download/, then auto-download via a hidden iframe
+ * hitting Content-Disposition: attachment. This works after async generate
+ * without a second click and without opening a new tab/window.
  */
 async function deliverGeneratedResume(
   resume: FinalResumeData,
@@ -55,61 +56,44 @@ async function deliverGeneratedResume(
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // Return file bytes so the browser can download them. Server still saves
-    // a copy under download/.
-    body: JSON.stringify({ resume, format }),
+    body: JSON.stringify({ resume, format, saveOnly: true }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
     throw new Error(payload.error?.message ?? "Resume download failed.");
   }
 
+  const saved = (await response.json()) as { filename?: string };
   const filename =
-    filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
+    saved.filename ??
     resumeFilenameFromFullName(
       resume.profile.personalInformation.fullName,
       format,
     );
 
-  // Force a downloadable blob so PDF viewers do not open a new tab.
-  const raw = await response.arrayBuffer();
-  const blob = new Blob([raw], { type: "application/octet-stream" });
-  triggerBrowserDownload(blob, filename);
+  triggerAutoFileDownload(
+    `/api/resume/download/${encodeURIComponent(filename)}`,
+  );
   return { filename };
 }
 
-function filenameFromContentDisposition(
-  header: string | null,
-): string | undefined {
-  if (!header) return undefined;
-  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(header);
-  if (utf8Match?.[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1].trim());
-    } catch {
-      // fall through
-    }
-  }
-  const plainMatch = /filename="([^"]+)"/i.exec(header);
-  if (plainMatch?.[1]) return plainMatch[1];
-  const bareMatch = /filename=([^;]+)/i.exec(header);
-  return bareMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
-}
-
-/** Same-tab download only — never target=_blank / window.open / iframe nav. */
-function triggerBrowserDownload(blob: Blob, filename: string): void {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  anchor.rel = "noopener";
-  anchor.style.display = "none";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+/** Hidden iframe download — no window.open, no target=_blank, no second click. */
+function triggerAutoFileDownload(href: string): void {
+  const frame = document.createElement("iframe");
+  frame.src = href;
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.style.position = "fixed";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.style.opacity = "0";
+  frame.style.pointerEvents = "none";
+  frame.style.overflow = "hidden";
+  document.body.appendChild(frame);
   window.setTimeout(() => {
-    URL.revokeObjectURL(objectUrl);
-  }, 4_000);
+    frame.remove();
+  }, 60_000);
 }
 
 async function autoDeliverGeneratedResume(
@@ -340,7 +324,10 @@ export default function ResumeGenerator() {
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
 
-  function queueAutoDownload(jobId: string, resume: FinalResumeData) {
+  async function runAutoDownload(
+    jobId: string,
+    resume: FinalResumeData,
+  ): Promise<void> {
     if (autoDownloadedJobIdsRef.current.has(jobId)) return;
     autoDownloadedJobIdsRef.current.add(jobId);
     setJobs((current) =>
@@ -353,47 +340,46 @@ export default function ResumeGenerator() {
           : item,
       ),
     );
-    void autoDeliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT)
-      .then(() => {
-        setJobs((current) =>
-          current.map((item) => {
-            if (item.id !== jobId) return item;
-            const { autoDownloadError: _removed, ...rest } = item;
-            return {
-              ...rest,
-              pdfReady: {
-                percent: 100,
-                phase: "ready",
-                label: "PDF ready",
-              },
-            };
-          }),
-        );
-      })
-      .catch((caught) => {
-        const message =
-          caught instanceof Error
-            ? caught.message
-            : "Automatic resume download failed.";
-        console.error(message);
-        setJobs((current) =>
-          current.map((item) =>
-            item.id === jobId
-              ? {
-                  ...item,
-                  autoDownloadError: message,
-                  pdfReady: {
-                    percent: item.pdfReady.percent,
-                    phase: "error",
-                    label: "PDF export failed",
-                  },
-                }
-              : item,
-          ),
-        );
-        // Allow a later retry from the done-effect if this attempt failed.
-        autoDownloadedJobIdsRef.current.delete(jobId);
-      });
+    try {
+      await autoDeliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT);
+      setJobs((current) =>
+        current.map((item) => {
+          if (item.id !== jobId) return item;
+          const { autoDownloadError: _removed, ...rest } = item;
+          return {
+            ...rest,
+            pdfReady: {
+              percent: 100,
+              phase: "ready",
+              label: "PDF ready",
+            },
+          };
+        }),
+      );
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Automatic resume download failed.";
+      console.error(message);
+      setJobs((current) =>
+        current.map((item) =>
+          item.id === jobId
+            ? {
+                ...item,
+                autoDownloadError: message,
+                pdfReady: {
+                  percent: item.pdfReady.percent,
+                  phase: "error",
+                  label: "PDF export failed",
+                },
+              }
+            : item,
+        ),
+      );
+      autoDownloadedJobIdsRef.current.delete(jobId);
+      throw caught instanceof Error ? caught : new Error(message);
+    }
   }
 
   const readyJdCount = useMemo(
@@ -459,8 +445,14 @@ export default function ResumeGenerator() {
                 pendingResume: null,
                 role,
                 title: formatResultHeadline(role, company),
-                // PDF circular progress starts only after generate finishes.
-                pdfReady: initialPdfReadyState(),
+                // Keep PDF export state if auto-download already started
+                // from the Generate click handler.
+                pdfReady:
+                  job.pdfReady.phase === "ready" ||
+                  job.pdfReady.phase === "error" ||
+                  job.pdfReady.phase === "exporting"
+                    ? job.pdfReady
+                    : startPdfExportState(),
               };
             }
             return { ...job, progress: nextProgress };
@@ -492,14 +484,6 @@ export default function ResumeGenerator() {
 
     return () => window.clearInterval(timer);
   }, [hasPdfExportingJobs]);
-
-  useEffect(() => {
-    for (const job of jobs) {
-      if (job.status === "done" && job.resume) {
-        queueAutoDownload(job.id, job.resume);
-      }
-    }
-  }, [jobs]);
 
   const profileReady = useMemo(() => {
     const personal = profile.personalInformation;
@@ -694,7 +678,8 @@ export default function ResumeGenerator() {
                 : "Resume generation failed.",
             );
           }
-          // Keep linear generate progress to 100%, then start PDF circular export.
+          // Keep linear generate progress to 100%. Start PDF auto-download
+          // in this Generate click async chain — no second button click.
           setJobs((current) =>
             current.map((item) =>
               item.id === job.id
@@ -702,10 +687,16 @@ export default function ResumeGenerator() {
                     ...item,
                     status: "finishing",
                     pendingResume: payload,
+                    pdfReady: startPdfExportState(),
                   }
                 : item,
             ),
           );
+          try {
+            await runAutoDownload(job.id, payload);
+          } catch {
+            // Error state already recorded on the job.
+          }
         } catch (caught) {
           setJobs((current) =>
             current.map((item) =>
@@ -1353,23 +1344,12 @@ function ResumePreview({
             </strong>
             <p className="pdf-ready-status">
               {pdfReady.phase === "ready"
-                ? `Download started: ${resumeFilenameFromFullName(
+                ? `Downloaded ${resumeFilenameFromFullName(
                     resume.profile.personalInformation.fullName,
                     "pdf",
                   )}`
                 : pdfReady.label}
             </p>
-            {pdfReady.phase === "ready" || pdfReady.phase === "error" ? (
-              <button
-                type="button"
-                className="download-btn zip"
-                style={{ marginTop: "0.55rem" }}
-                disabled={exporting !== null}
-                onClick={() => exportResume("pdf")}
-              >
-                {exporting === "pdf" ? "Downloading PDF…" : "Download PDF"}
-              </button>
-            ) : null}
           </div>
         </div>
 
