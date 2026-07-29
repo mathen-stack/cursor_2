@@ -142,6 +142,8 @@ const GENERATION_STEPS = [
 const PROGRESS_TICK_MS = 300;
 const PROGRESS_PERCENT_PER_TICK = 2;
 const PROGRESS_HOLD_PERCENT = 92;
+const PDF_EXPORT_TICK_MS = 220;
+const PDF_EXPORT_PERCENT_PER_TICK = 3;
 
 type GenerationProgress = {
   stepIndex: number;
@@ -217,19 +219,35 @@ type PdfReadyState = {
 
 function initialPdfReadyState(): PdfReadyState {
   return {
-    percent: 4,
+    percent: 0,
     phase: "generating",
-    label: "Preparing PDF…",
+    label: "Waiting to export PDF…",
   };
 }
 
-function pdfReadyFromGeneration(percent: number, label: string): PdfReadyState {
-  // Leave the final stretch for PDF export/download.
-  const mapped = Math.max(4, Math.min(90, Math.round(percent * 0.9)));
+function startPdfExportState(): PdfReadyState {
   return {
-    percent: mapped,
-    phase: "generating",
-    label: percent >= 92 ? "Finalizing resume…" : label || "Preparing PDF…",
+    percent: 6,
+    phase: "exporting",
+    label: "Building PDF layout…",
+  };
+}
+
+function advancePdfExportState(current: PdfReadyState): PdfReadyState {
+  if (current.phase !== "exporting") return current;
+  const nextPercent = Math.min(
+    92,
+    current.percent + PDF_EXPORT_PERCENT_PER_TICK,
+  );
+  return {
+    percent: nextPercent,
+    phase: "exporting",
+    label:
+      nextPercent < 40
+        ? "Building PDF layout…"
+        : nextPercent < 70
+          ? "Rendering PDF pages…"
+          : "Finalizing PDF…",
   };
 }
 
@@ -333,11 +351,7 @@ export default function ResumeGenerator() {
         item.id === jobId
           ? {
               ...item,
-              pdfReady: {
-                percent: 94,
-                phase: "exporting",
-                label: "Writing PDF…",
-              },
+              pdfReady: startPdfExportState(),
             }
           : item,
       ),
@@ -401,6 +415,14 @@ export default function ResumeGenerator() {
     [jobs],
   );
   const hasActiveJobs = inFlightDraftIds.size > 0;
+  const hasPdfExportingJobs = useMemo(
+    () =>
+      jobs.some(
+        (job) =>
+          job.status === "done" && job.pdfReady.phase === "exporting",
+      ),
+    [jobs],
+  );
   const activeJobCount = useMemo(
     () =>
       jobs.filter(
@@ -416,17 +438,12 @@ export default function ResumeGenerator() {
       setJobs((current) =>
         current.map((job) => {
           if (job.status === "running") {
-            const progress = advanceGenerationProgress(
-              job.progress,
-              PROGRESS_HOLD_PERCENT,
-            );
             return {
               ...job,
-              progress,
-              pdfReady:
-                job.pdfReady.phase === "generating"
-                  ? pdfReadyFromGeneration(progress.percent, progress.label)
-                  : job.pdfReady,
+              progress: advanceGenerationProgress(
+                job.progress,
+                PROGRESS_HOLD_PERCENT,
+              ),
             };
           }
           if (job.status === "finishing") {
@@ -445,24 +462,11 @@ export default function ResumeGenerator() {
                 pendingResume: null,
                 role,
                 title: formatResultHeadline(role, company),
-                pdfReady:
-                  job.pdfReady.phase === "ready" || job.pdfReady.phase === "error"
-                    ? job.pdfReady
-                    : {
-                        percent: Math.max(job.pdfReady.percent, 92),
-                        phase: "exporting",
-                        label: "Writing PDF…",
-                      },
+                // PDF circular progress starts only after generate finishes.
+                pdfReady: initialPdfReadyState(),
               };
             }
-            return {
-              ...job,
-              progress: nextProgress,
-              pdfReady:
-                job.pdfReady.phase === "generating"
-                  ? pdfReadyFromGeneration(nextProgress.percent, nextProgress.label)
-                  : job.pdfReady,
-            };
+            return { ...job, progress: nextProgress };
           }
           return job;
         }),
@@ -471,6 +475,26 @@ export default function ResumeGenerator() {
 
     return () => window.clearInterval(timer);
   }, [hasActiveJobs]);
+
+  useEffect(() => {
+    if (!hasPdfExportingJobs) return;
+
+    const timer = window.setInterval(() => {
+      setJobs((current) =>
+        current.map((job) => {
+          if (job.status !== "done" || job.pdfReady.phase !== "exporting") {
+            return job;
+          }
+          return {
+            ...job,
+            pdfReady: advancePdfExportState(job.pdfReady),
+          };
+        }),
+      );
+    }, PDF_EXPORT_TICK_MS);
+
+    return () => window.clearInterval(timer);
+  }, [hasPdfExportingJobs]);
 
   useEffect(() => {
     for (const job of jobs) {
@@ -673,9 +697,7 @@ export default function ResumeGenerator() {
                 : "Resume generation failed.",
             );
           }
-          // Start auto-download as soon as the resume exists — do not wait for
-          // the progress bar to reach 100%.
-          queueAutoDownload(job.id, payload);
+          // Keep linear generate progress to 100%, then start PDF circular export.
           setJobs((current) =>
             current.map((item) =>
               item.id === job.id
@@ -1041,19 +1063,14 @@ export default function ResumeGenerator() {
                   return (
                     <div key={job.id} className="job-row status-run">
                       <div className="job-list-main">
-                        <div className="job-list-head">
+                        <div className="job-list-head job-list-head--compact">
                           <div className="job-index">{index + 1}</div>
                           <div className="job-list-copy">
                             <div className="job-status-row">
-                              <span className="badge">
-                                {job.pdfReady.phase === "exporting"
-                                  ? "Writing PDF"
-                                  : "Running"}
-                              </span>
+                              <span className="badge">Generating</span>
                             </div>
                             <strong className="job-headline">{job.title}</strong>
                           </div>
-                          <RoundPdfProgress pdfReady={job.pdfReady} />
                           <button
                             type="button"
                             className="secondary-action entry-remove job-close"
@@ -1064,10 +1081,7 @@ export default function ResumeGenerator() {
                             <span aria-hidden>×</span>
                           </button>
                         </div>
-                        <GenerationProgressPanel
-                          progress={job.progress}
-                          pdfReady={job.pdfReady}
-                        />
+                        <GenerationProgressPanel progress={job.progress} />
                       </div>
                     </div>
                   );
@@ -1129,6 +1143,7 @@ function RoundPdfProgress({
   return (
     <div
       className={`round-pdf-progress tone-${tone}`}
+      style={{ width: size, height: size }}
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -1160,37 +1175,28 @@ function RoundPdfProgress({
       </svg>
       <div className="round-pdf-center">
         <strong>{pdfReady.percent}%</strong>
-        <span>{pdfReady.phase === "ready" ? "PDF ready" : "PDF"}</span>
+        <span>{pdfReady.phase === "ready" ? "Ready" : "PDF"}</span>
       </div>
     </div>
   );
 }
 
-function GenerationProgressPanel({
-  progress,
-  pdfReady,
-}: {
-  progress: GenerationProgress;
-  pdfReady: PdfReadyState;
-}) {
+function GenerationProgressPanel({ progress }: { progress: GenerationProgress }) {
   return (
     <div className="generation-progress" aria-live="polite">
-      <div className="generation-progress-layout">
-        <RoundPdfProgress pdfReady={pdfReady} size={96} />
-        <div className="generation-progress-copy">
-          <div className="generation-progress-head">
-            <strong>
-              {pdfReady.phase === "ready"
-                ? "PDF ready"
-                : pdfReady.phase === "exporting"
-                  ? "Writing PDF"
-                  : "Preparing PDF"}
-            </strong>
-            <span>{pdfReady.percent}%</span>
-          </div>
-          <p className="generation-progress-label">{pdfReady.label}</p>
-          <p className="generation-progress-sublabel">{progress.label}</p>
-        </div>
+      <div className="generation-progress-head">
+        <strong>{progress.label}</strong>
+        <span>{progress.percent}%</span>
+      </div>
+      <div
+        className="generation-progress-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.percent}
+        aria-label={progress.label}
+      >
+        <span style={{ width: `${progress.percent}%` }} />
       </div>
       <ol className="generation-progress-steps">
         {GENERATION_STEPS.map((step, index) => {
@@ -1207,18 +1213,6 @@ function GenerationProgressPanel({
             </li>
           );
         })}
-        <li
-          data-state={
-            pdfReady.phase === "ready"
-              ? "done"
-              : pdfReady.phase === "exporting" || pdfReady.phase === "error"
-                ? "active"
-                : "pending"
-          }
-        >
-          <span className="generation-progress-marker" aria-hidden />
-          <span>Export PDF ({pdfReady.label})</span>
-        </li>
       </ol>
     </div>
   );
@@ -1320,7 +1314,7 @@ function ResumePreview({
   return (
     <div className="job-row status-done">
       <div className="job-list-main">
-        <div className="job-list-head">
+        <div className="job-list-head job-list-head--compact">
           <div className="job-index">{index}</div>
           <div className="job-list-copy">
             <div className="job-status-row">
@@ -1335,7 +1329,6 @@ function ResumePreview({
             </div>
             <strong className="job-headline">{title}</strong>
           </div>
-          <RoundPdfProgress pdfReady={pdfReady} />
           <button
             type="button"
             className="secondary-action entry-remove job-close"
@@ -1346,18 +1339,28 @@ function ResumePreview({
             <span aria-hidden>×</span>
           </button>
         </div>
-        {pdfReady.phase !== "ready" ? (
-          <p className="pdf-ready-status" aria-live="polite">
-            {pdfReady.label}
-          </p>
-        ) : (
-          <p className="pdf-ready-status is-ready" aria-live="polite">
-            PDF ready — saved as {resumeFilenameFromFullName(
-              resume.profile.personalInformation.fullName,
-              "pdf",
-            )}
-          </p>
-        )}
+        <div className="pdf-ready-panel" aria-live="polite">
+          <RoundPdfProgress pdfReady={pdfReady} size={88} />
+          <div className="pdf-ready-panel__copy">
+            <strong>
+              {pdfReady.phase === "ready"
+                ? "PDF ready"
+                : pdfReady.phase === "error"
+                  ? "PDF export failed"
+                  : pdfReady.phase === "exporting"
+                    ? "Preparing PDF"
+                    : "PDF queued"}
+            </strong>
+            <p className="pdf-ready-status">
+              {pdfReady.phase === "ready"
+                ? `Saved as ${resumeFilenameFromFullName(
+                    resume.profile.personalInformation.fullName,
+                    "pdf",
+                  )}`
+                : pdfReady.label}
+            </p>
+          </div>
+        </div>
 
         <div className="download-row">
           <span className="download-label">Actions</span>

@@ -378,7 +378,7 @@ textarea {
 }
 
 .generation-progress-bar {
-  margin-top: 0.85rem;
+  margin-top: 0.35rem;
   height: 0.42rem;
   border-radius: 999px;
   background: var(--surface-2);
@@ -401,18 +401,6 @@ textarea {
   animation: rise 350ms ease-out both;
 }
 
-.generation-progress-layout {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 0.95rem;
-}
-
-.generation-progress-copy {
-  min-width: 0;
-  flex: 1;
-}
-
 .round-pdf-progress {
   position: relative;
   width: 72px;
@@ -430,7 +418,7 @@ textarea {
 
 .round-pdf-value {
   stroke: var(--accent);
-  transition: stroke-dashoffset 280ms linear;
+  transition: stroke-dashoffset 220ms linear;
 }
 
 .round-pdf-progress.tone-ready .round-pdf-value {
@@ -443,7 +431,6 @@ textarea {
 
 .round-pdf-progress.tone-active .round-pdf-value {
   stroke: var(--accent);
-  filter: drop-shadow(0 0 6px rgba(62, 207, 142, 0.35));
 }
 
 .round-pdf-center {
@@ -470,14 +457,34 @@ textarea {
   font-weight: 700;
 }
 
+.pdf-ready-panel {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.15rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid rgba(62, 207, 142, 0.3);
+  background: color-mix(in srgb, var(--ok-soft) 70%, var(--surface-2));
+}
+
+.pdf-ready-panel__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.pdf-ready-panel__copy strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
 .pdf-ready-status {
-  margin: 0.75rem 0 0;
+  margin: 0.35rem 0 0;
   color: var(--muted);
   font-size: 0.88rem;
 }
 
-.pdf-ready-status.is-ready {
-  color: var(--accent);
+.pdf-ready-panel .pdf-ready-status {
+  margin-top: 0.3rem;
 }
 
 .generation-progress-head {
@@ -485,7 +492,7 @@ textarea {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.15rem;
 }
 
 .generation-progress-head strong {
@@ -499,21 +506,9 @@ textarea {
   font-weight: 700;
 }
 
-.generation-progress-label {
-  margin: 0;
-  color: var(--ink);
-  font-size: 0.9rem;
-}
-
-.generation-progress-sublabel {
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
 .generation-progress-steps {
   list-style: none;
-  margin: 0;
+  margin: 0.85rem 0 0;
   padding: 0;
   display: grid;
   gap: 0.45rem;
@@ -646,6 +641,10 @@ textarea {
   grid-template-columns: 2rem minmax(0, 1fr) auto auto;
   gap: 0.75rem;
   align-items: center;
+}
+
+.job-list-head--compact {
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
 }
 
 .job-list-head .round-pdf-progress {
