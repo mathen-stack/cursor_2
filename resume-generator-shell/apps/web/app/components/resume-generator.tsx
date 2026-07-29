@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   CareerEntry,
   ExternalResumeFeedbackCategory,
@@ -183,6 +183,7 @@ export default function ResumeGenerator() {
     ],
   });
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
+  const launchingDraftIdsRef = useRef<Set<string>>(new Set());
 
   const readyJdCount = useMemo(
     () => jdDrafts.filter((draft) => draft.text.trim().length >= 50).length,
@@ -375,9 +376,15 @@ export default function ResumeGenerator() {
       .map((draft, index) => ({ draft, index }))
       .filter(
         ({ draft }) =>
-          draft.text.trim().length >= 50 && !inFlightDraftIds.has(draft.id),
+          draft.text.trim().length >= 50 &&
+          !inFlightDraftIds.has(draft.id) &&
+          !launchingDraftIdsRef.current.has(draft.id),
       );
     if (!profileReady || readyDrafts.length === 0) return;
+
+    for (const { draft } of readyDrafts) {
+      launchingDraftIdsRef.current.add(draft.id);
+    }
 
     const nextJobs: GenerationJob[] = readyDrafts.map(({ draft, index }) => ({
       id: createId("JOB"),
@@ -392,62 +399,68 @@ export default function ResumeGenerator() {
     // Keep in-progress and completed jobs; append the new parallel batch.
     setJobs((current) => [...current, ...nextJobs]);
 
-    await Promise.all(
-      nextJobs.map(async (job) => {
-        const draft = readyDrafts.find((item) => item.draft.id === job.draftId)?.draft;
-        if (!draft) return;
-        try {
-          const response = await fetch("/api/resume/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jobDescriptionText: draft.text,
-              profile,
-              locale: "en-US",
-            }),
-          });
-          const payload = (await response.json()) as
-            | FinalResumeData
-            | { error?: { message?: string } };
-          if (!response.ok || !("document" in payload)) {
-            throw new Error(
-              "error" in payload
-                ? payload.error?.message ?? "Resume generation failed."
-                : "Resume generation failed.",
+    try {
+      await Promise.all(
+        nextJobs.map(async (job) => {
+          const draft = readyDrafts.find((item) => item.draft.id === job.draftId)?.draft;
+          if (!draft) return;
+          try {
+            const response = await fetch("/api/resume/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jobDescriptionText: draft.text,
+                profile,
+                locale: "en-US",
+              }),
+            });
+            const payload = (await response.json()) as
+              | FinalResumeData
+              | { error?: { message?: string } };
+            if (!response.ok || !("document" in payload)) {
+              throw new Error(
+                "error" in payload
+                  ? payload.error?.message ?? "Resume generation failed."
+                  : "Resume generation failed.",
+              );
+            }
+            setJobs((current) =>
+              current.map((item) =>
+                item.id === job.id
+                  ? {
+                      ...item,
+                      status: "finishing",
+                      pendingResume: payload,
+                    }
+                  : item,
+              ),
+            );
+          } catch (caught) {
+            setJobs((current) =>
+              current.map((item) =>
+                item.id === job.id
+                  ? {
+                      ...item,
+                      status: "error",
+                      progress: null,
+                      pendingResume: null,
+                      resume: null,
+                      error:
+                        caught instanceof Error
+                          ? caught.message
+                          : "Resume generation failed.",
+                    }
+                  : item,
+              ),
             );
           }
-          setJobs((current) =>
-            current.map((item) =>
-              item.id === job.id
-                ? {
-                    ...item,
-                    status: "finishing",
-                    pendingResume: payload,
-                  }
-                : item,
-            ),
-          );
-        } catch (caught) {
-          setJobs((current) =>
-            current.map((item) =>
-              item.id === job.id
-                ? {
-                    ...item,
-                    status: "error",
-                    progress: null,
-                    pendingResume: null,
-                    resume: null,
-                    error:
-                      caught instanceof Error
-                        ? caught.message
-                        : "Resume generation failed.",
-                  }
-                : item,
-            ),
-          );
-        }
-      }),
-    );
+        }),
+      );
+    } finally {
+      for (const { draft } of readyDrafts) {
+        launchingDraftIdsRef.current.delete(draft.id);
+      }
+    }
   }
 
   return (
