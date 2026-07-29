@@ -31,7 +31,7 @@ function formatResultHeadline(role: string, company: string): string {
   return `${role} | ${company || "undefined"}`;
 }
 
-const AUTO_DOWNLOAD_FORMAT = "docx" as const;
+const AUTO_DOWNLOAD_FORMAT = "pdf" as const;
 
 function resumeFilenameFromFullName(fullName: string, format: string): string {
   const stem =
