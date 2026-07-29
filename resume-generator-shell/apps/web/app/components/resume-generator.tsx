@@ -202,11 +202,37 @@ type GenerationJob = {
   company?: string;
   status: "running" | "finishing" | "done" | "error";
   progress: GenerationProgress | null;
+  pdfReady: PdfReadyState;
   pendingResume: FinalResumeData | null;
   resume: FinalResumeData | null;
   error: string;
   autoDownloadError?: string | undefined;
 };
+
+type PdfReadyState = {
+  percent: number;
+  phase: "generating" | "exporting" | "ready" | "error";
+  label: string;
+};
+
+function initialPdfReadyState(): PdfReadyState {
+  return {
+    percent: 4,
+    phase: "generating",
+    label: "Preparing PDF…",
+  };
+}
+
+function pdfReadyFromGeneration(percent: number, label: string): PdfReadyState {
+  // Leave the final stretch for PDF export/download.
+  const mapped = Math.max(4, Math.min(90, Math.round(percent * 0.9)));
+  return {
+    percent: mapped,
+    phase: "generating",
+    label: percent >= 92 ? "Finalizing resume…" : label || "Preparing PDF…",
+  };
+}
+
 
 function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -302,13 +328,34 @@ export default function ResumeGenerator() {
   function queueAutoDownload(jobId: string, resume: FinalResumeData) {
     if (autoDownloadedJobIdsRef.current.has(jobId)) return;
     autoDownloadedJobIdsRef.current.add(jobId);
+    setJobs((current) =>
+      current.map((item) =>
+        item.id === jobId
+          ? {
+              ...item,
+              pdfReady: {
+                percent: 94,
+                phase: "exporting",
+                label: "Writing PDF…",
+              },
+            }
+          : item,
+      ),
+    );
     void autoDeliverGeneratedResume(resume, AUTO_DOWNLOAD_FORMAT)
       .then(() => {
         setJobs((current) =>
           current.map((item) => {
             if (item.id !== jobId) return item;
             const { autoDownloadError: _removed, ...rest } = item;
-            return rest;
+            return {
+              ...rest,
+              pdfReady: {
+                percent: 100,
+                phase: "ready",
+                label: "PDF ready",
+              },
+            };
           }),
         );
       })
@@ -320,7 +367,17 @@ export default function ResumeGenerator() {
         console.error(message);
         setJobs((current) =>
           current.map((item) =>
-            item.id === jobId ? { ...item, autoDownloadError: message } : item,
+            item.id === jobId
+              ? {
+                  ...item,
+                  autoDownloadError: message,
+                  pdfReady: {
+                    percent: item.pdfReady.percent,
+                    phase: "error",
+                    label: "PDF export failed",
+                  },
+                }
+              : item,
           ),
         );
         // Allow a later retry from the done-effect if this attempt failed.
@@ -359,12 +416,17 @@ export default function ResumeGenerator() {
       setJobs((current) =>
         current.map((job) => {
           if (job.status === "running") {
+            const progress = advanceGenerationProgress(
+              job.progress,
+              PROGRESS_HOLD_PERCENT,
+            );
             return {
               ...job,
-              progress: advanceGenerationProgress(
-                job.progress,
-                PROGRESS_HOLD_PERCENT,
-              ),
+              progress,
+              pdfReady:
+                job.pdfReady.phase === "generating"
+                  ? pdfReadyFromGeneration(progress.percent, progress.label)
+                  : job.pdfReady,
             };
           }
           if (job.status === "finishing") {
@@ -383,9 +445,24 @@ export default function ResumeGenerator() {
                 pendingResume: null,
                 role,
                 title: formatResultHeadline(role, company),
+                pdfReady:
+                  job.pdfReady.phase === "ready" || job.pdfReady.phase === "error"
+                    ? job.pdfReady
+                    : {
+                        percent: Math.max(job.pdfReady.percent, 92),
+                        phase: "exporting",
+                        label: "Writing PDF…",
+                      },
               };
             }
-            return { ...job, progress: nextProgress };
+            return {
+              ...job,
+              progress: nextProgress,
+              pdfReady:
+                job.pdfReady.phase === "generating"
+                  ? pdfReadyFromGeneration(nextProgress.percent, nextProgress.label)
+                  : job.pdfReady,
+            };
           }
           return job;
         }),
@@ -556,6 +633,7 @@ export default function ResumeGenerator() {
         company: labels.company,
         status: "running" as const,
         progress: initialGenerationProgress(),
+        pdfReady: initialPdfReadyState(),
         pendingResume: null,
         resume: null,
         error: "",
@@ -950,6 +1028,7 @@ export default function ResumeGenerator() {
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      pdfReady={job.pdfReady}
                       autoDownloadError={job.autoDownloadError}
                       onClose={() => closeJob(job.id)}
                     />
@@ -966,10 +1045,15 @@ export default function ResumeGenerator() {
                           <div className="job-index">{index + 1}</div>
                           <div className="job-list-copy">
                             <div className="job-status-row">
-                              <span className="badge">Running</span>
+                              <span className="badge">
+                                {job.pdfReady.phase === "exporting"
+                                  ? "Writing PDF"
+                                  : "Running"}
+                              </span>
                             </div>
                             <strong className="job-headline">{job.title}</strong>
                           </div>
+                          <RoundPdfProgress pdfReady={job.pdfReady} />
                           <button
                             type="button"
                             className="secondary-action entry-remove job-close"
@@ -980,7 +1064,10 @@ export default function ResumeGenerator() {
                             <span aria-hidden>×</span>
                           </button>
                         </div>
-                        <GenerationProgressPanel progress={job.progress} />
+                        <GenerationProgressPanel
+                          progress={job.progress}
+                          pdfReady={job.pdfReady}
+                        />
                       </div>
                     </div>
                   );
@@ -1021,28 +1108,90 @@ export default function ResumeGenerator() {
   );
 }
 
+function RoundPdfProgress({
+  pdfReady,
+  size = 72,
+}: {
+  pdfReady: PdfReadyState;
+  size?: number;
+}) {
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - Math.min(100, Math.max(0, pdfReady.percent)) / 100);
+  const tone =
+    pdfReady.phase === "ready"
+      ? "ready"
+      : pdfReady.phase === "error"
+        ? "error"
+        : "active";
+
+  return (
+    <div
+      className={`round-pdf-progress tone-${tone}`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pdfReady.percent}
+      aria-label={pdfReady.label}
+      title={pdfReady.label}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <circle
+          className="round-pdf-track"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <circle
+          className="round-pdf-value"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <div className="round-pdf-center">
+        <strong>{pdfReady.percent}%</strong>
+        <span>{pdfReady.phase === "ready" ? "PDF ready" : "PDF"}</span>
+      </div>
+    </div>
+  );
+}
+
 function GenerationProgressPanel({
   progress,
+  pdfReady,
 }: {
   progress: GenerationProgress;
+  pdfReady: PdfReadyState;
 }) {
   return (
     <div className="generation-progress" aria-live="polite">
-      <div className="generation-progress-head">
-        <strong>Generating resume</strong>
-        <span>{progress.percent}%</span>
+      <div className="generation-progress-layout">
+        <RoundPdfProgress pdfReady={pdfReady} size={96} />
+        <div className="generation-progress-copy">
+          <div className="generation-progress-head">
+            <strong>
+              {pdfReady.phase === "ready"
+                ? "PDF ready"
+                : pdfReady.phase === "exporting"
+                  ? "Writing PDF"
+                  : "Preparing PDF"}
+            </strong>
+            <span>{pdfReady.percent}%</span>
+          </div>
+          <p className="generation-progress-label">{pdfReady.label}</p>
+          <p className="generation-progress-sublabel">{progress.label}</p>
+        </div>
       </div>
-      <div
-        className="generation-progress-bar"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress.percent}
-        aria-label={progress.label}
-      >
-        <span style={{ width: `${progress.percent}%` }} />
-      </div>
-      <p className="generation-progress-label">{progress.label}</p>
       <ol className="generation-progress-steps">
         {GENERATION_STEPS.map((step, index) => {
           const state =
@@ -1058,6 +1207,18 @@ function GenerationProgressPanel({
             </li>
           );
         })}
+        <li
+          data-state={
+            pdfReady.phase === "ready"
+              ? "done"
+              : pdfReady.phase === "exporting" || pdfReady.phase === "error"
+                ? "active"
+                : "pending"
+          }
+        >
+          <span className="generation-progress-marker" aria-hidden />
+          <span>Export PDF ({pdfReady.label})</span>
+        </li>
       </ol>
     </div>
   );
@@ -1067,12 +1228,14 @@ function ResumePreview({
   resume,
   index,
   title,
+  pdfReady,
   autoDownloadError,
   onClose,
 }: {
   resume: FinalResumeData;
   index: number;
   title: string;
+  pdfReady: PdfReadyState;
   autoDownloadError?: string | undefined;
   onClose: () => void;
 }) {
@@ -1172,6 +1335,7 @@ function ResumePreview({
             </div>
             <strong className="job-headline">{title}</strong>
           </div>
+          <RoundPdfProgress pdfReady={pdfReady} />
           <button
             type="button"
             className="secondary-action entry-remove job-close"
@@ -1182,6 +1346,18 @@ function ResumePreview({
             <span aria-hidden>×</span>
           </button>
         </div>
+        {pdfReady.phase !== "ready" ? (
+          <p className="pdf-ready-status" aria-live="polite">
+            {pdfReady.label}
+          </p>
+        ) : (
+          <p className="pdf-ready-status is-ready" aria-live="polite">
+            PDF ready — saved as {resumeFilenameFromFullName(
+              resume.profile.personalInformation.fullName,
+              "pdf",
+            )}
+          </p>
+        )}
 
         <div className="download-row">
           <span className="download-label">Actions</span>
