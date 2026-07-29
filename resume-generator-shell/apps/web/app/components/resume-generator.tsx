@@ -524,14 +524,13 @@ export default function ResumeGenerator({
                 pendingResume: null,
                 role,
                 title: formatResultHeadline(role, company),
-                // Keep PDF export state if auto-download already started
-                // from the Generate click handler.
+                // Keep waiting for PDF until post-done auto-download starts.
                 pdfReady:
                   job.pdfReady.phase === "ready" ||
                   job.pdfReady.phase === "error" ||
                   job.pdfReady.phase === "exporting"
                     ? job.pdfReady
-                    : startPdfExportState(),
+                    : initialPdfReadyState(),
               };
             }
             return { ...job, progress: nextProgress };
@@ -543,6 +542,29 @@ export default function ResumeGenerator({
 
     return () => window.clearInterval(timer);
   }, [hasActiveJobs]);
+
+  useEffect(() => {
+    const readyForDownload = jobs.filter(
+      (job) =>
+        job.status === "done" &&
+        job.resume &&
+        job.pdfReady.phase === "generating" &&
+        !autoDownloadedJobIdsRef.current.has(job.id),
+    );
+    if (readyForDownload.length === 0) return;
+
+    for (const job of readyForDownload) {
+      const resume = job.resume;
+      if (!resume) continue;
+      void runAutoDownload(
+        job.id,
+        resume,
+        profile.personalInformation.fullName,
+      ).catch(() => {
+        // Error state already recorded on the job.
+      });
+    }
+  }, [jobs, profile.personalInformation.fullName]);
 
   useEffect(() => {
     if (!hasPdfExportingJobs) return;
@@ -800,8 +822,8 @@ export default function ResumeGenerator({
                 : "Resume generation failed.",
             );
           }
-          // Resume is ready — immediately export + auto-download
-          // <profile-full-name>.pdf (no second click).
+          // Resume payload is ready — finish the generation progress UI first.
+          // PDF auto-download starts only after status becomes "done".
           setJobs((current) =>
             current.map((item) =>
               item.id === job.id
@@ -809,20 +831,11 @@ export default function ResumeGenerator({
                     ...item,
                     status: "finishing",
                     pendingResume: payload,
-                    pdfReady: startPdfExportState(),
+                    pdfReady: initialPdfReadyState(),
                   }
                 : item,
             ),
           );
-          try {
-            await runAutoDownload(
-              job.id,
-              payload,
-              profile.personalInformation.fullName,
-            );
-          } catch {
-            // Error state already recorded on the job.
-          }
         } catch (caught) {
           setJobs((current) =>
             current.map((item) =>
