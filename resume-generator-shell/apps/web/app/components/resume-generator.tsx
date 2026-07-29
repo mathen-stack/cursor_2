@@ -12,7 +12,24 @@ import { PeriodDateControl } from "./period-date-control";
 import {
   detectCompanyNameFromJd,
   formatJdResultHeadline,
+  isFallbackJobRole,
 } from "../lib/detect-company-from-jd";
+
+function resolveRoleFromResume(
+  resume: FinalResumeData,
+  fallbackRole: string,
+): string {
+  if (!isFallbackJobRole(fallbackRole)) return fallbackRole;
+  const summaryRole = resume.summary?.targetRole?.title?.trim();
+  if (summaryRole) return summaryRole;
+  const experienceRole = resume.experience?.experiences?.[0]?.assignedRole?.trim();
+  if (experienceRole) return experienceRole;
+  return fallbackRole;
+}
+
+function formatResultHeadline(role: string, company: string): string {
+  return `${role} | ${company || "undefined"}`;
+}
 
 const SAMPLE_JD = `Senior Machine Learning Engineer
 Build and deploy scalable machine learning models in production environments.
@@ -244,12 +261,19 @@ export default function ResumeGenerator() {
           if (job.status === "finishing") {
             const nextProgress = advanceGenerationProgress(job.progress, 100);
             if (nextProgress.percent >= 100 && job.pendingResume) {
+              const role = resolveRoleFromResume(
+                job.pendingResume,
+                job.role,
+              );
+              const company = job.company || "undefined";
               return {
                 ...job,
                 status: "done" as const,
                 progress: null,
                 resume: job.pendingResume,
                 pendingResume: null,
+                role,
+                title: formatResultHeadline(role, company),
               };
             }
             return { ...job, progress: nextProgress };
