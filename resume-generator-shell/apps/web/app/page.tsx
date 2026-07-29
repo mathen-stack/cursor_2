@@ -1,5 +1,5 @@
-import ResumeGenerator from "./components/resume-generator";
+import AuthenticatedApp from "./components/authenticated-app";
 
 export default function HomePage() {
-  return <ResumeGenerator />;
+  return <AuthenticatedApp />;
 }

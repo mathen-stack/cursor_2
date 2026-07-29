@@ -1,6 +1,16 @@
 import type { CareerEntry, UserProfile } from "@resume/contracts";
 
-export const SAVED_PROFILE_STORAGE_KEY = "resume-tailor:saved-profile:v1";
+export const SAVED_PROFILE_STORAGE_KEY_PREFIX = "resume-tailor:saved-profile:v1";
+
+export function savedProfileStorageKey(username?: string | null): string {
+  const safeUser =
+    username
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "guest";
+  return `${SAVED_PROFILE_STORAGE_KEY_PREFIX}:${safeUser}`;
+}
 
 type SavedProfileRecord = {
   version: 1;
@@ -121,13 +131,13 @@ export function normalizeStoredProfile(value: unknown): UserProfile | null {
   };
 }
 
-export function loadSavedProfile(): {
+export function loadSavedProfile(username?: string | null): {
   profile: UserProfile;
   savedAt: string;
 } | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(SAVED_PROFILE_STORAGE_KEY);
+    const raw = window.localStorage.getItem(savedProfileStorageKey(username));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SavedProfileRecord>;
     const profile = normalizeStoredProfile(parsed.profile);
@@ -144,7 +154,10 @@ export function loadSavedProfile(): {
   }
 }
 
-export function saveProfileToStorage(profile: UserProfile): {
+export function saveProfileToStorage(
+  profile: UserProfile,
+  username?: string | null,
+): {
   savedAt: string;
   profile: UserProfile;
 } {
@@ -158,11 +171,14 @@ export function saveProfileToStorage(profile: UserProfile): {
     savedAt,
     profile: normalized,
   };
-  window.localStorage.setItem(SAVED_PROFILE_STORAGE_KEY, JSON.stringify(record));
+  window.localStorage.setItem(
+    savedProfileStorageKey(username),
+    JSON.stringify(record),
+  );
   return { savedAt, profile: normalized };
 }
 
-export function clearSavedProfile(): void {
+export function clearSavedProfile(username?: string | null): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SAVED_PROFILE_STORAGE_KEY);
+  window.localStorage.removeItem(savedProfileStorageKey(username));
 }

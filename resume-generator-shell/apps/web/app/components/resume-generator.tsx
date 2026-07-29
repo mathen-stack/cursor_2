@@ -346,7 +346,13 @@ function atsScoreClass(score: number): string {
   return "low";
 }
 
-export default function ResumeGenerator() {
+export default function ResumeGenerator({
+  user,
+  onLogout,
+}: {
+  user: { username: string; displayName: string };
+  onLogout: () => void | Promise<void>;
+}) {
   const [jdDrafts, setJdDrafts] = useState<JdDraft[]>([
     createJdDraft("", "JD-001"),
   ]);
@@ -360,14 +366,18 @@ export default function ResumeGenerator() {
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const saved = loadSavedProfile();
+    const saved = loadSavedProfile(user.username);
     if (saved) {
       setProfile(saved.profile);
       setProfileSavedAt(saved.savedAt);
       setProfileSaveMessage("Saved profile loaded");
+    } else {
+      setProfile(createEmptyProfile());
+      setProfileSavedAt(null);
+      setProfileSaveMessage("");
     }
     setProfileHydrated(true);
-  }, []);
+  }, [user.username]);
 
   async function runAutoDownload(
     jobId: string,
@@ -573,7 +583,7 @@ export default function ResumeGenerator() {
       if (!profile.personalInformation.fullName.trim()) {
         throw new Error("Enter your full name before saving the profile.");
       }
-      const saved = saveProfileToStorage(profile);
+      const saved = saveProfileToStorage(profile, user.username);
       setProfile(saved.profile);
       setProfileSavedAt(saved.savedAt);
       setProfileSaveMessage("Profile saved");
@@ -808,7 +818,21 @@ export default function ResumeGenerator() {
       <header className="topbar">
         <div className="topbar-inner">
           <p className="brand">Resume Tailor</p>
-          <p className="header-username">{profile.personalInformation.fullName}</p>
+          <div className="topbar-user">
+            <div className="topbar-user-copy">
+              <p className="header-username">
+                {profile.personalInformation.fullName.trim() || user.displayName}
+              </p>
+              <p className="header-account">@{user.username}</p>
+            </div>
+            <button
+              type="button"
+              className="secondary-action topbar-logout"
+              onClick={() => void onLogout()}
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
