@@ -127,19 +127,19 @@ function appendEducation(
   appendLine(lines, section.id, "section-heading", section.heading, [section.heading]);
   for (const education of section.content) {
     const degree = `${education.degree} in ${education.field}`;
+    const period = `${education.startDate} - ${education.endDate}`;
     appendLine(
       lines,
       section.id,
       "education",
-      `${degree} | ${education.institution}`,
-      [education.degree, education.field, education.institution],
-    );
-    appendLine(
-      lines,
-      section.id,
-      "date",
-      `${education.startDate} - ${education.endDate}`,
-      [education.startDate, education.endDate],
+      `${degree} | ${education.institution} | ${period}`,
+      [
+        education.degree,
+        education.field,
+        education.institution,
+        education.startDate,
+        education.endDate,
+      ],
     );
   }
 }

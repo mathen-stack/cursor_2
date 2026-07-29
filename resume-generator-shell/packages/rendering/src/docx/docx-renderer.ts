@@ -187,7 +187,7 @@ function documentXml(data: FinalResumeData): { xml: string; emittedTokens: strin
           paragraph(
             `${textRun(degree, { bold: true })}${textRun(` | ${education.institution}`)}<w:r><w:tab/></w:r>${textRun(`${education.startDate} - ${education.endDate}`)}`,
             {
-              style: "ResumeBody",
+              style: "ResumeRoleHeading",
               spacingBeforePt: template.spacing.paragraphGapPt,
               spacingAfterPt: template.spacing.paragraphGapPt,
               tabStopTwips: contentWidth,

@@ -162,16 +162,6 @@ function newEducationEntry(index: number): UserProfile["education"][number] {
   };
 }
 
-function formatEducationPeriod(entry: {
-  startDate?: string;
-  endDate?: string;
-}): string {
-  const start = entry.startDate?.trim() ?? "";
-  const end = entry.endDate?.trim() ?? "";
-  if (start && end) return `${start} - ${end}`;
-  return start || end;
-}
-
 function atsScoreClass(score: number): string {
   if (score >= 90) return "high";
   if (score >= 75) return "mid";
@@ -1372,16 +1362,20 @@ function ResumePreview({
                       ))
                     : null}
                   {section.id === "education"
-                    ? section.content.map((entry) => (
-                        <div key={entry.educationId} className="edu-line">
-                          <strong>
-                            {entry.degree} in {entry.field} | {entry.institution}
-                          </strong>
-                          {formatEducationPeriod(entry) ? (
-                            <span>{formatEducationPeriod(entry)}</span>
-                          ) : null}
-                        </div>
-                      ))
+                    ? section.content.map((entry) => {
+                        const period = [entry.startDate, entry.endDate]
+                          .map((value) => value?.trim() ?? "")
+                          .filter(Boolean)
+                          .join(" - ");
+                        return (
+                          <div key={entry.educationId} className="edu-line">
+                            <strong>
+                              {entry.degree} in {entry.field} | {entry.institution}
+                            </strong>
+                            {period ? <span className="edu-dates">{period}</span> : null}
+                          </div>
+                        );
+                      })
                     : null}
                 </section>
               );

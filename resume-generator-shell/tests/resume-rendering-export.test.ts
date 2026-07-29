@@ -110,7 +110,7 @@ describe("resume rendering and export integrity", () => {
     expect(new TextDecoder().decode(pdf.bytes.slice(0, 8))).toBe("%PDF-1.7");
   });
 
-  it("renders education periods as a first-class date line like experience", async () => {
+  it("renders education periods visibly in TXT, HTML, and PDF exports", async () => {
     const data = await resume("PROFILE-EDU-DATES");
     const canonical = createCanonicalResume(data);
     const educationLines = canonical.lines.filter(
@@ -120,19 +120,31 @@ describe("resume rendering and export integrity", () => {
     expect(educationLines.map((line) => line.kind)).toEqual([
       "section-heading",
       "education",
-      "date",
     ]);
     expect(educationLines[1]?.text).toBe(
-      "Bachelor of Science in Computer Science | Example University",
+      "Bachelor of Science in Computer Science | Example University | 2014-09 - 2018-06",
     );
-    expect(educationLines[2]?.text).toBe("2014-09 - 2018-06");
     expect(canonical.plainText).toContain("2014-09 - 2018-06");
+    expect(canonical.tokens).toEqual(
+      expect.arrayContaining(["2014-09", "2018-06"]),
+    );
 
     const html = await new ProductionResumeRenderer().export(data, "html");
     const htmlText = new TextDecoder().decode(html.bytes);
     expect(htmlText).toContain("2014-09 - 2018-06");
     expect(htmlText).toMatch(
       /Bachelor of Science in Computer Science \| Example University[\s\S]*2014-09 - 2018-06/,
+    );
+
+    const txt = await new ProductionResumeRenderer().export(data, "txt");
+    const txtText = new TextDecoder().decode(txt.bytes);
+    expect(txtText).toMatch(
+      /EDUCATION\nBachelor of Science in Computer Science \| Example University \| 2014-09 - 2018-06/,
+    );
+
+    const pdf = await new ProductionResumeRenderer().export(data, "pdf");
+    expect(pdf.emittedTokens).toEqual(
+      expect.arrayContaining(["2014-09", "2018-06"]),
     );
   });
 

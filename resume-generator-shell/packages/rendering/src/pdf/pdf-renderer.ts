@@ -118,12 +118,15 @@ function addText(
     indentFirst?: number;
     indentFollowing?: number;
     after?: number;
+    /** When false, draw text at the current Y without advancing the cursor. */
+    advance?: boolean;
   } = {},
 ): void {
   const size = options.size ?? context.bodySize;
   const maxWidth = options.maxWidth ?? context.contentWidth;
   const lineHeight = options.lineHeight ?? Math.max(size * 1.15, context.lineHeight);
   const lines = wrapText(text, maxWidth, size);
+  const advance = options.advance !== false;
   ensureSpace(context, lines.length * lineHeight + (options.after ?? 0));
   lines.forEach((line, index) => {
     const estimatedWidth = codePoints(line).length * size * 0.5;
@@ -142,9 +145,41 @@ function addText(
     context.current.commands.push(
       `BT /${font} ${size.toFixed(2)} Tf${horizontalScale} 1 0 0 1 ${x.toFixed(2)} ${context.current.y.toFixed(2)} Tm <${textHex}> Tj ET`,
     );
-    context.current.y -= lineHeight;
+    if (advance) context.current.y -= lineHeight;
   });
-  context.current.y -= options.after ?? 0;
+  if (advance) context.current.y -= options.after ?? 0;
+}
+
+/** Draw left text and a right-aligned date on the same baseline. */
+function addLineWithTrailingDate(
+  context: PdfLayoutContext,
+  leftText: string,
+  dateText: string,
+  options: {
+    size?: number;
+    bold?: boolean;
+    lineHeight?: number;
+    after?: number;
+  } = {},
+): void {
+  const size = options.size ?? context.bodySize;
+  const lineHeight = options.lineHeight ?? Math.max(size * 1.15, context.lineHeight);
+  const after = options.after ?? 0;
+  ensureSpace(context, lineHeight + after);
+  addText(context, leftText, {
+    size,
+    bold: options.bold,
+    lineHeight,
+    maxWidth: Math.max(40, context.contentWidth - size * 8),
+    advance: false,
+  });
+  addText(context, dateText, {
+    size: context.bodySize,
+    align: "right",
+    lineHeight,
+    advance: false,
+  });
+  context.current.y -= lineHeight + after;
 }
 
 function addRule(context: PdfLayoutContext, y: number): void {
@@ -260,17 +295,17 @@ function renderDocument(data: FinalResumeData): {
       for (const experience of section.content) {
         ensureSpace(context, context.lineHeight * 3);
         context.current.y -= template.spacing.entryGapPt;
-        addText(context, `${experience.assignedRole} | ${experience.companyName}`, {
-          size: template.typography.roleHeadingSizePt,
-          bold: true,
-          lineHeight: template.typography.roleHeadingSizePt * 1.15,
-        });
-        addText(context, `${experience.startDate} - ${experience.endDate}`, {
-          size: template.typography.bodySizePt,
-          align: "right",
-          lineHeight: context.lineHeight,
-          after: template.spacing.paragraphGapPt,
-        });
+        addLineWithTrailingDate(
+          context,
+          `${experience.assignedRole} | ${experience.companyName}`,
+          `${experience.startDate} - ${experience.endDate}`,
+          {
+            size: template.typography.roleHeadingSizePt,
+            bold: true,
+            lineHeight: template.typography.roleHeadingSizePt * 1.15,
+            after: template.spacing.paragraphGapPt,
+          },
+        );
         context.emittedTokens.push(
           experience.assignedRole,
           experience.companyName,
@@ -296,15 +331,14 @@ function renderDocument(data: FinalResumeData): {
     if (section.id === "education") {
       for (const education of section.content) {
         const degree = `${education.degree} in ${education.field}`;
-        addText(context, `${degree} | ${education.institution}`, {
-          after: 0,
-        });
-        addText(context, `${education.startDate} - ${education.endDate}`, {
-          size: template.typography.bodySizePt,
-          align: "right",
-          lineHeight: context.lineHeight,
-          after: template.spacing.paragraphGapPt,
-        });
+        addLineWithTrailingDate(
+          context,
+          `${degree} | ${education.institution}`,
+          `${education.startDate} - ${education.endDate}`,
+          {
+            after: template.spacing.paragraphGapPt,
+          },
+        );
         context.emittedTokens.push(
           education.degree,
           education.field,
