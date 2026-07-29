@@ -3,6 +3,7 @@ import {
   readJsonWithLimit,
   requestLimitErrorResponse,
 } from "../../../../lib/request-limits";
+import { saveResumeToDownloadFolder } from "../../../../lib/resume-download-store";
 import { getResumeRenderer } from "../../../../lib/resume-rendering-service";
 
 export const runtime = "nodejs";
@@ -45,15 +46,17 @@ export async function POST(request: Request): Promise<Response> {
     }
     const artifact = await getResumeRenderer().export(payload.resume, payload.format);
     const body = Buffer.from(artifact.bytes);
+    const savedPath = await saveResumeToDownloadFolder(artifact.filename, artifact.bytes);
     return new Response(body, {
       status: 200,
       headers: {
         "Content-Type": artifact.mimeType,
-        "Content-Disposition": `attachment; filename="${artifact.filename}"`,
+        "Content-Disposition": `attachment; filename="download/${artifact.filename}"`,
         "Content-Length": String(artifact.byteLength),
         "X-Resume-Checksum": artifact.artifactChecksum,
         "X-Resume-Source-Fingerprint": artifact.sourceDocumentFingerprint,
         "X-Resume-Export-Status": artifact.validation.overallStatus,
+        "X-Resume-Saved-Path": savedPath,
         "Cache-Control": "no-store",
       },
     });

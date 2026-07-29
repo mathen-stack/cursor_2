@@ -4,6 +4,8 @@ node_modules
 dist
 coverage
 artifacts
+download/*
+!download/.gitkeep
 *.tsbuildinfo
 .env
 .env.*

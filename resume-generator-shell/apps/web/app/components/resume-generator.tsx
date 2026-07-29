@@ -60,12 +60,12 @@ async function downloadGeneratedResume(
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const filenameMatch = disposition.match(/filename="([^"]+)"/);
-  const filename =
-    filenameMatch?.[1] ??
-    resumeFilenameFromFullName(
-      resume.profile.personalInformation.fullName,
-      format,
-    );
+  const fallbackName = resumeFilenameFromFullName(
+    resume.profile.personalInformation.fullName,
+    format,
+  );
+  // Prefer download/<full-name>.ext so the browser saves under a download folder.
+  const filename = filenameMatch?.[1] ?? `download/${fallbackName}`;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
