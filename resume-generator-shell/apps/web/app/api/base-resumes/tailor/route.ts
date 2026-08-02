@@ -147,6 +147,9 @@ export async function POST(request: Request): Promise<Response> {
       jobDescriptionText: jd,
       profile: generationProfile,
       locale: payload.locale || "en-US",
+      // Preserve-tailor only needs JD bullet candidates. Do not hard-stop when
+      // experience-engine rejects a weak composed bullet (Home stays strict).
+      approvalPolicy: "preserve-tailor",
     });
 
     const resume = assemblePreservedBaseResumeTailor({

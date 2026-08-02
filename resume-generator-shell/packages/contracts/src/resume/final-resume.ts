@@ -17,22 +17,32 @@ import type {
 } from "../engines/template";
 import type { ResumeWordedReadinessReport } from "./readiness";
 
+export const ResumeApprovalPolicySchema = z.enum(["strict", "preserve-tailor"]);
+export type ResumeApprovalPolicy = z.infer<typeof ResumeApprovalPolicySchema>;
+
 export const ResumeGenerationRequestSchema = z.object({
   jobDescription: JobDescriptionSchema,
   profile: UserProfileSchema,
   locale: z.string().min(2).default("en-US"),
+  /**
+   * strict (default): every engine must approve (Home generate).
+   * preserve-tailor: allow experience/summary/skills rejection; template must still approve.
+   */
+  approvalPolicy: ResumeApprovalPolicySchema.default("strict"),
 });
 
 export interface ResumeGenerationRequest {
   jobDescription: JobDescription;
   profile: UserProfile;
   locale: string;
+  approvalPolicy?: ResumeApprovalPolicy;
 }
 
 export const ResumeGenerationSubmissionSchema = z.object({
   jobDescriptionText: z.string().min(50),
   profile: UserProfileSchema,
   locale: z.string().min(2).default("en-US"),
+  approvalPolicy: ResumeApprovalPolicySchema.default("strict"),
 });
 
 export type ResumeGenerationSubmission = z.infer<

@@ -161,8 +161,18 @@ export class ResumeOrchestrator {
       templateResult.output,
     ];
     outputs.forEach((output) => assertContextMatch(context, output));
-    if (outputs.some((output) => output.status !== "approved")) {
-      throw new ResumeEngineRejectedError(outputs);
+    const approvalPolicy = safeRequest.approvalPolicy ?? "strict";
+    const blockingOutputs = outputs.filter((output) => {
+      if (output.status === "approved") return false;
+      // Preserve-tailor overwrites summary/skills and only needs JD bullet
+      // candidates from experience — do not hard-stop on those engines.
+      if (approvalPolicy === "preserve-tailor") {
+        return output.engineName === "template-engine";
+      }
+      return true;
+    });
+    if (blockingOutputs.length > 0) {
+      throw new ResumeEngineRejectedError(blockingOutputs);
     }
 
     const orchestration: ResumeOrchestrationTelemetry = {
@@ -177,13 +187,30 @@ export class ResumeOrchestrator {
       ],
     };
 
+    // Preserve-tailor assembly overwrites summary/skills/bullets. Coerce
+    // non-blocking engine statuses so the assembler gate does not hard-stop
+    // after a weak JD bullet candidate was rejected.
+    const allowUnapprovedContentEngines = approvalPolicy === "preserve-tailor";
+    const summaryForAssembly =
+      allowUnapprovedContentEngines && summaryResult.output.status !== "approved"
+        ? { ...summaryResult.output, status: "approved" as const }
+        : summaryResult.output;
+    const skillsForAssembly =
+      allowUnapprovedContentEngines && skillsResult.output.status !== "approved"
+        ? { ...skillsResult.output, status: "approved" as const }
+        : skillsResult.output;
+    const experienceForAssembly =
+      allowUnapprovedContentEngines && experienceResult.output.status !== "approved"
+        ? { ...experienceResult.output, status: "approved" as const }
+        : experienceResult.output;
+
     const assembled = this.assembler.assemble({
       context,
       jobDescription: safeRequest.jobDescription,
       profile: safeRequest.profile,
-      summary: summaryResult.output,
-      skills: skillsResult.output,
-      experience: experienceResult.output,
+      summary: summaryForAssembly,
+      skills: skillsForAssembly,
+      experience: experienceForAssembly,
       template: templateResult.output,
       orchestration,
     });
