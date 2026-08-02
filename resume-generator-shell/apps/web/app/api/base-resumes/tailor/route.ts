@@ -5,6 +5,7 @@ import {
   matchBaseResumesToJd,
   pickBestBaseResumeMatch,
 } from "../../../../lib/base-resume-match";
+import { assemblePreservedBaseResumeTailor } from "../../../../lib/base-resume-preserve-tailor";
 import { baseResumeToUserProfile } from "../../../../lib/base-resume-to-profile";
 import {
   listBaseResumeRecords,
@@ -22,8 +23,10 @@ export const runtime = "nodejs";
 type TailorMode = "auto" | "manual";
 
 /**
- * Tailor an uploaded base resume to a JD using the existing generation
- * pipeline, so STAR / anti-repetition / sentence-strength rules still apply.
+ * Tailor an uploaded base resume to a JD while:
+ * 1) replacing only identification with the user's Home profile
+ * 2) preserving original summary / skills / experience / education
+ * 3) generating strongest JD bullets and appending them to every experience
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -97,8 +100,6 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Use career/education content from the uploaded resume, but always stamp
-    // the signed-in user's saved identification on the tailored output.
     const savedProfile = await readUserProfileRecord(session.username);
     const identity = savedProfile?.profile.personalInformation;
     if (!identity?.fullName?.trim() || !identity.email?.trim()) {
@@ -114,15 +115,23 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const profile = baseResumeToUserProfile(base.extracted, {
+    const identityProfile = baseResumeToUserProfile(base.extracted, {
       profileId: `PROFILE-${base.id}`,
       identityFrom: identity,
     });
 
-    const resume = await getResumeGenerationService().generate({
+    // Generate JD-strong bullets with existing quality rules, then re-assemble
+    // so original resume content is preserved and only identity + JD bullets change.
+    const generated = await getResumeGenerationService().generate({
       jobDescriptionText: jd,
-      profile,
+      profile: identityProfile,
       locale: payload.locale || "en-US",
+    });
+
+    const resume = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted: base.extracted,
+      identityProfile,
     });
 
     return NextResponse.json(
@@ -136,6 +145,14 @@ export async function POST(request: Request): Promise<Response> {
         },
         match,
         mode,
+        preserveMode: {
+          identityFromProfile: true,
+          preservedSummary: true,
+          preservedSkills: true,
+          preservedExperience: true,
+          preservedEducation: true,
+          appendedJdBulletsToEveryExperience: true,
+        },
       },
       { status: 201 },
     );

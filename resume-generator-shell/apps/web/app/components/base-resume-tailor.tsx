@@ -448,9 +448,9 @@ export default function BaseResumeTailor({
               <div>
                 <h2>Tailor to a job description</h2>
                 <p className="hint">
-                  Choose how to pick the source resume: auto-find the best fit from
-                  your library, or upload a resume for this JD. Your name and contact
-                  info always come from your Home profile — not the uploaded file.
+                  Auto-find or upload a resume, then tailor. We keep the original
+                  summary, skills, experience, and education; only replace your
+                  identity from Home profile; and add strong JD bullets to every role.
                 </p>
               </div>
             </div>

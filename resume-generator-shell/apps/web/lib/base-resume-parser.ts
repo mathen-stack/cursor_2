@@ -49,7 +49,14 @@ function detectStacks(text: string): string[] {
 }
 
 function sectionize(lines: string[]): Map<string, string[]> {
-  const sections = new Map<string, string[]>([["header", []], ["experience", []], ["education", []], ["skills", []], ["other", []]]);
+  const sections = new Map<string, string[]>([
+    ["header", []],
+    ["summary", []],
+    ["experience", []],
+    ["education", []],
+    ["skills", []],
+    ["other", []],
+  ]);
   let current = "header";
   for (const line of lines) {
     if (SECTION_HEADERS.test(line)) {
@@ -57,7 +64,7 @@ function sectionize(lines: string[]): Map<string, string[]> {
       if (key.includes("experience") || key.includes("employment")) current = "experience";
       else if (key.includes("education")) current = "education";
       else if (key.includes("skill") || key.includes("technolog")) current = "skills";
-      else if (key.includes("summary")) current = "other";
+      else if (key.includes("summary")) current = "summary";
       else current = "other";
       continue;
     }
@@ -196,12 +203,14 @@ export function parseBaseResumeText(rawText: string): BaseResumeExtracted {
   const lines = cleanLines(text);
   const sections = sectionize(lines);
   const header = sections.get("header") ?? [];
+  const summaryLines = sections.get("summary") ?? [];
   const experienceLines =
     (sections.get("experience")?.length ?? 0) > 0
       ? sections.get("experience")!
       : lines;
   const educationLines = sections.get("education") ?? [];
   const skillLines = sections.get("skills") ?? [];
+  const summary = summaryLines.join(" ").replace(/\s+/g, " ").trim();
 
   const email = text.match(EMAIL_RE)?.[0];
   const phone = text.match(PHONE_RE)?.[0];
@@ -250,6 +259,7 @@ export function parseBaseResumeText(rawText: string): BaseResumeExtracted {
       ...(linkedin ? { linkedin } : {}),
       ...(portfolio ? { portfolio } : {}),
     },
+    summary,
     experiences,
     education:
       education.length > 0

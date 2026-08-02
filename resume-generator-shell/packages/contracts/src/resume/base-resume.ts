@@ -22,6 +22,8 @@ export const BaseResumeExtractedSchema = z.object({
     phone: z.string().optional(),
     location: z.string().optional(),
   }),
+  /** Original professional summary text, when present on the uploaded resume. */
+  summary: z.string().default(""),
   experiences: z.array(BaseResumeExperienceSchema).default([]),
   education: z.array(EducationEntrySchema.partial().extend({
     educationId: z.string().min(1),

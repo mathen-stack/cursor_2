@@ -1,15 +1,30 @@
 import { describe, expect, it } from "vitest";
+import type { BaseResumeRecord } from "@resume/contracts";
+import {
+  ImmutableFinalResumeAssembler,
+  ResumeOrchestrator,
+  createJobDescription,
+} from "@resume/core";
+import {
+  createProductionExperienceEngine,
+  createProductionSkillsEngine,
+  createProductionSummaryEngine,
+  createProductionTemplateEngine,
+} from "@resume/engines";
 import { parseBaseResumeText } from "../apps/web/lib/base-resume-parser";
 import {
   matchBaseResumesToJd,
   pickBestBaseResumeMatch,
 } from "../apps/web/lib/base-resume-match";
+import { assemblePreservedBaseResumeTailor } from "../apps/web/lib/base-resume-preserve-tailor";
 import { baseResumeToUserProfile } from "../apps/web/lib/base-resume-to-profile";
-import type { BaseResumeRecord } from "@resume/contracts";
 
 const SAMPLE_RESUME = `Alex Morgan
 alex.morgan@example.com | +1 555 0142 | Remote
 https://linkedin.com/in/alex-morgan
+
+Professional Summary
+Frontend engineer focused on React platforms, design systems, and reliable realtime UX.
 
 Professional Experience
 
@@ -126,4 +141,90 @@ Integrate WebSockets and collaborate with product teams.`,
     expect(pickBestBaseResumeMatch(matches)?.title).toBe("Frontend base");
     expect(matches[0]?.matchedStacks.length).toBeGreaterThan(0);
   });
+});
+
+describe("preserved base-resume tailor", () => {
+  it("keeps original content, swaps identity, and appends JD bullets to every role", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
+
+    const identityProfile = baseResumeToUserProfile(extracted, {
+      profileId: "PROFILE-PRESERVE",
+      identityFrom: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+      },
+    });
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: identityProfile,
+      locale: "en-US",
+    });
+
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted,
+      identityProfile,
+    });
+
+    const contact = tailored.document.sections.find((section) => section.id === "contact");
+    const summary = tailored.document.sections.find(
+      (section) => section.id === "professional-summary",
+    );
+    const skills = tailored.document.sections.find((section) => section.id === "skills");
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    const education = tailored.document.sections.find(
+      (section) => section.id === "education",
+    );
+
+    expect(contact?.id === "contact" && contact.content.fullName).toBe("Kenny User");
+    expect(contact?.id === "contact" && contact.content.email).toBe("kenny@example.com");
+    expect(summary?.id === "professional-summary" && summary.content).toMatch(
+      /Frontend engineer focused on React/i,
+    );
+    expect(skills?.id === "skills" && skills.content[0]?.skills.join(" ")).toMatch(
+      /React|TypeScript/i,
+    );
+    expect(education?.id === "education" && education.content[0]?.institution).toMatch(
+      /State University|University/i,
+    );
+
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    for (const entry of experience.content) {
+      for (const original of extracted.experiences.find(
+        (item) => item.companyName === entry.companyName,
+      )?.bullets ?? []) {
+        expect(entry.bullets).toContain(original);
+      }
+      expect(entry.bullets.length).toBeGreaterThan(
+        extracted.experiences.find((item) => item.companyName === entry.companyName)
+          ?.bullets.length ?? 0,
+      );
+    }
+
+    // Uploaded identity must not appear on the tailored contact block.
+    expect(JSON.stringify(contact)).not.toContain("alex.morgan@example.com");
+    expect(tailored.assemblyValidation.overallStatus).toBe("approved");
+  }, 60_000);
 });
