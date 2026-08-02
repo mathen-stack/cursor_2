@@ -226,5 +226,18 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
     // Uploaded identity must not appear on the tailored contact block.
     expect(JSON.stringify(contact)).not.toContain("alex.morgan@example.com");
     expect(tailored.assemblyValidation.overallStatus).toBe("approved");
+
+    const { ProductionResumeRenderer } = await import("@resume/rendering");
+    const exporter = new ProductionResumeRenderer();
+    const docx = await exporter.export(tailored, "docx");
+    expect(docx.validation.overallStatus).toBe("approved");
+    expect(docx.byteLength).toBeGreaterThan(100);
+    const pdf = await exporter.export(tailored, "pdf");
+    expect(pdf.validation.overallStatus).toBe("approved");
+    const txt = await exporter.export(tailored, "txt");
+    expect(new TextDecoder().decode(txt.bytes)).toMatch(/Kenny User/);
+    expect(new TextDecoder().decode(txt.bytes)).toMatch(
+      /Built React and TypeScript interfaces/i,
+    );
   }, 60_000);
 });

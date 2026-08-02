@@ -124,32 +124,39 @@ export function assemblePreservedBaseResumeTailor(input: {
 
   const summary: SummaryEngineOutput = {
     ...structuredClone(generated.summary),
-    // Preserve the uploaded summary only — never replace it with a JD rewrite.
-    summary: originalSummary,
+    // Prefer the uploaded summary. If the upload had none, keep the generated
+    // summary so export integrity still has a non-empty summary token.
+    summary: originalSummary || generated.summary.summary,
   };
 
-  const preservedSkillNames = extracted.skills.slice(0, 40);
-  const skills: SkillsEngineOutput = {
-    ...structuredClone(generated.skills),
-    categories: [
-      {
-        name: "Skills",
-        skills: preservedSkillNames,
-      },
-    ],
-    skills: preservedSkillNames.map((name, index) => ({
-      skillId: `SKILL-PRESERVED-${index + 1}`,
-      name,
-      normalizedKey: name.toLocaleLowerCase(),
-      category: "Skills",
-      source: "explicit" as const,
-      priority: "high" as const,
-      score: 80,
-      evidence: [],
-      inferredFrom: [],
-      evidencedInExperience: false,
-    })),
-  };
+  const preservedSkillNames = extracted.skills
+    .map((skill) => skill.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+  const skills: SkillsEngineOutput =
+    preservedSkillNames.length > 0
+      ? {
+          ...structuredClone(generated.skills),
+          categories: [
+            {
+              name: "Skills",
+              skills: preservedSkillNames,
+            },
+          ],
+          skills: preservedSkillNames.map((name, index) => ({
+            skillId: `SKILL-PRESERVED-${index + 1}`,
+            name,
+            normalizedKey: name.toLocaleLowerCase(),
+            category: "Skills",
+            source: "explicit" as const,
+            priority: "high" as const,
+            score: 80,
+            evidence: [],
+            inferredFrom: [],
+            evidencedInExperience: false,
+          })),
+        }
+      : structuredClone(generated.skills);
 
   const experiences = (
     extracted.experiences.length > 0

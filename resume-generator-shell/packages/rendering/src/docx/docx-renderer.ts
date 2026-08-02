@@ -128,8 +128,11 @@ function documentXml(data: FinalResumeData): { xml: string; emittedTokens: strin
     emittedTokens.push(section.heading);
 
     if (section.id === "professional-summary") {
-      body.push(paragraph(textRun(section.content), { style: "ResumeBody" }));
-      emittedTokens.push(section.content);
+      const summaryText = section.content.trim();
+      if (summaryText) {
+        body.push(paragraph(textRun(section.content), { style: "ResumeBody" }));
+        emittedTokens.push(section.content);
+      }
       continue;
     }
 

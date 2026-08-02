@@ -47,25 +47,6 @@ function resumeFilenameFromFullName(fullName: string, format: string): string {
   return `${stem}.${format}`;
 }
 
-/** Ensure export/download filename uses the profile full name. */
-function resumeWithProfileFullName(
-  resume: FinalResumeData,
-  fullName: string,
-): FinalResumeData {
-  const trimmed = fullName.trim();
-  if (!trimmed) return resume;
-  return {
-    ...resume,
-    profile: {
-      ...resume.profile,
-      personalInformation: {
-        ...resume.profile.personalInformation,
-        fullName: trimmed,
-      },
-    },
-  };
-}
-
 /**
  * As soon as a resume exists: export PDF named <full-name>.pdf, save under
  * download/, and trigger an automatic browser download (no second click).
@@ -75,12 +56,10 @@ async function deliverGeneratedResume(
   format: "docx" | "pdf" | "txt" = AUTO_DOWNLOAD_FORMAT,
   profileFullName?: string,
 ): Promise<{ filename: string }> {
-  const namedResume = resumeWithProfileFullName(
-    resume,
-    profileFullName ?? resume.profile.personalInformation.fullName,
-  );
+  // Filename can use the preferred display name, but never mutate assembled
+  // resume content before export — that breaks integrity fingerprints/tokens.
   const filename = resumeFilenameFromFullName(
-    namedResume.profile.personalInformation.fullName,
+    profileFullName?.trim() || resume.profile.personalInformation.fullName,
     format,
   );
 
@@ -88,7 +67,7 @@ async function deliverGeneratedResume(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // Return PDF bytes (server also writes download/<full-name>.pdf).
-    body: JSON.stringify({ resume: namedResume, format }),
+    body: JSON.stringify({ resume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };

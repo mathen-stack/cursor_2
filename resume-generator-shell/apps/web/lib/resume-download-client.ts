@@ -11,24 +11,6 @@ export function resumeFilenameFromFullName(fullName: string, format: string): st
   return `${stem}.${format}`;
 }
 
-function resumeWithProfileFullName(
-  resume: FinalResumeData,
-  fullName: string,
-): FinalResumeData {
-  const trimmed = fullName.trim();
-  if (!trimmed) return resume;
-  return {
-    ...resume,
-    profile: {
-      ...resume.profile,
-      personalInformation: {
-        ...resume.profile.personalInformation,
-        fullName: trimmed,
-      },
-    },
-  };
-}
-
 function filenameFromContentDisposition(
   header: string | null,
 ): string | undefined {
@@ -71,19 +53,18 @@ export async function downloadResumeFile(
   format: "docx" | "pdf" | "txt",
   profileFullName?: string,
 ): Promise<{ filename: string }> {
-  const namedResume = resumeWithProfileFullName(
-    resume,
-    profileFullName ?? resume.profile.personalInformation.fullName,
-  );
+  // Do not mutate assembled resume content before export — that breaks
+  // fingerprint / token integrity checks. Filename can still use the
+  // preferred display name independently.
   const filename = resumeFilenameFromFullName(
-    namedResume.profile.personalInformation.fullName,
+    profileFullName?.trim() || resume.profile.personalInformation.fullName,
     format,
   );
 
   const response = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume: namedResume, format }),
+    body: JSON.stringify({ resume, format }),
   });
   if (!response.ok) {
     const payload = (await response.json()) as { error?: { message?: string } };
