@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
-import { extractText } from "unpdf";
 import { cleanResumeExtractText } from "./base-resume-bullet-sanitize";
+import { extractExactPdfText } from "./pdf-text-extract";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -63,10 +63,9 @@ export async function extractResumeText(
   }
 
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
-    const result = await extractText(file.bytes, { mergePages: true });
-    const text = cleanResumeExtractText(
-      Array.isArray(result.text) ? result.text.join("\n") : String(result.text || ""),
-    );
+    // Position-aware extraction preserves reading order / bullets far better
+    // than naive PDF.js string concatenation.
+    const text = cleanResumeExtractText(await extractExactPdfText(file.bytes));
     if (!text) throw new Error("Could not extract text from the PDF resume.");
     return { text, mimeType: "application/pdf" };
   }
