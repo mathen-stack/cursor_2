@@ -15,6 +15,7 @@ import {
   requestLimitErrorResponse,
 } from "../../../../lib/request-limits";
 import { getResumeGenerationService } from "../../../../lib/resume-service";
+import { readUserProfileRecord } from "../../../../lib/user-profile-store";
 
 export const runtime = "nodejs";
 
@@ -96,10 +97,27 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const profile = baseResumeToUserProfile(
-      base.extracted,
-      `PROFILE-${base.id}`,
-    );
+    // Use career/education content from the uploaded resume, but always stamp
+    // the signed-in user's saved identification on the tailored output.
+    const savedProfile = await readUserProfileRecord(session.username);
+    const identity = savedProfile?.profile.personalInformation;
+    if (!identity?.fullName?.trim() || !identity.email?.trim()) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "PROFILE_IDENTITY_REQUIRED",
+            message:
+              "Save your name and email on Home (User Profile) before tailoring. Identification on the tailored resume comes from your profile, not the uploaded resume.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const profile = baseResumeToUserProfile(base.extracted, {
+      profileId: `PROFILE-${base.id}`,
+      identityFrom: identity,
+    });
 
     const resume = await getResumeGenerationService().generate({
       jobDescriptionText: jd,

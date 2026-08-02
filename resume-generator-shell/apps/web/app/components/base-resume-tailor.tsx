@@ -413,7 +413,8 @@ export default function BaseResumeTailor({
                 <h2>Tailor to a job description</h2>
                 <p className="hint">
                   Choose how to pick the source resume: auto-find the best fit from
-                  your library, or upload a resume for this JD.
+                  your library, or upload a resume for this JD. Your name and contact
+                  info always come from your Home profile — not the uploaded file.
                 </p>
               </div>
             </div>

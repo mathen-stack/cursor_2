@@ -46,8 +46,25 @@ describe("base resume extraction", () => {
   });
 
   it("maps extracted resume data into a generation-ready profile", () => {
-    const profile = baseResumeToUserProfile(parseBaseResumeText(SAMPLE_RESUME));
-    expect(profile.personalInformation.fullName).toMatch(/Alex/i);
+    const profile = baseResumeToUserProfile(parseBaseResumeText(SAMPLE_RESUME), {
+      identityFrom: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+        linkedin: "https://linkedin.com/in/kenny",
+      },
+    });
+    expect(profile.personalInformation.fullName).toBe("Kenny User");
+    expect(profile.personalInformation.email).toBe("kenny@example.com");
+    expect(profile.personalInformation.phone).toBe("+1 555 9999");
+    expect(profile.personalInformation.location).toBe("Austin, TX");
+    expect(profile.personalInformation.linkedin).toBe(
+      "https://linkedin.com/in/kenny",
+    );
+    // Uploaded resume identity must not leak through.
+    expect(profile.personalInformation.fullName).not.toMatch(/Alex/i);
+    expect(profile.personalInformation.email).not.toBe("alex.morgan@example.com");
     expect(profile.careerHistory.length).toBeGreaterThanOrEqual(2);
     expect(profile.careerHistory[0]?.startDate).toBeTruthy();
     expect(profile.education[0]?.institution).toBeTruthy();
