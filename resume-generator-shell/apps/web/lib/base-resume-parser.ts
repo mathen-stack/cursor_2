@@ -156,9 +156,11 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
       // Bullet/body fragments with leaked margin dates must not become fake jobs.
       const beforeLooksLikeBody =
         before.length > 70 ||
-        /^(?:•|-|\*|and|the|with|for|that|through|using|traffic|latency|decreasing|feature|accuracy)\b/i.test(
+        /^(?:•|-|\*)/.test(before) ||
+        /\b(?:traffic|latency|decreasing|feature|accuracy|high-volume|throughput|inference|pipeline|frameworks)\b/i.test(
           before,
         ) ||
+        /^(?:and|the|with|for|that|through|using)\b/i.test(before) ||
         isCorruptEncodedText(before);
       if (beforeLooksLikeBody) {
         if (current) {
