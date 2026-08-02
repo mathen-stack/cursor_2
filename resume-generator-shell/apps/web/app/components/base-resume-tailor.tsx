@@ -112,9 +112,10 @@ export default function BaseResumeTailor({
           `Uploaded “${created[0].title}”. Paste a JD and tailor from this resume.`,
         );
       } else {
+        const first = created[0];
         setMessage(
-          created.length === 1
-            ? `Saved “${created[0].title}” for auto-find matching.`
+          created.length === 1 && first
+            ? `Saved “${first.title}” for auto-find matching.`
             : `Saved ${created.length} resumes for auto-find matching.`,
         );
       }
