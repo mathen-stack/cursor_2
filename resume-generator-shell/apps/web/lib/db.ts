@@ -60,6 +60,25 @@ export async function ensureDatabaseSchema(): Promise<SqlClient> {
           profile JSONB NOT NULL
         )
       `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS resume_base_resumes (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL REFERENCES resume_accounts(username)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+          title TEXT NOT NULL,
+          original_filename TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          raw_text TEXT NOT NULL,
+          extracted JSONB NOT NULL,
+          is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS resume_base_resumes_username_idx
+        ON resume_base_resumes (username)
+      `;
     })().catch((error) => {
       schemaReady = null;
       throw error;

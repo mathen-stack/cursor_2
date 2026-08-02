@@ -50,6 +50,10 @@ export function getProfilesDirectory(): string {
   return path.join(getDataRootDirectory(), "profiles");
 }
 
+export function getBaseResumesDirectory(): string {
+  return path.join(getDataRootDirectory(), "base-resumes");
+}
+
 export function getDownloadDirectory(): string {
   const configured = process.env.RESUME_DOWNLOAD_DIR?.trim();
   if (configured) return path.resolve(configured);

@@ -8,6 +8,7 @@ export * from "./engines/summary";
 export * from "./engines/template";
 export * from "./resume/final-resume";
 export * from "./resume/export";
+export * from "./resume/base-resume";
 export * from "./production/experience-generation";
 
 export * from "./resume/readiness";

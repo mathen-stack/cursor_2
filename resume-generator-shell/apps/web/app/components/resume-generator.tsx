@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
+  BaseResumeSummary,
   CareerEntry,
   ExternalResumeFeedbackCategory,
   ExternalResumeTestRecord,
@@ -362,8 +363,29 @@ export default function ResumeGenerator({
   const [profileSaveMessage, setProfileSaveMessage] = useState("");
   const [profileSaveError, setProfileSaveError] = useState("");
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
+  const [baseResumes, setBaseResumes] = useState<BaseResumeSummary[]>([]);
+  const [baseResumeError, setBaseResumeError] = useState("");
+  const [baseResumeMessage, setBaseResumeMessage] = useState("");
+  const [baseResumeUploading, setBaseResumeUploading] = useState(false);
+  const [generationSource, setGenerationSource] = useState<
+    "profile" | "base-auto" | "base-manual"
+  >("profile");
+  const [selectedBaseResumeId, setSelectedBaseResumeId] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const launchingDraftIdsRef = useRef<Set<string>>(new Set());
   const autoDownloadedJobIdsRef = useRef<Set<string>>(new Set());
+
+  async function refreshBaseResumes(): Promise<void> {
+    const response = await fetch("/api/base-resumes", { cache: "no-store" });
+    const payload = (await response.json()) as {
+      resumes?: BaseResumeSummary[];
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.error?.message ?? "Could not load base resumes.");
+    }
+    setBaseResumes(payload.resumes ?? []);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -399,6 +421,12 @@ export default function ResumeGenerator({
       }
     }
     void loadProfile();
+    void refreshBaseResumes().catch((caught) => {
+      if (cancelled) return;
+      setBaseResumeError(
+        caught instanceof Error ? caught.message : "Could not load base resumes.",
+      );
+    });
     return () => {
       cancelled = true;
     };
@@ -615,7 +643,98 @@ export default function ResumeGenerator({
     );
   }, [profile]);
 
-  const canGenerate = profileReady && readyJdCount > 0;
+  const canTailorFromBase =
+    baseResumes.length > 0 &&
+    (generationSource === "base-auto" ||
+      (generationSource === "base-manual" && Boolean(selectedBaseResumeId)));
+  const canGenerate =
+    readyJdCount > 0 &&
+    (generationSource === "profile" ? profileReady : canTailorFromBase);
+
+  async function uploadBaseResumes(fileList: FileList | null): Promise<void> {
+    if (!fileList || fileList.length === 0) return;
+    setBaseResumeError("");
+    setBaseResumeMessage("");
+    setBaseResumeUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of Array.from(fileList)) {
+        const body = new FormData();
+        body.append("file", file);
+        body.append("title", file.name.replace(/\.[^.]+$/, ""));
+        const response = await fetch("/api/base-resumes", {
+          method: "POST",
+          body,
+        });
+        const payload = (await response.json()) as {
+          resume?: BaseResumeSummary;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.resume) {
+          throw new Error(
+            payload.error?.message ?? `Could not upload ${file.name}.`,
+          );
+        }
+        uploaded.push(payload.resume.title);
+      }
+      await refreshBaseResumes();
+      setBaseResumeMessage(
+        uploaded.length === 1
+          ? `Uploaded “${uploaded[0]}” and extracted role/stack data.`
+          : `Uploaded ${uploaded.length} resumes and extracted role/stack data.`,
+      );
+      if (generationSource === "profile") {
+        setGenerationSource("base-auto");
+      }
+    } catch (caught) {
+      setBaseResumeError(
+        caught instanceof Error ? caught.message : "Upload failed.",
+      );
+    } finally {
+      setBaseResumeUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function toggleFavoriteBaseResume(resume: BaseResumeSummary): Promise<void> {
+    setBaseResumeError("");
+    try {
+      const response = await fetch(`/api/base-resumes/${resume.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFavorite: !resume.isFavorite }),
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Could not update favorite.");
+      }
+      await refreshBaseResumes();
+    } catch (caught) {
+      setBaseResumeError(
+        caught instanceof Error ? caught.message : "Could not update favorite.",
+      );
+    }
+  }
+
+  async function removeBaseResume(resumeId: string): Promise<void> {
+    setBaseResumeError("");
+    try {
+      const response = await fetch(`/api/base-resumes/${resumeId}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Could not delete resume.");
+      }
+      if (selectedBaseResumeId === resumeId) setSelectedBaseResumeId("");
+      await refreshBaseResumes();
+      setBaseResumeMessage("Base resume removed.");
+    } catch (caught) {
+      setBaseResumeError(
+        caught instanceof Error ? caught.message : "Could not delete resume.",
+      );
+    }
+  }
 
   function markProfileEdited() {
     setProfileSaveError("");
@@ -782,7 +901,12 @@ export default function ResumeGenerator({
         if (launchingDraftIdsRef.current.has(draft.id)) return false;
         return true;
       });
-    if (!profileReady || readyDrafts.length === 0) return;
+    const usingBaseResume = generationSource !== "profile";
+    if (usingBaseResume) {
+      if (!canTailorFromBase || readyDrafts.length === 0) return;
+    } else if (!profileReady || readyDrafts.length === 0) {
+      return;
+    }
 
     for (const { draft } of readyDrafts) {
       launchingDraftIdsRef.current.add(draft.id);
@@ -819,25 +943,53 @@ export default function ResumeGenerator({
         const draft = readyDrafts.find((item) => item.draft.id === job.draftId)?.draft;
         if (!draft) return;
         try {
-          const response = await fetch("/api/resume/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jobDescriptionText: draft.text,
-              profile,
-              locale: "en-US",
-            }),
-          });
+          const response = usingBaseResume
+            ? await fetch("/api/base-resumes/tailor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jobDescriptionText: draft.text,
+                  mode: generationSource === "base-manual" ? "manual" : "auto",
+                  baseResumeId:
+                    generationSource === "base-manual"
+                      ? selectedBaseResumeId
+                      : undefined,
+                  locale: "en-US",
+                }),
+              })
+            : await fetch("/api/resume/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jobDescriptionText: draft.text,
+                  profile,
+                  locale: "en-US",
+                }),
+              });
           const payload = (await response.json()) as
             | FinalResumeData
-            | { error?: { message?: string } };
-          if (!response.ok || !("document" in payload)) {
+            | {
+                resume?: FinalResumeData;
+                baseResume?: { title?: string };
+                error?: { message?: string };
+              };
+          const resumePayload =
+            payload && "document" in payload
+              ? (payload as FinalResumeData)
+              : payload && "resume" in payload && payload.resume
+                ? payload.resume
+                : null;
+          if (!response.ok || !resumePayload) {
             throw new Error(
               "error" in payload
                 ? payload.error?.message ?? "Resume generation failed."
                 : "Resume generation failed.",
             );
           }
+          const tailoredFrom =
+            usingBaseResume && "baseResume" in payload
+              ? payload.baseResume?.title
+              : null;
           // Resume payload is ready — finish the generation progress UI first.
           // PDF auto-download starts only after status becomes "done".
           setJobs((current) =>
@@ -845,8 +997,11 @@ export default function ResumeGenerator({
               item.id === job.id
                 ? {
                     ...item,
+                    title: tailoredFrom
+                      ? `${item.title} · from ${tailoredFrom}`
+                      : item.title,
                     status: "finishing",
-                    pendingResume: payload,
+                    pendingResume: resumePayload,
                     pdfReady: initialPdfReadyState(),
                   }
                 : item,
@@ -1182,11 +1337,142 @@ export default function ResumeGenerator({
           {profileSaveError ? <p className="error">{profileSaveError}</p> : null}
         </section>
 
+        <section className="profile-card">
+          <div className="section-head">
+            <div>
+              <h2>Base Resumes</h2>
+              <p className="hint">
+                Upload perfect resumes (PDF, DOCX, or TXT). We extract roles and
+                stacks, store them, then tailor the strongest match—or your
+                favorite—to each JD. Existing bullet quality rules still apply.
+              </p>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+            multiple
+            hidden
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              void uploadBaseResumes(event.target.files)
+            }
+          />
+
+          <div className="section-actions">
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={baseResumeUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {baseResumeUploading ? "Uploading…" : "Upload resumes"}
+            </button>
+          </div>
+
+          {baseResumes.length === 0 ? (
+            <p className="hint">No base resumes yet. Upload one or more to enable JD matching.</p>
+          ) : (
+            <div className="entry-block">
+              {baseResumes.map((resume) => (
+                <div key={resume.id} className="entry-head" style={{ marginBottom: "0.75rem" }}>
+                  <div>
+                    <p className="entry-label">
+                      {resume.isFavorite ? "★ " : ""}
+                      {resume.title}
+                    </p>
+                    <p className="hint">
+                      {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
+                      {resume.stacks.length
+                        ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="section-actions">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => {
+                        setSelectedBaseResumeId(resume.id);
+                        setGenerationSource("base-manual");
+                      }}
+                    >
+                      Use
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() => void toggleFavoriteBaseResume(resume)}
+                    >
+                      {resume.isFavorite ? "Unfavorite" : "Favorite"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action entry-remove"
+                      onClick={() => void removeBaseResume(resume.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="profile-grid" style={{ marginTop: "1rem" }}>
+            <label className="profile-field">
+              <span>Generation source</span>
+              <select
+                value={generationSource}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                  setGenerationSource(
+                    event.target.value as "profile" | "base-auto" | "base-manual",
+                  )
+                }
+              >
+                <option value="profile">Profile + JD (current flow)</option>
+                <option value="base-auto" disabled={baseResumes.length === 0}>
+                  Auto-match uploaded resume
+                </option>
+                <option value="base-manual" disabled={baseResumes.length === 0}>
+                  Manual pick uploaded resume
+                </option>
+              </select>
+            </label>
+            {generationSource === "base-manual" ? (
+              <label className="profile-field">
+                <span>Selected base resume</span>
+                <select
+                  value={selectedBaseResumeId}
+                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                    setSelectedBaseResumeId(event.target.value)
+                  }
+                >
+                  <option value="">Choose a resume</option>
+                  {baseResumes.map((resume) => (
+                    <option key={resume.id} value={resume.id}>
+                      {resume.isFavorite ? "★ " : ""}
+                      {resume.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+
+          {baseResumeMessage ? <p className="inline-status">{baseResumeMessage}</p> : null}
+          {baseResumeError ? <p className="error">{baseResumeError}</p> : null}
+        </section>
+
         <section className="composer">
           <div className="section-head">
             <div>
               <h2>Job Description</h2>
-              <p className="hint">Paste a JD, then generate the resume.</p>
+              <p className="hint">
+                Paste a JD, then generate or tailor a resume. Preview and download
+                PDF/DOCX from the result card.
+              </p>
             </div>
           </div>
 
@@ -1213,12 +1499,16 @@ export default function ResumeGenerator({
               disabled={!canGenerate}
               onClick={() => generate()}
             >
-              Generate
+              {generationSource === "profile" ? "Generate" : "Tailor"}
             </button>
             <p className="inline-status">
               {hasActiveJobs
                 ? `${activeJobCount} running. You can generate again when ready.`
-                : "Ready when profile, career history, education, and JD are filled in."}
+                : generationSource === "profile"
+                  ? "Ready when profile, career history, education, and JD are filled in."
+                  : generationSource === "base-auto"
+                    ? "Ready to auto-match the strongest uploaded resume to this JD."
+                    : "Choose a favorite/base resume, then tailor it to this JD."}
             </p>
           </div>
         </section>
