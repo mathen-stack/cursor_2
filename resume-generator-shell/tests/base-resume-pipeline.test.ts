@@ -150,15 +150,16 @@ Integrate WebSockets and collaborate with product teams.`,
 });
 
 describe("base-resume JD bullet merge rules", () => {
-  it("preserves originals and only replaces the poorest 1–2 bullets", () => {
-    const { jdBulletBudget, mergeExperienceBullets } = __baseResumeBulletMergeForTests;
+  it("preserves originals and only replaces the poorest 1–2 when JD bullets are stronger", () => {
+    const { jdBulletBudget, mergeExperienceBullets, bulletQualityScore } =
+      __baseResumeBulletMergeForTests;
 
     expect(jdBulletBudget(0)).toBe(0);
     expect(jdBulletBudget(1)).toBe(1);
     expect(jdBulletBudget(3)).toBe(2);
     expect(jdBulletBudget(5)).toBe(2);
 
-    const strongPool = [
+    const strongJdBullets = [
       {
         bulletId: "G1",
         requirementId: "R1",
@@ -167,7 +168,7 @@ describe("base-resume JD bullet merge rules", () => {
         action: "a",
         result: "r",
         actionVerb: "Built",
-        directKeywords: [],
+        directKeywords: ["React", "TypeScript"],
         supportingKeywords: [],
         outcomeKeywords: [],
         finalBullet:
@@ -184,7 +185,7 @@ describe("base-resume JD bullet merge rules", () => {
         action: "a",
         result: "r",
         actionVerb: "Improved",
-        directKeywords: [],
+        directKeywords: ["WebSocket"],
         supportingKeywords: [],
         outcomeKeywords: [],
         finalBullet:
@@ -195,6 +196,38 @@ describe("base-resume JD bullet merge rules", () => {
       },
     ];
 
+    const generatedStub = {
+      jobDescription: {
+        rawText:
+          "Senior Frontend Engineer React Next.js TypeScript WebSocket realtime delivery pipelines",
+      },
+      experience: {
+        experiences: [
+          {
+            experienceId: "EXP-GEN-1",
+            companyName: "Generated Co",
+            startDate: "2022",
+            endDate: "Present",
+            assignedRole: "Senior Frontend Engineer",
+            bullets: strongJdBullets,
+          },
+        ],
+      },
+    } as unknown as import("@resume/contracts").FinalResumeData;
+
+    const jdText = generatedStub.jobDescription.rawText;
+    expect(
+      bulletQualityScore(strongJdBullets[0]!.finalBullet, {
+        roleStacks: ["React", "TypeScript"],
+        jdText,
+      }),
+    ).toBeGreaterThan(
+      bulletQualityScore("Helped with assorted UI tasks", {
+        roleStacks: ["React", "TypeScript"],
+        jdText,
+      }),
+    );
+
     const threeOriginals = [
       "Implemented RESTful API integrations and Cypress test coverage",
       "Optimized React performance for high-traffic checkout flows",
@@ -204,22 +237,24 @@ describe("base-resume JD bullet merge rules", () => {
       experienceId: "EXP-SHORT",
       experienceIndex: 0,
       originalTexts: threeOriginals,
-      strongPool,
+      roleStacks: ["React", "TypeScript", "Cypress"],
+      jdText,
+      generated: generatedStub,
     });
     // Same count — replace only, never append.
     expect(replacedShort.length).toBe(3);
     expect(
-      replacedShort.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
-    ).toBe(1);
-    expect(
       replacedShort.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
-    ).toBe(2);
+    ).toBeGreaterThanOrEqual(1);
     expect(
       replacedShort.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet)),
     ).toBe(false);
-    expect(replacedShort.some((bullet) => /Cypress test coverage/i.test(bullet.finalBullet))).toBe(
-      true,
-    );
+    // Stronger originals stay.
+    expect(
+      replacedShort.some((bullet) => /Cypress test coverage|React performance/i.test(bullet.finalBullet)),
+    ).toBe(true);
+    // Strong JD bullets lead the role.
+    expect(replacedShort[0]?.requirementId).not.toBe("PRESERVED-ORIGINAL");
 
     const fiveOriginals = [
       "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
@@ -232,7 +267,9 @@ describe("base-resume JD bullet merge rules", () => {
       experienceId: "EXP-REPLACE",
       experienceIndex: 0,
       originalTexts: fiveOriginals,
-      strongPool,
+      roleStacks: ["React", "TypeScript", "WebSocket"],
+      jdText,
+      generated: generatedStub,
     });
     expect(replaced.length).toBe(5);
     expect(replaced.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
