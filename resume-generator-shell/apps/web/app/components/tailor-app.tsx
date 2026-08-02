@@ -1,13 +1,13 @@
 "use client";
 
 import AuthenticatedShell from "./authenticated-shell";
-import ResumeGenerator from "./resume-generator";
+import BaseResumeTailor from "./base-resume-tailor";
 
-export default function AuthenticatedApp() {
+export default function TailorApp() {
   return (
     <AuthenticatedShell>
       {({ user, logout }) => (
-        <ResumeGenerator user={user} onLogout={logout} />
+        <BaseResumeTailor user={user} onLogout={logout} />
       )}
     </AuthenticatedShell>
   );
