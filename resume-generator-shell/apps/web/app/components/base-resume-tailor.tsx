@@ -45,6 +45,8 @@ export default function BaseResumeTailor({
   );
   const [jobDescription, setJobDescription] = useState("");
   const [matches, setMatches] = useState<BaseResumeMatchResult[]>([]);
+  const [matching, setMatching] = useState(false);
+  const [showMatches, setShowMatches] = useState(false);
   const [tailoring, setTailoring] = useState(false);
   const [result, setResult] = useState<TailorResult | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -53,6 +55,21 @@ export default function BaseResumeTailor({
   const [exportSavedAs, setExportSavedAs] = useState("");
   const libraryInputRef = useRef<HTMLInputElement | null>(null);
   const tailorUploadRef = useRef<HTMLInputElement | null>(null);
+  const matchesSectionRef = useRef<HTMLElement | null>(null);
+
+  const matchRankById = useMemo(() => {
+    const ranks = new Map<string, number>();
+    matches.forEach((match, index) => {
+      ranks.set(match.baseResumeId, index + 1);
+    });
+    return ranks;
+  }, [matches]);
+
+  const libraryById = useMemo(() => {
+    const map = new Map<string, BaseResumeSummary>();
+    for (const resume of baseResumes) map.set(resume.id, resume);
+    return map;
+  }, [baseResumes]);
 
   const canTailor = useMemo(() => {
     if (jobDescription.trim().length < 50) return false;
@@ -150,7 +167,9 @@ export default function BaseResumeTailor({
 
   async function previewMatches(): Promise<void> {
     setError("");
+    setMessage("");
     setMatches([]);
+    setShowMatches(false);
     if (jobDescription.trim().length < 50) {
       setError("Paste a job description of at least 50 characters.");
       return;
@@ -159,6 +178,7 @@ export default function BaseResumeTailor({
       setError("Upload at least one resume so auto-find has something to score.");
       return;
     }
+    setMatching(true);
     try {
       const response = await fetch("/api/base-resumes/match", {
         method: "POST",
@@ -167,14 +187,31 @@ export default function BaseResumeTailor({
       });
       const payload = (await response.json()) as {
         matches?: BaseResumeMatchResult[];
+        best?: BaseResumeMatchResult | null;
         error?: { message?: string };
       };
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Could not match resumes.");
       }
-      setMatches(payload.matches ?? []);
+      const nextMatches = payload.matches ?? [];
+      setMatches(nextMatches);
+      setShowMatches(true);
+      const best = payload.best ?? nextMatches[0] ?? null;
+      setMessage(
+        best
+          ? `Best fit: “${best.title}” (score ${best.score}). Review the ranked resumes below.`
+          : "No matching resumes found for this JD.",
+      );
+      requestAnimationFrame(() => {
+        matchesSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not match resumes.");
+    } finally {
+      setMatching(false);
     }
   }
 
@@ -331,32 +368,41 @@ export default function BaseResumeTailor({
               <p className="hint">No saved resumes yet.</p>
             ) : (
               <div className="entry-block">
-                {baseResumes.map((resume) => (
-                  <div
-                    key={resume.id}
-                    className="entry-head"
-                    style={{ marginBottom: "0.75rem" }}
-                  >
-                    <div>
-                      <p className="entry-label">{resume.title}</p>
-                      <p className="hint">
-                        {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
-                        {resume.stacks.length
-                          ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
-                          : ""}
-                      </p>
+                {baseResumes.map((resume) => {
+                  const rank = matchRankById.get(resume.id);
+                  return (
+                    <div
+                      key={resume.id}
+                      className={`entry-head library-resume${rank === 1 ? " is-best-fit" : ""}${rank ? " is-ranked" : ""}`}
+                    >
+                      <div>
+                        <p className="entry-label">
+                          {rank ? (
+                            <span className="badge badge-company" style={{ marginRight: "0.4rem" }}>
+                              #{rank}
+                            </span>
+                          ) : null}
+                          {resume.title}
+                        </p>
+                        <p className="hint">
+                          {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
+                          {resume.stacks.length
+                            ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="section-actions">
+                        <button
+                          type="button"
+                          className="secondary-action entry-remove"
+                          onClick={() => void removeResume(resume.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <div className="section-actions">
-                      <button
-                        type="button"
-                        className="secondary-action entry-remove"
-                        onClick={() => void removeResume(resume.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -462,11 +508,13 @@ export default function BaseResumeTailor({
                   type="button"
                   className="secondary-action"
                   disabled={
-                    jobDescription.trim().length < 50 || baseResumes.length === 0
+                    matching ||
+                    jobDescription.trim().length < 50 ||
+                    baseResumes.length === 0
                   }
                   onClick={() => void previewMatches()}
                 >
-                  Preview best fits
+                  {matching ? "Finding best fits…" : "Preview best fits"}
                 </button>
               ) : null}
               <button
@@ -488,24 +536,86 @@ export default function BaseResumeTailor({
               </p>
             </div>
 
-            {mode === "auto" && matches.length > 0 ? (
-              <div className="entry-block" style={{ marginTop: "1rem" }}>
-                <p className="entry-label">Best-fit ranking</p>
-                {matches.slice(0, 5).map((match, index) => (
-                  <p key={match.baseResumeId} className="hint">
-                    {index + 1}. {match.title} — score {match.score}
-                    {match.matchedStacks.length
-                      ? ` · ${match.matchedStacks.slice(0, 4).join(", ")}`
-                      : ""}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-
             {message ? <p className="inline-status">{message}</p> : null}
             {error ? <p className="error">{error}</p> : null}
           </section>
         </div>
+
+        {mode === "auto" && showMatches ? (
+          <section
+            className="board best-fits-board"
+            ref={matchesSectionRef}
+            aria-live="polite"
+          >
+            <div className="section-head">
+              <div>
+                <h2>Best-fit resumes</h2>
+                <p className="hint">
+                  Ranked against this JD. #1 is the resume Auto-find will tailor.
+                </p>
+              </div>
+            </div>
+
+            {matches.length === 0 ? (
+              <div className="empty-board">
+                <p>No best-fit resumes found for this JD.</p>
+              </div>
+            ) : (
+              <div className="job-board">
+                {matches.slice(0, 8).map((match, index) => {
+                  const summary = libraryById.get(match.baseResumeId);
+                  const isBest = index === 0;
+                  return (
+                    <div
+                      key={match.baseResumeId}
+                      className={`job-row ${isBest ? "status-done" : "status-run"}`}
+                    >
+                      <div className="job-list-main">
+                        <div className="job-list-head job-list-head--compact">
+                          <div className="job-index">{index + 1}</div>
+                          <div className="job-list-copy">
+                            <div className="job-status-row">
+                              <span
+                                className={`badge ${isBest ? "badge-done" : "badge-company"}`}
+                              >
+                                {isBest ? "Best fit" : `Rank #${index + 1}`}
+                              </span>
+                              <span className="badge badge-company">
+                                Score {match.score}
+                              </span>
+                            </div>
+                            <strong className="job-headline">{match.title}</strong>
+                            <p className="hint">
+                              {summary
+                                ? `${summary.roleCount} role${summary.roleCount === 1 ? "" : "s"}`
+                                : "Saved resume"}
+                              {summary?.stacks?.length
+                                ? ` · ${summary.stacks.slice(0, 6).join(", ")}`
+                                : ""}
+                            </p>
+                            {match.matchedStacks.length > 0 ? (
+                              <p className="hint">
+                                Matched stacks: {match.matchedStacks.slice(0, 8).join(", ")}
+                              </p>
+                            ) : null}
+                            {match.matchedRoles.length > 0 ? (
+                              <p className="hint">
+                                Matched roles: {match.matchedRoles.slice(0, 5).join(", ")}
+                              </p>
+                            ) : null}
+                            {match.reasons[0] ? (
+                              <p className="hint">{match.reasons[0]}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         <section className="board" aria-live="polite">
           <div className="section-head">

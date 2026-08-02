@@ -222,6 +222,27 @@ button:disabled {
   cursor: pointer;
 }
 
+.library-resume {
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid transparent;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.library-resume.is-ranked {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+}
+
+.library-resume.is-best-fit {
+  border-color: rgba(62, 207, 142, 0.45);
+  background: var(--run-soft);
+}
+
+.best-fits-board .job-row + .job-row {
+  margin-top: 0.65rem;
+}
+
 @media (max-width: 900px) {
   .tailor-layout {
     grid-template-columns: 1fr;
