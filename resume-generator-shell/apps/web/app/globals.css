@@ -157,6 +157,26 @@ button:disabled {
   gap: 1rem;
 }
 
+.tailor-layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.tailor-layout > .profile-card,
+.tailor-layout > .composer {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+@media (max-width: 900px) {
+  .tailor-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-user-list {
   display: grid;
   gap: 0.45rem;

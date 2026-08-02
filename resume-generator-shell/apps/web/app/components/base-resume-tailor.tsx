@@ -293,210 +293,220 @@ export default function BaseResumeTailor({
       </header>
 
       <main className="main">
-        <section className="composer">
-          <div className="section-head">
-            <div>
-              <h2>Tailor to a job description</h2>
-              <p className="hint">
-                Choose how to pick the source resume: auto-find the best fit from
-                your uploads, or upload a resume for this JD.
-              </p>
+        <div className="tailor-layout">
+          <section className="profile-card">
+            <div className="section-head">
+              <div>
+                <h2>Resume library</h2>
+                <p className="hint">
+                  Save many perfect resumes here. Auto-find uses this library to
+                  pick the most fit resume for each JD.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <fieldset className="profile-field profile-field-full" style={{ border: 0, padding: 0 }}>
-            <legend className="entry-label" style={{ marginBottom: "0.5rem" }}>
-              Source resume
-            </legend>
-            <div className="section-actions" style={{ flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className={mode === "auto" ? "primary" : "secondary-action"}
-                aria-pressed={mode === "auto"}
-                onClick={() => setMode("auto")}
-              >
-                Auto-find best fit
-              </button>
-              <button
-                type="button"
-                className={mode === "upload" ? "primary" : "secondary-action"}
-                aria-pressed={mode === "upload"}
-                onClick={() => setMode("upload")}
-              >
-                Upload resume
-              </button>
-            </div>
-            <p className="hint" style={{ marginTop: "0.65rem" }}>
-              {mode === "auto"
-                ? baseResumes.length === 0
-                  ? "Auto-find needs saved resumes first — add them in the library below."
-                  : `Will score ${baseResumes.length} saved resume${baseResumes.length === 1 ? "" : "s"} and tailor the strongest match.`
-                : uploadedForTailor
-                  ? `Using uploaded “${uploadedForTailor.title}” for this tailor.`
-                  : "Upload a PDF, DOCX, or TXT resume to tailor against this JD."}
-            </p>
-          </fieldset>
+            <input
+              ref={libraryInputRef}
+              type="file"
+              accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              multiple
+              hidden
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                void uploadFiles(event.target.files)
+              }
+            />
 
-          {mode === "upload" ? (
-            <div className="section-actions" style={{ marginTop: "0.75rem" }}>
-              <input
-                ref={tailorUploadRef}
-                type="file"
-                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                hidden
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  void uploadFiles(event.target.files, { selectForTailor: true })
-                }
-              />
+            <div className="section-actions">
               <button
                 type="button"
                 className="secondary-action"
                 disabled={uploading}
-                onClick={() => tailorUploadRef.current?.click()}
+                onClick={() => libraryInputRef.current?.click()}
               >
-                {uploading
-                  ? "Uploading…"
-                  : uploadedForTailor
-                    ? "Replace uploaded resume"
-                    : "Choose resume file"}
+                {uploading ? "Uploading…" : "Add resumes to library"}
               </button>
-              {uploadedForTailor ? (
+            </div>
+
+            {baseResumes.length === 0 ? (
+              <p className="hint">No saved resumes yet.</p>
+            ) : (
+              <div className="entry-block">
+                {baseResumes.map((resume) => (
+                  <div
+                    key={resume.id}
+                    className="entry-head"
+                    style={{ marginBottom: "0.75rem" }}
+                  >
+                    <div>
+                      <p className="entry-label">{resume.title}</p>
+                      <p className="hint">
+                        {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
+                        {resume.stacks.length
+                          ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="section-actions">
+                      <button
+                        type="button"
+                        className="secondary-action entry-remove"
+                        onClick={() => void removeResume(resume.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="composer">
+            <div className="section-head">
+              <div>
+                <h2>Tailor to a job description</h2>
+                <p className="hint">
+                  Choose how to pick the source resume: auto-find the best fit from
+                  your library, or upload a resume for this JD.
+                </p>
+              </div>
+            </div>
+
+            <fieldset
+              className="profile-field profile-field-full"
+              style={{ border: 0, padding: 0 }}
+            >
+              <legend className="entry-label" style={{ marginBottom: "0.5rem" }}>
+                Source resume
+              </legend>
+              <div className="section-actions" style={{ flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  className="secondary-action entry-remove"
-                  onClick={() => setUploadedForTailor(null)}
+                  className={mode === "auto" ? "primary" : "secondary-action"}
+                  aria-pressed={mode === "auto"}
+                  onClick={() => setMode("auto")}
                 >
-                  Clear
+                  Auto-find best fit
+                </button>
+                <button
+                  type="button"
+                  className={mode === "upload" ? "primary" : "secondary-action"}
+                  aria-pressed={mode === "upload"}
+                  onClick={() => setMode("upload")}
+                >
+                  Upload resume
+                </button>
+              </div>
+              <p className="hint" style={{ marginTop: "0.65rem" }}>
+                {mode === "auto"
+                  ? baseResumes.length === 0
+                    ? "Auto-find needs saved resumes first — add them in the library on the left."
+                    : `Will score ${baseResumes.length} saved resume${baseResumes.length === 1 ? "" : "s"} and tailor the strongest match.`
+                  : uploadedForTailor
+                    ? `Using uploaded “${uploadedForTailor.title}” for this tailor.`
+                    : "Upload a PDF, DOCX, or TXT resume to tailor against this JD."}
+              </p>
+            </fieldset>
+
+            {mode === "upload" ? (
+              <div className="section-actions" style={{ marginTop: "0.75rem" }}>
+                <input
+                  ref={tailorUploadRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  hidden
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    void uploadFiles(event.target.files, { selectForTailor: true })
+                  }
+                />
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={uploading}
+                  onClick={() => tailorUploadRef.current?.click()}
+                >
+                  {uploading
+                    ? "Uploading…"
+                    : uploadedForTailor
+                      ? "Replace uploaded resume"
+                      : "Choose resume file"}
+                </button>
+                {uploadedForTailor ? (
+                  <button
+                    type="button"
+                    className="secondary-action entry-remove"
+                    onClick={() => setUploadedForTailor(null)}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <label
+              className="profile-field profile-field-full"
+              style={{ marginTop: "1rem" }}
+            >
+              <span>Job description</span>
+              <textarea
+                value={jobDescription}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                  setJobDescription(event.target.value)
+                }
+                placeholder="Paste the full job description here"
+              />
+            </label>
+
+            <div className="composer-footer">
+              {mode === "auto" ? (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={
+                    jobDescription.trim().length < 50 || baseResumes.length === 0
+                  }
+                  onClick={() => void previewMatches()}
+                >
+                  Preview best fits
                 </button>
               ) : null}
-            </div>
-          ) : null}
-
-          <label className="profile-field profile-field-full" style={{ marginTop: "1rem" }}>
-            <span>Job description</span>
-            <textarea
-              value={jobDescription}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                setJobDescription(event.target.value)
-              }
-              placeholder="Paste the full job description here"
-            />
-          </label>
-
-          <div className="composer-footer">
-            {mode === "auto" ? (
               <button
                 type="button"
-                className="secondary-action"
-                disabled={jobDescription.trim().length < 50 || baseResumes.length === 0}
-                onClick={() => void previewMatches()}
+                className="primary"
+                disabled={!canTailor || tailoring}
+                onClick={() => void tailor()}
               >
-                Preview best fits
+                {tailoring ? "Tailoring…" : "Tailor resume"}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="primary"
-              disabled={!canTailor || tailoring}
-              onClick={() => void tailor()}
-            >
-              {tailoring ? "Tailoring…" : "Tailor resume"}
-            </button>
-            <p className="inline-status">
-              {!canTailor
-                ? mode === "auto"
-                  ? "Need a JD (50+ chars) and at least one saved resume."
-                  : "Need a JD (50+ chars) and an uploaded resume."
-                : mode === "auto"
-                  ? "Ready to auto-find the best fit and tailor it."
-                  : "Ready to tailor your uploaded resume to this JD."}
-            </p>
-          </div>
-
-          {mode === "auto" && matches.length > 0 ? (
-            <div className="entry-block" style={{ marginTop: "1rem" }}>
-              <p className="entry-label">Best-fit ranking</p>
-              {matches.slice(0, 5).map((match, index) => (
-                <p key={match.baseResumeId} className="hint">
-                  {index + 1}. {match.title} — score {match.score}
-                  {match.matchedStacks.length
-                    ? ` · ${match.matchedStacks.slice(0, 4).join(", ")}`
-                    : ""}
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          {message ? <p className="inline-status">{message}</p> : null}
-          {error ? <p className="error">{error}</p> : null}
-        </section>
-
-        <section className="profile-card">
-          <div className="section-head">
-            <div>
-              <h2>Resume library</h2>
-              <p className="hint">
-                Save many perfect resumes here. Auto-find uses this library to pick
-                the most fit resume for each JD.
+              <p className="inline-status">
+                {!canTailor
+                  ? mode === "auto"
+                    ? "Need a JD (50+ chars) and at least one saved resume."
+                    : "Need a JD (50+ chars) and an uploaded resume."
+                  : mode === "auto"
+                    ? "Ready to auto-find the best fit and tailor it."
+                    : "Ready to tailor your uploaded resume to this JD."}
               </p>
             </div>
-          </div>
 
-          <input
-            ref={libraryInputRef}
-            type="file"
-            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-            multiple
-            hidden
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              void uploadFiles(event.target.files)
-            }
-          />
+            {mode === "auto" && matches.length > 0 ? (
+              <div className="entry-block" style={{ marginTop: "1rem" }}>
+                <p className="entry-label">Best-fit ranking</p>
+                {matches.slice(0, 5).map((match, index) => (
+                  <p key={match.baseResumeId} className="hint">
+                    {index + 1}. {match.title} — score {match.score}
+                    {match.matchedStacks.length
+                      ? ` · ${match.matchedStacks.slice(0, 4).join(", ")}`
+                      : ""}
+                  </p>
+                ))}
+              </div>
+            ) : null}
 
-          <div className="section-actions">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={uploading}
-              onClick={() => libraryInputRef.current?.click()}
-            >
-              {uploading ? "Uploading…" : "Add resumes to library"}
-            </button>
-          </div>
-
-          {baseResumes.length === 0 ? (
-            <p className="hint">No saved resumes yet.</p>
-          ) : (
-            <div className="entry-block">
-              {baseResumes.map((resume) => (
-                <div
-                  key={resume.id}
-                  className="entry-head"
-                  style={{ marginBottom: "0.75rem" }}
-                >
-                  <div>
-                    <p className="entry-label">{resume.title}</p>
-                    <p className="hint">
-                      {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
-                      {resume.stacks.length
-                        ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="section-actions">
-                    <button
-                      type="button"
-                      className="secondary-action entry-remove"
-                      onClick={() => void removeResume(resume.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+            {message ? <p className="inline-status">{message}</p> : null}
+            {error ? <p className="error">{error}</p> : null}
+          </section>
+        </div>
 
         <section className="board" aria-live="polite">
           <div className="section-head">
