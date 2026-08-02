@@ -4,6 +4,8 @@
  * tailored PDFs look corrupted.
  */
 
+import { decodeEncodedPdfText } from "./pdf-encoding-decode";
+
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE =
   /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{2,4}[\s.-]?\d{2,4}(?:[\s.-]?\d{2,4})?/;
@@ -12,8 +14,10 @@ const PAGE_MARKER_RE =
   /^(?:page\s*)?\d+\s*(?:of|\/)\s*\d+$|^\d+\s+of\s+\d+$/i;
 const BARE_DATE_RE =
   /^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4}(?:\s*[-–—to]+\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4}))?$/i;
+// Short place-only lines like "Bellevue, Nebraska" / "Austin, TX".
+// Keep this tight — a loose "words, words" pattern falsely kills real bullets.
 const LOCATION_ONLY_RE =
-  /^[\p{L}][\p{L}.\s-]+,\s*(?:[A-Z]{2}|[\p{L}.\s-]+)(?:\s*,\s*[\p{L}.\s-]+)?(?:\s*\+?\d[\d\s().-]{6,})?$/u;
+  /^(?:[A-Z][\p{L}.'-]{1,24}(?:\s+[A-Z][\p{L}.'-]{1,24}){0,3}),\s*(?:[A-Z]{2}|[A-Z][\p{L}.'-]{2,24}(?:\s+[A-Z][\p{L}.'-]{1,24}){0,2})(?:\s*,\s*[A-Z][\p{L}.'\s-]{2,32})?(?:\s*\+?\d[\d\s().-]{6,})?$/u;
 const BULLET_PREFIX_RE =
   /^(?:[-*•●○▪◦–—]|\u00f0|\u00b7|\u2022|\uf0b7|ð)\s*/u;
 const WEIRD_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
@@ -23,35 +27,59 @@ const NONSENSE_BULLET_RE =
   /\b(?:improved comfortable|architected a market leader|accelerated across global|consolidated strong grasp|market leader in their space through architecture decision records)\b/i;
 
 export function cleanResumeExtractText(text: string): string {
-  return text
+  const normalized = text
     .replace(/\r/g, "")
     .replace(WEIRD_CONTROL_RE, "")
     .replace(MOJIBAKE_BULLET_RE, "• ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+  // Decode custom-encoded PDF lines (broken ToUnicode / cipher fonts).
+  return normalized
+    .split("\n")
+    .map((line) => decodeEncodedPdfText(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
-export function sanitizeBulletText(text: string): string {
-  let value = text
+/** Light cleanup used before wrapping/coalescing (no capitalize / connector strip). */
+export function softCleanBulletText(text: string): string {
+  return decodeEncodedPdfText(text)
     .replace(WEIRD_CONTROL_RE, "")
     .replace(MOJIBAKE_BULLET_RE, " ")
     .replace(BULLET_PREFIX_RE, "")
     .replace(/[–—]/g, "-")
+    // Repair words glued across PDF font runs: "andTensorRT" → "and TensorRT"
+    // (do NOT split legitimate camelCase like TypeScript / GitHub / BigQuery)
+    .replace(
+      /\b(and|the|for|with|from|into|using|via|on|to|by|of|as|or)([A-Z])/g,
+      "$1 $2",
+    )
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:])/g, "$1")
     .trim();
+}
 
-  // Drop trailing orphan date fragments leaked from PDF extraction.
+export function sanitizeBulletText(text: string): string {
+  let value = softCleanBulletText(text);
+
+  // Drop orphan date fragments leaked from PDF headers into bullet text.
   value = value
+    .replace(
+      /\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s*[-–—]\s*(?:Present|Current|Now|\d{4})\s+/i,
+      " ",
+    )
+    .replace(/\s+\d{4}\s*[-–—]\s*(?:Present|Current|Now)\s+/i, " ")
     .replace(
       /\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s*[-–—]\s*(?:Present|Current|Now|\d{4})\s*$/i,
       "",
     )
     .replace(/\s+\d{4}\s*[-–—]\s*(?:Present|Current|Now|\d{4})\s*$/i, "")
+    .replace(/\s+/g, " ")
     .trim();
 
-  // Strip trailing dangling connectors from split PDF lines.
+  // Strip trailing dangling connectors from split PDF lines (final only).
   value = value.replace(/(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough)\s*$/i, "").trim();
 
   if (value && !/[.!?]$/.test(value) && value.length > 60) {
@@ -74,7 +102,7 @@ export function isJunkBulletText(text: string): boolean {
     return true;
   }
   if (PHONE_RE.test(value) && value.replace(PHONE_RE, "").trim().length < 12) return true;
-  if (LOCATION_ONLY_RE.test(value)) return true;
+  if (value.length <= 64 && LOCATION_ONLY_RE.test(value)) return true;
   if (/^https?:\/\//i.test(value)) return true;
   if (/linkedin\.com/i.test(value) && value.length < 120) return true;
   if (NONSENSE_BULLET_RE.test(value)) return true;
@@ -107,25 +135,52 @@ export function isWeakOrBrokenBulletText(text: string): boolean {
 export function coalesceBulletLines(lines: readonly string[]): string[] {
   const merged: string[] = [];
   for (const raw of lines) {
-    const line = sanitizeBulletText(raw);
-    if (!line) continue;
-
-    const continuation =
-      merged.length > 0 &&
-      !BULLET_PREFIX_RE.test(raw.trim()) &&
-      (/^[a-z(]/.test(line) ||
-        /(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough|\/)\s*$/i.test(
-          merged[merged.length - 1] ?? "",
-        ));
-
-    if (continuation) {
-      const previous = merged[merged.length - 1] ?? "";
-      merged[merged.length - 1] = sanitizeBulletText(`${previous} ${line}`);
+    const decodedRaw = decodeEncodedPdfText(raw).trim();
+    const soft = softCleanBulletText(raw);
+    if (!soft) continue;
+    // Hard junk (contact/page lines) must never become or glue onto bullets.
+    if (
+      PAGE_MARKER_RE.test(soft) ||
+      (EMAIL_RE.test(soft) && soft.length < 80) ||
+      (INTL_PHONE_RE.test(soft) && soft.replace(INTL_PHONE_RE, "").trim().length < 24) ||
+      (PHONE_RE.test(soft) && soft.replace(PHONE_RE, "").trim().length < 12) ||
+      LOCATION_ONLY_RE.test(soft)
+    ) {
       continue;
     }
 
-    if (isJunkBulletText(line)) continue;
-    merged.push(line);
+    const startsNewBullet =
+      BULLET_PREFIX_RE.test(raw.trim()) ||
+      BULLET_PREFIX_RE.test(decodedRaw) ||
+      // Action-verb bullet starts (markers often stripped before a second coalesce pass)
+      /^(?:Established|Engineered|Delivered|Designed|Developed|Championed|Orchestrated|Integrated|Implemented|Optimized|Created|Spearheaded|Devised|Launched|Automated|Initiated|Directed|Advanced|Strengthened|Played|Resolved|Transformed|Introduced|Built|Led|Owned|Improved|Collaborated|Coordinated)\b/.test(
+        soft,
+      );
+    const previous = merged[merged.length - 1];
+    const nextIsFragment = /^[a-z(]/.test(soft) || soft.length < 48;
+    const previousOpen =
+      Boolean(previous) &&
+      (/(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough|\/)\s*$/i.test(previous!) ||
+        /-$/.test(previous!));
+
+    // Continuations are lowercase/parenthetical wraps, or short tails after an open clause.
+    const continuation =
+      Boolean(previous) &&
+      !startsNewBullet &&
+      (
+        /^[a-z(]/.test(soft) ||
+        (previousOpen && nextIsFragment) ||
+        (previousOpen && /^[\d(%]/.test(soft))
+      );
+
+    if (continuation && previous) {
+      const joiner = /-$/.test(previous) ? "" : " ";
+      merged[merged.length - 1] = softCleanBulletText(`${previous}${joiner}${soft}`);
+      continue;
+    }
+
+    if (isJunkBulletText(sanitizeBulletText(soft))) continue;
+    merged.push(soft);
   }
 
   return merged

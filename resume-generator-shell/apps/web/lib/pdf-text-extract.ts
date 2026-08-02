@@ -4,6 +4,10 @@ import {
   getDocumentProxy,
   type StructuredTextItem,
 } from "unpdf";
+import {
+  decodeEncodedPdfDocument,
+  decodeEncodedPdfText,
+} from "./pdf-encoding-decode";
 
 type TextRun = {
   str: string;
@@ -29,7 +33,9 @@ export function reconstructTextFromPdfItems(
     const pageText = reconstructPageText(pageItems);
     if (pageText) pageTexts.push(pageText);
   }
-  return pageTexts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  return decodeEncodedPdfDocument(
+    pageTexts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim(),
+  );
 }
 
 function reconstructPageText(pageItems: readonly StructuredTextItem[]): string {
@@ -60,6 +66,9 @@ function normalizeRun(item: StructuredTextItem): TextRun | null {
     // Common PDF bullet private-use / ZapfDingbats leakage → plain bullet.
     .replace(/[\uF0B7\uF0A7\uF06C\uF0D8\u25CF\u25AA\u2219]/g, "•")
     .replace(/^(?:ð\s*[•·]|ï¿½|Â·)\s*/u, "• ");
+
+  // Custom-encoded resume fonts often extract as "=" + accented Latin junk.
+  str = decodeEncodedPdfText(str);
 
   if (BULLET_CHAR_RE.test(str.trim()) && str.trim().length <= 2) {
     str = "•";
@@ -191,7 +200,10 @@ function joinRunsOnLine(runs: readonly TextRun[]): string {
     previous = run;
   }
 
-  return out.replace(/[ \t]+/g, " ").trim();
+  return out
+    .replace(/\b(and|the|for|with|from|into|using|via|on|to|by|of|as|or)([A-Z])/g, "$1 $2")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
 /**
@@ -213,5 +225,5 @@ export async function extractExactPdfText(bytes: Uint8Array): Promise<string> {
   }
 
   const fallback = await extractText(pdf, { mergePages: true });
-  return String(fallback.text || "").trim();
+  return decodeEncodedPdfDocument(String(fallback.text || "").trim());
 }

@@ -7,7 +7,9 @@ import {
   isJunkBulletText,
   sanitizeBulletList,
   sanitizeBulletText,
+  softCleanBulletText,
 } from "./base-resume-bullet-sanitize";
+import { decodeEncodedPdfText } from "./pdf-encoding-decode";
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE =
@@ -92,11 +94,26 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
   };
 
   for (const line of lines) {
+    const decodedLine = decodeEncodedPdfText(line);
     const dateMatch = DATE_RANGE_RE.exec(line);
-    const bullet = /^[-•*]\s+/.test(line) || /^[A-Z][a-z]+(?:ed|ing)\b/.test(line);
+    const bullet =
+      /^[-•*\uF0B7]\s+/.test(line) ||
+      /^[-•*\uF0B7]\s+/.test(decodedLine) ||
+      /^J\s*=/.test(line) ||
+      /^[A-Z][a-z]+(?:ed|ing)\b/.test(softCleanBulletText(line));
 
     if (dateMatch) {
       const before = line.slice(0, dateMatch.index).trim();
+      // Bullet lines sometimes leak a trailing "2018 - Present" from PDF headers.
+      // Keep them as bullets instead of opening a fake experience.
+      if (bullet || (before.length > 60 && /\b(?:by|with|for|and|the|that|from)\b/i.test(before))) {
+        if (!current) continue;
+        const soft = softCleanBulletText(line);
+        if (soft && !isJunkBulletText(sanitizeBulletText(soft))) {
+          current.bullets.push(soft);
+        }
+        continue;
+      }
       // Role/company on previous line, dates alone on this line → keep same experience.
       if (!before && current && current.bullets.length === 0) {
         current.startDate = dateMatch[1]!.trim();
@@ -174,21 +191,52 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
       continue;
     }
 
-    if (bullet || line.length > 40) {
-      const cleaned = sanitizeBulletText(line);
-      if (!cleaned || isJunkBulletText(cleaned)) continue;
+    if (bullet || line.length > 40 || /^[a-z(]/.test(line) || /-$/.test(line)) {
+      const soft = softCleanBulletText(line);
+      if (!soft) continue;
+      // Drop contact/page junk, but allow short wrap fragments to join first.
+      if (
+        /^(?:page\s*)?\d+\s*(?:of|\/)\s*\d+$/i.test(soft) ||
+        (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(soft) && soft.length < 80)
+      ) {
+        continue;
+      }
       const previous = current.bullets[current.bullets.length - 1];
+      const actionVerbStart =
+        /^(?:Established|Engineered|Delivered|Designed|Developed|Championed|Orchestrated|Integrated|Implemented|Optimized|Created|Spearheaded|Devised|Launched|Automated|Initiated|Directed|Advanced|Strengthened|Played|Resolved|Transformed|Introduced|Built|Led|Owned|Improved|Collaborated|Coordinated)\b/.test(
+          soft,
+        );
+      // PDF wrap tails sometimes keep a leading "-" even when they continue the prior bullet
+      // ("in-the-" + "- wild deepfake...").
+      const hyphenWrap =
+        typeof previous === "string" &&
+        /-$/.test(previous) &&
+        Boolean(bullet) &&
+        !actionVerbStart &&
+        soft.length < 100;
+      const startsNewBullet = (Boolean(bullet) || actionVerbStart) && !hyphenWrap;
+      const nextIsFragment = /^[a-z(]/.test(soft) || soft.length < 48;
+      const previousOpen =
+        typeof previous === "string" &&
+        (/(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough|\/)\s*$/i.test(previous) ||
+          /-$/.test(previous));
       // Join PDF-wrapped continuations onto the previous bullet when useful.
       if (
-        previous &&
-        (/^[a-z(]/.test(cleaned) ||
-          /(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough)\s*$/i.test(previous))
+        typeof previous === "string" &&
+        !startsNewBullet &&
+        (
+          /^[a-z(]/.test(soft) ||
+          (previousOpen && nextIsFragment) ||
+          (previousOpen && /^[\d(%]/.test(soft)) ||
+          hyphenWrap
+        )
       ) {
-        current.bullets[current.bullets.length - 1] = sanitizeBulletText(
-          `${previous} ${cleaned}`,
+        const joiner = /-$/.test(previous) ? "" : " ";
+        current.bullets[current.bullets.length - 1] = softCleanBulletText(
+          `${previous}${joiner}${soft}`,
         );
-      } else {
-        current.bullets.push(cleaned);
+      } else if (!isJunkBulletText(sanitizeBulletText(soft))) {
+        current.bullets.push(soft);
       }
     } else if (!current.companyName || current.companyName === "Unknown Company") {
       current.companyName = line;
