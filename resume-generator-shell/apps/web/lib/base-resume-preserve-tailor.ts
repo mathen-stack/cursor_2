@@ -10,11 +10,13 @@ import type {
 import { ImmutableFinalResumeAssembler } from "@resume/core";
 
 type ExperienceBullet = ExperienceEngineOutput["experiences"][number]["bullets"][number];
+type CareerEntry = UserProfile["careerHistory"][number];
+type EducationEntry = UserProfile["education"][number];
 
-/** Replace at most this many poor original bullets per experience. */
+/** Introduce at most this many JD bullets per experience (replace or append). */
 const JD_BULLETS_PER_ROLE = 2;
-/** JD bullet must beat the original by at least this quality margin to replace it. */
-const REPLACE_QUALITY_MARGIN = 2;
+/** Experiences with more than this many bullets replace poorest instead of appending. */
+const REPLACE_THRESHOLD_EXCLUSIVE = 4;
 
 const STRONG_VERB_RE =
   /\b(led|built|improved|reduced|increased|delivered|launched|designed|implemented|optimized|owned|drove|created|architected|scaled|automated|migrated|engineered|accelerated|strengthened)\b/i;
@@ -130,10 +132,6 @@ function rankCandidateBullets(
     });
 }
 
-/**
- * Prefer bullets generated for this same role index; fall back to the global
- * strongest JD bullets so every role still gets high-quality replacements.
- */
 function candidateJdBulletsForRole(input: {
   generated: FinalResumeData;
   experienceIndex: number;
@@ -146,7 +144,6 @@ function candidateJdBulletsForRole(input: {
     roleStacks: input.roleStacks,
     jdText: input.jdText,
   });
-
   const globalRanked = rankCandidateBullets(
     input.generated.experience.experiences.flatMap((entry) => entry.bullets),
     { roleStacks: input.roleStacks, jdText: input.jdText },
@@ -164,13 +161,32 @@ function candidateJdBulletsForRole(input: {
 }
 
 /**
- * How many original bullets to replace with JD bullets (1 or 2).
- * Never more than the originals available; never append extras.
+ * How many JD bullets to introduce (1 or 2).
+ * - originalCount > 4 → replace that many poorest
+ * - otherwise → append that many
  */
 function jdBulletBudget(originalCount: number): number {
-  if (originalCount <= 0) return 0;
+  if (originalCount <= 0) return JD_BULLETS_PER_ROLE;
   if (originalCount === 1) return 1;
   return JD_BULLETS_PER_ROLE;
+}
+
+function pickUniqueJdBullets(
+  candidates: readonly ExperienceBullet[],
+  count: number,
+  blockedTexts: ReadonlySet<string>,
+  experienceId: string,
+): ExperienceBullet[] {
+  const picked: ExperienceBullet[] = [];
+  const used = new Set<string>(blockedTexts);
+  for (const candidate of candidates) {
+    if (picked.length >= count) break;
+    const key = candidate.finalBullet.trim().toLocaleLowerCase();
+    if (!key || used.has(key)) continue;
+    used.add(key);
+    picked.push(cloneBullet(candidate, `${experienceId}-JD-${picked.length + 1}`));
+  }
+  return picked;
 }
 
 function mergeExperienceBullets(input: {
@@ -188,87 +204,109 @@ function mergeExperienceBullets(input: {
   const originalBullets = input.originalTexts.map((text, bulletIndex) =>
     asPreservedBullet(text, `${input.experienceId}-ORIG-${bulletIndex + 1}`),
   );
-
   const candidates = candidateJdBulletsForRole({
     generated: input.generated,
     experienceIndex: input.experienceIndex,
     roleStacks: input.roleStacks,
     jdText: input.jdText,
   });
-
-  // No originals to preserve/replace — seed with up to 2 strongest JD bullets.
-  if (originalBullets.length === 0) {
-    return candidates.slice(0, JD_BULLETS_PER_ROLE).map((bullet, bulletIndex) =>
-      cloneBullet(bullet, `${input.experienceId}-JD-${bulletIndex + 1}`),
-    );
-  }
-
   const budget = jdBulletBudget(originalBullets.length);
   const originalKeys = new Set(
     originalBullets.map((bullet) => bullet.finalBullet.trim().toLocaleLowerCase()),
   );
+  const jdBullets = pickUniqueJdBullets(
+    candidates,
+    budget,
+    originalKeys,
+    input.experienceId,
+  );
 
-  const rankedOriginals = originalBullets
-    .map((bullet, index) => ({
-      bullet,
-      index,
-      weakness: originalBulletWeakness(bullet.finalBullet, qualityOptions),
-      quality: bulletQualityScore(bullet.finalBullet, qualityOptions),
-    }))
-    .sort((left, right) => {
-      if (right.weakness !== left.weakness) return right.weakness - left.weakness;
-      return right.index - left.index;
-    });
-
-  const replacements: Array<{ index: number; bullet: ExperienceBullet }> = [];
-  const usedJd = new Set<string>();
-
-  for (const original of rankedOriginals) {
-    if (replacements.length >= budget) break;
-    const better = candidates.find((candidate) => {
-      const key = candidate.finalBullet.trim().toLocaleLowerCase();
-      if (originalKeys.has(key) || usedJd.has(key)) return false;
-      const jdQuality = bulletQualityScore(candidate.finalBullet, qualityOptions);
-      // Only replace when the JD bullet is clearly stronger.
-      return jdQuality >= original.quality + REPLACE_QUALITY_MARGIN;
-    });
-    if (!better) continue;
-    usedJd.add(better.finalBullet.trim().toLocaleLowerCase());
-    replacements.push({
-      index: original.index,
-      bullet: cloneBullet(
-        better,
-        `${input.experienceId}-JD-${replacements.length + 1}`,
-      ),
-    });
-  }
-
-  if (replacements.length === 0) {
+  if (jdBullets.length === 0) {
     return originalBullets;
   }
 
-  const replaceByIndex = new Map(
-    replacements.map((item) => [item.index, item.bullet] as const),
-  );
-  const merged = originalBullets.map(
-    (bullet, index) => replaceByIndex.get(index) ?? bullet,
-  );
+  // More than 4 originals → replace poorest 1–2 (keep count the same).
+  if (originalBullets.length > REPLACE_THRESHOLD_EXCLUSIVE) {
+    const rankedByWeakness = originalBullets
+      .map((bullet, index) => ({
+        bullet,
+        index,
+        weakness: originalBulletWeakness(bullet.finalBullet, qualityOptions),
+      }))
+      .sort((left, right) => {
+        if (right.weakness !== left.weakness) return right.weakness - left.weakness;
+        return right.index - left.index;
+      });
+    const byIndex = new Map<number, ExperienceBullet>();
+    rankedByWeakness.slice(0, jdBullets.length).forEach((item, offset) => {
+      const replacement = jdBullets[offset];
+      if (replacement) byIndex.set(item.index, replacement);
+    });
+    const replaced = originalBullets.map(
+      (bullet, index) => byIndex.get(index) ?? bullet,
+    );
+    const jdFirst = replaced.filter(
+      (bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL",
+    );
+    const preserved = replaced.filter(
+      (bullet) => bullet.requirementId === "PRESERVED-ORIGINAL",
+    );
+    return [...jdFirst, ...preserved];
+  }
 
-  // Lead with the stronger JD replacements so the role opens with JD fit.
-  const jdFirst = merged.filter((bullet) =>
-    bullet.requirementId !== "PRESERVED-ORIGINAL",
-  );
-  const preserved = merged.filter(
-    (bullet) => bullet.requirementId === "PRESERVED-ORIGINAL",
-  );
-  return [...jdFirst, ...preserved];
+  // 4 or fewer originals → append 1–2 new JD bullets.
+  return [...jdBullets, ...originalBullets];
 }
 
-function preservedEducation(
+/**
+ * Overlay company / period / role from the user's profile onto each original
+ * experience (by index). Bullets stay from the uploaded resume.
+ */
+function careerHeaderFromProfile(
+  entry: BaseResumeExperience,
+  index: number,
+  profileCareer: readonly CareerEntry[],
+): {
+  experienceId: string;
+  companyName: string;
+  assignedRole: string;
+  startDate: string;
+  endDate: string;
+} {
+  const fromProfile = profileCareer[index];
+  const experienceId =
+    entry.experienceId ||
+    fromProfile?.experienceId ||
+    `EXP-${String(index + 1).padStart(3, "0")}`;
+  return {
+    experienceId,
+    companyName:
+      fromProfile?.companyName?.trim() || entry.companyName || "Company",
+    assignedRole:
+      fromProfile?.role?.trim() || entry.role?.trim() || "Professional",
+    startDate: fromProfile?.startDate?.trim() || entry.startDate || "2018",
+    endDate: fromProfile?.endDate?.trim() || entry.endDate || "Present",
+  };
+}
+
+/**
+ * Education comes from the user's profile. Fall back to uploaded education only
+ * when the profile has no education rows.
+ */
+function educationFromProfile(
   extracted: BaseResumeExtracted,
-  fallback: UserProfile["education"],
-): UserProfile["education"] {
-  if (extracted.education.length === 0) return structuredClone(fallback);
+  profileEducation: readonly EducationEntry[],
+): EducationEntry[] {
+  if (profileEducation.length > 0) {
+    return profileEducation.map((entry, index) => ({
+      educationId: entry.educationId || `EDU-${String(index + 1).padStart(3, "0")}`,
+      institution: entry.institution?.trim() || "University",
+      degree: entry.degree?.trim() || "Degree",
+      field: entry.field?.trim() || "General Studies",
+      startDate: entry.startDate?.trim() || "2012",
+      endDate: entry.endDate?.trim() || "2016",
+    }));
+  }
   return extracted.education.map((entry, index) => ({
     educationId: entry.educationId || `EDU-${String(index + 1).padStart(3, "0")}`,
     institution: entry.institution?.trim() || "University",
@@ -279,47 +317,57 @@ function preservedEducation(
   }));
 }
 
-function roleStacksForExperience(entry: BaseResumeExperience): string[] {
-  return [...(entry.stacks ?? []), ...(entry.role ? [entry.role] : [])]
+function roleStacksForExperience(
+  entry: BaseResumeExperience,
+  assignedRole: string,
+): string[] {
+  return [...(entry.stacks ?? []), assignedRole, entry.role || ""]
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
 /**
- * Keep the uploaded resume's summary / skills / experience / education intact,
- * stamp the signed-in user's identity, and replace only the poorest 1–2
- * original bullets in each experience with clearly stronger JD-generated bullets.
+ * Preserve the uploaded resume content (summary, skills, bullets).
+ * From the user profile only: identity, career headers (company/period/role),
+ * and education (school/period/degree/discipline).
+ * Bullets: if count > 4 replace poorest 1–2; else append 1–2 new JD bullets.
  */
 export function assemblePreservedBaseResumeTailor(input: {
   generated: FinalResumeData;
   extracted: BaseResumeExtracted;
-  identityProfile: UserProfile;
+  /** Full saved user profile — identity, career headers, education. */
+  userProfile: UserProfile;
 }): FinalResumeData {
-  const { generated, extracted, identityProfile } = input;
+  const { generated, extracted, userProfile } = input;
   const originalSummary = normalizeOriginalSummary(extracted);
   const jdText = generated.jobDescription.rawText || "";
 
+  const education = educationFromProfile(extracted, userProfile.education);
   const profile: UserProfile = {
-    ...structuredClone(identityProfile),
-    personalInformation: structuredClone(identityProfile.personalInformation),
-    education: preservedEducation(extracted, identityProfile.education),
+    profileId: userProfile.profileId || generated.profile.profileId,
+    personalInformation: structuredClone(userProfile.personalInformation),
+    education,
     careerHistory:
       extracted.experiences.length > 0
-        ? extracted.experiences.map((entry, index) => ({
-            experienceId:
-              entry.experienceId || `EXP-${String(index + 1).padStart(3, "0")}`,
-            companyName: entry.companyName || "Company",
-            ...(entry.role?.trim() ? { role: entry.role.trim() } : {}),
-            startDate: entry.startDate || "2018",
-            endDate: entry.endDate || "Present",
-          }))
-        : structuredClone(identityProfile.careerHistory),
+        ? extracted.experiences.map((entry, index) => {
+            const header = careerHeaderFromProfile(
+              entry,
+              index,
+              userProfile.careerHistory,
+            );
+            return {
+              experienceId: header.experienceId,
+              companyName: header.companyName,
+              ...(header.assignedRole ? { role: header.assignedRole } : {}),
+              startDate: header.startDate,
+              endDate: header.endDate,
+            };
+          })
+        : structuredClone(userProfile.careerHistory),
   };
 
   const summary: SummaryEngineOutput = {
     ...structuredClone(generated.summary),
-    // Prefer the uploaded summary. If the upload had none, keep the generated
-    // summary so export integrity still has a non-empty summary token.
     summary: originalSummary || generated.summary.summary,
   };
 
@@ -366,24 +414,27 @@ export function assemblePreservedBaseResumeTailor(input: {
         }));
 
   const experiences = sourceExperiences.map((entry, experienceIndex) => {
-    const experienceId =
-      entry.experienceId || `EXP-${String(experienceIndex + 1).padStart(3, "0")}`;
+    const header = careerHeaderFromProfile(
+      entry,
+      experienceIndex,
+      userProfile.careerHistory,
+    );
     const originalTexts = entry.bullets.map((text) => text.trim()).filter(Boolean);
     const bullets = mergeExperienceBullets({
-      experienceId,
+      experienceId: header.experienceId,
       experienceIndex,
       originalTexts,
-      roleStacks: roleStacksForExperience(entry),
+      roleStacks: roleStacksForExperience(entry, header.assignedRole),
       jdText,
       generated,
     });
 
     return {
-      experienceId,
-      companyName: entry.companyName || "Company",
-      startDate: entry.startDate || "2018",
-      endDate: entry.endDate || "Present",
-      assignedRole: entry.role?.trim() || "Professional",
+      experienceId: header.experienceId,
+      companyName: header.companyName,
+      startDate: header.startDate,
+      endDate: header.endDate,
+      assignedRole: header.assignedRole,
       bullets,
     };
   });
@@ -411,6 +462,8 @@ export const __baseResumeBulletMergeForTests = {
   mergeExperienceBullets,
   originalBulletWeakness,
   bulletQualityScore,
+  careerHeaderFromProfile,
+  educationFromProfile,
   JD_BULLETS_PER_ROLE,
-  REPLACE_QUALITY_MARGIN,
+  REPLACE_THRESHOLD_EXCLUSIVE,
 };

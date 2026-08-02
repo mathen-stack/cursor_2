@@ -150,14 +150,15 @@ Integrate WebSockets and collaborate with product teams.`,
 });
 
 describe("base-resume JD bullet merge rules", () => {
-  it("preserves originals and only replaces the poorest 1–2 when JD bullets are stronger", () => {
-    const { jdBulletBudget, mergeExperienceBullets, bulletQualityScore } =
+  it("appends 1–2 when count ≤4, replaces poorest 1–2 when count >4", () => {
+    const { jdBulletBudget, mergeExperienceBullets, REPLACE_THRESHOLD_EXCLUSIVE } =
       __baseResumeBulletMergeForTests;
 
-    expect(jdBulletBudget(0)).toBe(0);
+    expect(jdBulletBudget(0)).toBe(2);
     expect(jdBulletBudget(1)).toBe(1);
     expect(jdBulletBudget(3)).toBe(2);
     expect(jdBulletBudget(5)).toBe(2);
+    expect(REPLACE_THRESHOLD_EXCLUSIVE).toBe(4);
 
     const strongJdBullets = [
       {
@@ -216,45 +217,31 @@ describe("base-resume JD bullet merge rules", () => {
     } as unknown as import("@resume/contracts").FinalResumeData;
 
     const jdText = generatedStub.jobDescription.rawText;
-    expect(
-      bulletQualityScore(strongJdBullets[0]!.finalBullet, {
-        roleStacks: ["React", "TypeScript"],
-        jdText,
-      }),
-    ).toBeGreaterThan(
-      bulletQualityScore("Helped with assorted UI tasks", {
-        roleStacks: ["React", "TypeScript"],
-        jdText,
-      }),
-    );
 
     const threeOriginals = [
       "Implemented RESTful API integrations and Cypress test coverage",
       "Optimized React performance for high-traffic checkout flows",
       "Helped with assorted UI tasks",
     ];
-    const replacedShort = mergeExperienceBullets({
-      experienceId: "EXP-SHORT",
+    const appended = mergeExperienceBullets({
+      experienceId: "EXP-APPEND",
       experienceIndex: 0,
       originalTexts: threeOriginals,
       roleStacks: ["React", "TypeScript", "Cypress"],
       jdText,
       generated: generatedStub,
     });
-    // Same count — replace only, never append.
-    expect(replacedShort.length).toBe(3);
+    // ≤4 originals → append 1–2 JD bullets.
+    expect(appended.length).toBe(5);
     expect(
-      replacedShort.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
-    ).toBeGreaterThanOrEqual(1);
+      appended.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
+    ).toBe(3);
     expect(
-      replacedShort.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet)),
-    ).toBe(false);
-    // Stronger originals stay.
-    expect(
-      replacedShort.some((bullet) => /Cypress test coverage|React performance/i.test(bullet.finalBullet)),
-    ).toBe(true);
-    // Strong JD bullets lead the role.
-    expect(replacedShort[0]?.requirementId).not.toBe("PRESERVED-ORIGINAL");
+      appended.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+    ).toBe(2);
+    expect(appended.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
+      true,
+    );
 
     const fiveOriginals = [
       "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
@@ -271,6 +258,7 @@ describe("base-resume JD bullet merge rules", () => {
       jdText,
       generated: generatedStub,
     });
+    // >4 originals → replace poorest 1–2, keep count.
     expect(replaced.length).toBe(5);
     expect(replaced.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
       false,
@@ -288,18 +276,49 @@ describe("base-resume JD bullet merge rules", () => {
 });
 
 describe("preserved base-resume tailor", () => {
-  it("keeps original content, swaps identity, and replaces poorest 1–2 bullets per role", async () => {
+  it("preserves original content, overlays profile headers, and applies bullet rules", async () => {
     const extracted = parseBaseResumeText(SAMPLE_RESUME);
     expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
 
-    const identityProfile = baseResumeToUserProfile(extracted, {
+    const userProfile = {
       profileId: "PROFILE-PRESERVE",
-      identityFrom: {
+      personalInformation: {
         fullName: "Kenny User",
         email: "kenny@example.com",
         phone: "+1 555 9999",
         location: "Austin, TX",
       },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Corp",
+          role: "Staff Frontend Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Kenny Labs",
+          role: "Frontend Engineer",
+          startDate: "2019-06",
+          endDate: "2022-02",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const generationProfile = baseResumeToUserProfile(extracted, {
+      profileId: userProfile.profileId,
+      identityFrom: userProfile.personalInformation,
     });
 
     const orchestrator = new ResumeOrchestrator(
@@ -316,14 +335,18 @@ describe("preserved base-resume tailor", () => {
       jobDescription: createJobDescription(`Senior Frontend Engineer
 Build React and Next.js applications with TypeScript and Tailwind CSS.
 Integrate WebSockets and collaborate with product teams on delivery.`),
-      profile: identityProfile,
+      profile: {
+        ...generationProfile,
+        careerHistory: userProfile.careerHistory,
+        education: userProfile.education,
+      },
       locale: "en-US",
     });
 
     const tailored = assemblePreservedBaseResumeTailor({
       generated,
       extracted,
-      identityProfile,
+      userProfile,
     });
 
     const contact = tailored.document.sections.find((section) => section.id === "contact");
@@ -346,8 +369,11 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
     expect(skills?.id === "skills" && skills.content[0]?.skills.join(" ")).toMatch(
       /React|TypeScript/i,
     );
-    expect(education?.id === "education" && education.content[0]?.institution).toMatch(
-      /State University|University/i,
+    expect(education?.id === "education" && education.content[0]?.institution).toBe(
+      "Kenny University",
+    );
+    expect(education?.id === "education" && education.content[0]?.field).toBe(
+      "Software Engineering",
     );
 
     expect(experience?.id).toBe("professional-experience");
@@ -355,23 +381,24 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
       throw new Error("Expected professional experience section");
     }
 
-    for (const entry of experience.content) {
-      const original =
-        extracted.experiences.find((item) => item.companyName === entry.companyName)
-          ?.bullets ?? [];
-      // Replace-only: bullet count stays the same as the uploaded role.
-      expect(entry.bullets.length).toBe(original.length);
-      const preservedCount = original.filter((bullet) =>
-        entry.bullets.includes(bullet),
-      ).length;
-      expect(preservedCount).toBeGreaterThanOrEqual(Math.max(0, original.length - 2));
-      expect(preservedCount).toBeLessThan(original.length);
-    }
-    expect(
-      experience.content
-        .find((entry) => entry.companyName === "HP")
-        ?.bullets.includes("Helped with assorted UI tasks"),
-    ).toBe(false);
+    expect(experience.content[0]?.companyName).toBe("Kenny Corp");
+    expect(experience.content[0]?.assignedRole).toBe("Staff Frontend Engineer");
+    expect(experience.content[1]?.companyName).toBe("Kenny Labs");
+
+    experience.content.forEach((entry, index) => {
+      const original = extracted.experiences[index]?.bullets ?? [];
+      if (original.length > 4) {
+        expect(entry.bullets.length).toBe(original.length);
+        expect(entry.bullets).not.toContain("Helped with assorted UI tasks");
+        expect(entry.bullets).not.toContain("Worked on various frontend tickets");
+      } else {
+        expect(entry.bullets.length).toBeGreaterThan(original.length);
+        expect(entry.bullets.length - original.length).toBeLessThanOrEqual(2);
+        for (const bullet of original) {
+          expect(entry.bullets).toContain(bullet);
+        }
+      }
+    });
 
     // Uploaded identity must not appear on the tailored contact block.
     expect(JSON.stringify(contact)).not.toContain("alex.morgan@example.com");

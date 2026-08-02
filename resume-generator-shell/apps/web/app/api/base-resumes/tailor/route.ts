@@ -24,10 +24,9 @@ type TailorMode = "auto" | "manual";
 
 /**
  * Tailor an uploaded base resume to a JD while:
- * 1) replacing only identification with the user's Home profile
- * 2) preserving original summary / skills / experience / education
- * 3) preserving original bullets and replacing only the poorest 1–2 in each
- *    experience with strongest JD bullets
+ * 1) preserving the original resume content (summary, skills, bullets)
+ * 2) overlaying identity + career headers + education from the user profile
+ * 3) if a role has >4 bullets, replace poorest 1–2; else append 1–2 JD bullets
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -103,36 +102,57 @@ export async function POST(request: Request): Promise<Response> {
 
     const savedProfile = await readUserProfileRecord(session.username);
     const identity = savedProfile?.profile.personalInformation;
-    if (!identity?.fullName?.trim() || !identity.email?.trim()) {
+    if (
+      !savedProfile?.profile ||
+      !identity?.fullName?.trim() ||
+      !identity.email?.trim()
+    ) {
       return NextResponse.json(
         {
           error: {
             code: "PROFILE_IDENTITY_REQUIRED",
             message:
-              "Save your name and email on Home (User Profile) before tailoring. Identification on the tailored resume comes from your profile, not the uploaded resume.",
+              "Save your name and email on Home (User Profile) before tailoring. Identification, career headers, and education come from your profile.",
           },
         },
         { status: 400 },
       );
     }
 
-    const identityProfile = baseResumeToUserProfile(base.extracted, {
-      profileId: `PROFILE-${base.id}`,
+    const userProfile = {
+      ...savedProfile.profile,
+      personalInformation: identity,
+    };
+
+    // Generation uses profile career/education when available so JD bullets
+    // align to the user's real roles; assembly still preserves uploaded bullets.
+    const fallbackFromUpload = baseResumeToUserProfile(base.extracted, {
+      profileId: userProfile.profileId || `PROFILE-${base.id}`,
       identityFrom: identity,
     });
+    const generationProfile = {
+      ...fallbackFromUpload,
+      personalInformation: identity,
+      careerHistory:
+        userProfile.careerHistory.length > 0
+          ? userProfile.careerHistory
+          : fallbackFromUpload.careerHistory,
+      education:
+        userProfile.education.length > 0
+          ? userProfile.education
+          : fallbackFromUpload.education,
+    };
 
-    // Generate JD-strong bullets with existing quality rules, then re-assemble
-    // so original resume content is preserved and only identity + JD bullets change.
     const generated = await getResumeGenerationService().generate({
       jobDescriptionText: jd,
-      profile: identityProfile,
+      profile: generationProfile,
       locale: payload.locale || "en-US",
     });
 
     const resume = assemblePreservedBaseResumeTailor({
       generated,
       extracted: base.extracted,
-      identityProfile,
+      userProfile,
     });
 
     return NextResponse.json(
@@ -148,11 +168,12 @@ export async function POST(request: Request): Promise<Response> {
         mode,
         preserveMode: {
           identityFromProfile: true,
+          careerHeadersFromProfile: true,
+          educationFromProfile: true,
           preservedSummary: true,
           preservedSkills: true,
-          preservedExperience: true,
-          preservedEducation: true,
-          replacePoorestOriginalBullets: "1-2",
+          preservedOriginalBullets: true,
+          bulletRule: "replace-poorest-1-2-when-more-than-4-else-append-1-2",
         },
       },
       { status: 201 },
