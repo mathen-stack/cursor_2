@@ -26,8 +26,8 @@ type TailorMode = "auto" | "manual";
  * Tailor an uploaded base resume to a JD while:
  * 1) replacing only identification with the user's Home profile
  * 2) preserving original summary / skills / experience / education
- * 3) adding 1–2 strongest JD bullets per experience (or replacing the poorest
- *    2 when a role already has more than 4 bullets)
+ * 3) preserving original bullets and replacing only the poorest 1–2 in each
+ *    experience with strongest JD bullets
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -152,8 +152,7 @@ export async function POST(request: Request): Promise<Response> {
           preservedSkills: true,
           preservedExperience: true,
           preservedEducation: true,
-          jdBulletsPerExperience: "1-2",
-          replacePoorestWhenAlreadyAboveFour: true,
+          replacePoorestOriginalBullets: "1-2",
         },
       },
       { status: 201 },

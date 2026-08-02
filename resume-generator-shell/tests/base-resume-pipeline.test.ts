@@ -150,14 +150,13 @@ Integrate WebSockets and collaborate with product teams.`,
 });
 
 describe("base-resume JD bullet merge rules", () => {
-  it("adds 1–2 bullets to reach more than 4, or replaces poorest 2 when already above 4", () => {
-    const { jdBulletBudget, mergeExperienceBullets, MIN_BULLETS_EXCLUSIVE } =
-      __baseResumeBulletMergeForTests;
+  it("preserves originals and only replaces the poorest 1–2 bullets", () => {
+    const { jdBulletBudget, mergeExperienceBullets } = __baseResumeBulletMergeForTests;
 
-    expect(jdBulletBudget(3)).toBe(2); // 3 + 2 = 5
-    expect(jdBulletBudget(4)).toBe(1); // 4 + 1 = 5
-    expect(jdBulletBudget(5)).toBe(2); // replace mode
-    expect(jdBulletBudget(6)).toBe(2);
+    expect(jdBulletBudget(0)).toBe(0);
+    expect(jdBulletBudget(1)).toBe(1);
+    expect(jdBulletBudget(3)).toBe(2);
+    expect(jdBulletBudget(5)).toBe(2);
 
     const strongPool = [
       {
@@ -196,32 +195,43 @@ describe("base-resume JD bullet merge rules", () => {
       },
     ];
 
-    const appended = mergeExperienceBullets({
-      experienceId: "EXP-APPEND",
+    const threeOriginals = [
+      "Implemented RESTful API integrations and Cypress test coverage",
+      "Optimized React performance for high-traffic checkout flows",
+      "Helped with assorted UI tasks",
+    ];
+    const replacedShort = mergeExperienceBullets({
+      experienceId: "EXP-SHORT",
       experienceIndex: 0,
-      originalTexts: [
-        "Implemented RESTful API integrations and Cypress test coverage",
-        "Optimized React performance for high-traffic checkout flows",
-        "Delivered accessible component library updates across checkout",
-      ],
+      originalTexts: threeOriginals,
       strongPool,
     });
-    expect(appended.length).toBeGreaterThan(MIN_BULLETS_EXCLUSIVE);
-    expect(appended.length).toBe(5);
+    // Same count — replace only, never append.
+    expect(replacedShort.length).toBe(3);
     expect(
-      appended.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+      replacedShort.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
+    ).toBe(1);
+    expect(
+      replacedShort.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
     ).toBe(2);
+    expect(
+      replacedShort.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet)),
+    ).toBe(false);
+    expect(replacedShort.some((bullet) => /Cypress test coverage/i.test(bullet.finalBullet))).toBe(
+      true,
+    );
 
+    const fiveOriginals = [
+      "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
+      "Improved WebSocket reliability for real-time gameplay features",
+      "Collaborated with product stakeholders on delivery planning",
+      "Helped with assorted UI tasks",
+      "Worked on various frontend tickets",
+    ];
     const replaced = mergeExperienceBullets({
       experienceId: "EXP-REPLACE",
       experienceIndex: 0,
-      originalTexts: [
-        "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
-        "Improved WebSocket reliability for real-time gameplay features",
-        "Collaborated with product stakeholders on delivery planning",
-        "Helped with assorted UI tasks",
-        "Worked on various frontend tickets",
-      ],
+      originalTexts: fiveOriginals,
       strongPool,
     });
     expect(replaced.length).toBe(5);
@@ -232,13 +242,16 @@ describe("base-resume JD bullet merge rules", () => {
       replaced.some((bullet) => /Worked on various frontend tickets/i.test(bullet.finalBullet)),
     ).toBe(false);
     expect(
+      replaced.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
+    ).toBe(3);
+    expect(
       replaced.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
     ).toBe(2);
   });
 });
 
 describe("preserved base-resume tailor", () => {
-  it("keeps original content, swaps identity, and mixes in 1–2 JD bullets per role", async () => {
+  it("keeps original content, swaps identity, and replaces poorest 1–2 bullets per role", async () => {
     const extracted = parseBaseResumeText(SAMPLE_RESUME);
     expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
 
@@ -309,21 +322,19 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
       const original =
         extracted.experiences.find((item) => item.companyName === entry.companyName)
           ?.bullets ?? [];
-      expect(entry.bullets.length).toBeGreaterThan(4);
-      if (original.length > 4) {
-        // Replace mode: same count, poorest originals dropped.
-        expect(entry.bullets.length).toBe(original.length);
-        expect(entry.bullets).not.toContain("Helped with assorted UI tasks");
-        expect(entry.bullets).not.toContain("Worked on various frontend tickets");
-      } else {
-        // Append mode: keep all originals and add 1–2 JD bullets.
-        for (const bullet of original) {
-          expect(entry.bullets).toContain(bullet);
-        }
-        expect(entry.bullets.length).toBeGreaterThan(original.length);
-        expect(entry.bullets.length - original.length).toBeLessThanOrEqual(2);
-      }
+      // Replace-only: bullet count stays the same as the uploaded role.
+      expect(entry.bullets.length).toBe(original.length);
+      const preservedCount = original.filter((bullet) =>
+        entry.bullets.includes(bullet),
+      ).length;
+      expect(preservedCount).toBeGreaterThanOrEqual(Math.max(0, original.length - 2));
+      expect(preservedCount).toBeLessThan(original.length);
     }
+    expect(
+      experience.content
+        .find((entry) => entry.companyName === "HP")
+        ?.bullets.includes("Helped with assorted UI tasks"),
+    ).toBe(false);
 
     // Uploaded identity must not appear on the tailored contact block.
     expect(JSON.stringify(contact)).not.toContain("alex.morgan@example.com");

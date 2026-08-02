@@ -450,8 +450,8 @@ export default function BaseResumeTailor({
                 <p className="hint">
                   Auto-find or upload a resume, then tailor. We keep original
                   summary/skills/experience/education, swap identity from your Home
-                  profile, and add 1–2 strong JD bullets per role (or replace the
-                  weakest 2 if a role already has more than 4).
+                  profile, and replace only the poorest 1–2 bullets in each role
+                  with strong JD bullets.
                 </p>
               </div>
             </div>
