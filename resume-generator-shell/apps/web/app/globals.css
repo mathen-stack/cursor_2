@@ -172,31 +172,52 @@ button:disabled {
 }
 
 .tailor-source-fieldset {
+  display: grid;
+  gap: 0.45rem;
   border: 0;
   padding: 0;
   margin: 0;
-  gap: 0.55rem;
+  min-inline-size: 0;
 }
 
 .tailor-source-fieldset legend {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.15rem;
   padding: 0;
 }
 
-.tailor-radio {
+.tailor-source-options {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.35rem 1.25rem;
+}
+
+.tailor-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: auto;
   cursor: pointer;
   color: var(--ink);
   font-size: 0.92rem;
-  line-height: 1.35;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
-.tailor-radio input {
-  width: 1rem;
-  height: 1rem;
+.tailor-radio input[type="radio"] {
+  appearance: auto;
+  -webkit-appearance: radio;
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  min-width: 0.95rem;
+  min-height: 0.95rem;
   margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
   accent-color: var(--accent);
   cursor: pointer;
 }
@@ -478,7 +499,7 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.profile-field input,
+.profile-field input:not([type="radio"]):not([type="checkbox"]),
 .profile-field select,
 .control-input {
   width: 100%;
@@ -503,7 +524,7 @@ textarea::placeholder {
   color: #627068;
 }
 
-.profile-field input:focus,
+.profile-field input:not([type="radio"]):not([type="checkbox"]):focus,
 .profile-field select:focus,
 .control-input:focus,
 textarea:focus {

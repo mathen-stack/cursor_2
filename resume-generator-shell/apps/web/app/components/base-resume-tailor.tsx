@@ -372,30 +372,30 @@ export default function BaseResumeTailor({
               </div>
             </div>
 
-            <fieldset
-              className="profile-field profile-field-full tailor-source-fieldset"
-            >
+            <fieldset className="tailor-source-fieldset">
               <legend className="entry-label">Source resume</legend>
-              <label className="tailor-radio">
-                <input
-                  type="radio"
-                  name="source-resume"
-                  value="auto"
-                  checked={mode === "auto"}
-                  onChange={() => setMode("auto")}
-                />
-                <span>Auto-find best fit</span>
-              </label>
-              <label className="tailor-radio">
-                <input
-                  type="radio"
-                  name="source-resume"
-                  value="upload"
-                  checked={mode === "upload"}
-                  onChange={() => setMode("upload")}
-                />
-                <span>Upload resume</span>
-              </label>
+              <div className="tailor-source-options">
+                <label className="tailor-radio">
+                  <input
+                    type="radio"
+                    name="source-resume"
+                    value="auto"
+                    checked={mode === "auto"}
+                    onChange={() => setMode("auto")}
+                  />
+                  <span>Auto-find best fit</span>
+                </label>
+                <label className="tailor-radio">
+                  <input
+                    type="radio"
+                    name="source-resume"
+                    value="upload"
+                    checked={mode === "upload"}
+                    onChange={() => setMode("upload")}
+                  />
+                  <span>Upload resume</span>
+                </label>
+              </div>
               <p className="hint">
                 {mode === "auto"
                   ? baseResumes.length === 0
