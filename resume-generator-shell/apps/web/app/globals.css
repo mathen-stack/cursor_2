@@ -243,6 +243,49 @@ button:disabled {
   margin-top: 0.65rem;
 }
 
+.best-fit-rank-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.best-fit-rank-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.best-fit-rank-item.is-active,
+.best-fit-rank-item.is-best.is-active {
+  border-color: rgba(62, 207, 142, 0.5);
+  background: var(--run-soft);
+}
+
+.best-fit-rank-item.is-best:not(.is-active) {
+  border-color: rgba(62, 207, 142, 0.28);
+}
+
+.best-fit-rank-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.best-fit-rank-copy strong {
+  font-size: 0.95rem;
+}
+
+.best-fit-paper {
+  margin-top: 0.25rem;
+}
+
 @media (max-width: 900px) {
   .tailor-layout {
     grid-template-columns: 1fr;

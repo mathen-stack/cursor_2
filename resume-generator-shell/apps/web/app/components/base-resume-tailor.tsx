@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   BaseResumeMatchResult,
+  BaseResumeRecord,
   BaseResumeSummary,
   FinalResumeData,
+  UserProfile,
 } from "@resume/contracts";
 import {
   downloadResumeFile,
@@ -28,6 +30,8 @@ type TailorResult = {
   baseResumeTitle: string;
 };
 
+type IdentityInfo = UserProfile["personalInformation"];
+
 export default function BaseResumeTailor({
   user,
   onLogout,
@@ -47,6 +51,11 @@ export default function BaseResumeTailor({
   const [matches, setMatches] = useState<BaseResumeMatchResult[]>([]);
   const [matching, setMatching] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
+  const [previewedResume, setPreviewedResume] = useState<BaseResumeRecord | null>(
+    null,
+  );
+  const [previewIdentity, setPreviewIdentity] = useState<IdentityInfo | null>(null);
+  const [previewedMatchId, setPreviewedMatchId] = useState("");
   const [tailoring, setTailoring] = useState(false);
   const [result, setResult] = useState<TailorResult | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -165,11 +174,35 @@ export default function BaseResumeTailor({
     }
   }
 
+  async function loadResumePreview(resumeId: string): Promise<void> {
+    const [resumeResponse, profileResponse] = await Promise.all([
+      fetch(`/api/base-resumes/${resumeId}`, { cache: "no-store" }),
+      fetch("/api/profile", { cache: "no-store" }),
+    ]);
+    const resumePayload = (await resumeResponse.json()) as {
+      resume?: BaseResumeRecord;
+      error?: { message?: string };
+    };
+    if (!resumeResponse.ok || !resumePayload.resume) {
+      throw new Error(
+        resumePayload.error?.message ?? "Could not load best-fit resume preview.",
+      );
+    }
+    const profilePayload = (await profileResponse.json()) as {
+      profile?: UserProfile;
+    };
+    setPreviewedResume(resumePayload.resume);
+    setPreviewedMatchId(resumeId);
+    setPreviewIdentity(profilePayload.profile?.personalInformation ?? null);
+  }
+
   async function previewMatches(): Promise<void> {
     setError("");
     setMessage("");
     setMatches([]);
     setShowMatches(false);
+    setPreviewedResume(null);
+    setPreviewedMatchId("");
     if (jobDescription.trim().length < 50) {
       setError("Paste a job description of at least 50 characters.");
       return;
@@ -197,10 +230,13 @@ export default function BaseResumeTailor({
       setMatches(nextMatches);
       setShowMatches(true);
       const best = payload.best ?? nextMatches[0] ?? null;
+      if (!best) {
+        setMessage("No matching resumes found for this JD.");
+        return;
+      }
+      await loadResumePreview(best.baseResumeId);
       setMessage(
-        best
-          ? `Best fit: “${best.title}” (score ${best.score}). Review the ranked resumes below.`
-          : "No matching resumes found for this JD.",
+        `Best fit: “${best.title}” (score ${best.score}). Preview shown below.`,
       );
       requestAnimationFrame(() => {
         matchesSectionRef.current?.scrollIntoView({
@@ -550,9 +586,10 @@ export default function BaseResumeTailor({
           >
             <div className="section-head">
               <div>
-                <h2>Best-fit resumes</h2>
+                <h2>Best-fit resume preview</h2>
                 <p className="hint">
-                  Ranked against this JD. #1 is the resume Auto-find will tailor.
+                  This is the strongest library match for your JD. Contact info uses
+                  your Home profile. Click another rank to preview it.
                 </p>
               </div>
             </div>
@@ -562,58 +599,142 @@ export default function BaseResumeTailor({
                 <p>No best-fit resumes found for this JD.</p>
               </div>
             ) : (
-              <div className="job-board">
-                {matches.slice(0, 8).map((match, index) => {
-                  const summary = libraryById.get(match.baseResumeId);
-                  const isBest = index === 0;
-                  return (
-                    <div
-                      key={match.baseResumeId}
-                      className={`job-row ${isBest ? "status-done" : "status-run"}`}
-                    >
-                      <div className="job-list-main">
-                        <div className="job-list-head job-list-head--compact">
-                          <div className="job-index">{index + 1}</div>
-                          <div className="job-list-copy">
-                            <div className="job-status-row">
-                              <span
-                                className={`badge ${isBest ? "badge-done" : "badge-company"}`}
-                              >
-                                {isBest ? "Best fit" : `Rank #${index + 1}`}
-                              </span>
-                              <span className="badge badge-company">
-                                Score {match.score}
+              <>
+                <div className="best-fit-rank-list">
+                  {matches.slice(0, 8).map((match, index) => {
+                    const summary = libraryById.get(match.baseResumeId);
+                    const isActive = previewedMatchId === match.baseResumeId;
+                    const isBest = index === 0;
+                    return (
+                      <button
+                        key={match.baseResumeId}
+                        type="button"
+                        className={`best-fit-rank-item${isActive ? " is-active" : ""}${isBest ? " is-best" : ""}`}
+                        onClick={() => {
+                          void loadResumePreview(match.baseResumeId).catch((caught) => {
+                            setError(
+                              caught instanceof Error
+                                ? caught.message
+                                : "Could not load resume preview.",
+                            );
+                          });
+                        }}
+                      >
+                        <span className="job-index">{index + 1}</span>
+                        <span className="best-fit-rank-copy">
+                          <strong>
+                            {isBest ? "Best fit · " : ""}
+                            {match.title}
+                          </strong>
+                          <span className="hint">
+                            Score {match.score}
+                            {summary?.stacks?.length
+                              ? ` · ${summary.stacks.slice(0, 4).join(", ")}`
+                              : ""}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {previewedResume ? (
+                  <div className="resume-paper best-fit-paper">
+                    <header style={{ marginBottom: "1rem" }}>
+                      <div className="job-status-row" style={{ marginBottom: "0.5rem" }}>
+                        <span className="badge badge-done">
+                          {previewedMatchId === matches[0]?.baseResumeId
+                            ? "Best fit preview"
+                            : "Library resume preview"}
+                        </span>
+                        <span className="badge badge-company">
+                          {previewedResume.title}
+                        </span>
+                      </div>
+                      <h1>
+                        {previewIdentity?.fullName?.trim() ||
+                          user.displayName ||
+                          "Your name"}
+                      </h1>
+                      <div className="contact-line">
+                        {[
+                          previewIdentity?.email,
+                          previewIdentity?.phone,
+                          previewIdentity?.location,
+                        ]
+                          .filter(Boolean)
+                          .join(" | ") ||
+                          "Save your contact info on Home to show it here"}
+                      </div>
+                    </header>
+
+                    {previewedResume.extracted.experiences.length > 0 ? (
+                      <section className="resume-section">
+                        <h2>Professional Experience</h2>
+                        {previewedResume.extracted.experiences.map((entry) => (
+                          <article key={entry.experienceId} className="role-block">
+                            <div className="role-head">
+                              <strong>
+                                {entry.role?.trim() || "Role"} | {entry.companyName}
+                              </strong>
+                              <span>
+                                {entry.startDate} – {entry.endDate}
                               </span>
                             </div>
-                            <strong className="job-headline">{match.title}</strong>
-                            <p className="hint">
-                              {summary
-                                ? `${summary.roleCount} role${summary.roleCount === 1 ? "" : "s"}`
-                                : "Saved resume"}
-                              {summary?.stacks?.length
-                                ? ` · ${summary.stacks.slice(0, 6).join(", ")}`
-                                : ""}
-                            </p>
-                            {match.matchedStacks.length > 0 ? (
+                            {entry.stacks.length > 0 ? (
                               <p className="hint">
-                                Matched stacks: {match.matchedStacks.slice(0, 8).join(", ")}
+                                Stack: {entry.stacks.slice(0, 8).join(", ")}
                               </p>
                             ) : null}
-                            {match.matchedRoles.length > 0 ? (
-                              <p className="hint">
-                                Matched roles: {match.matchedRoles.slice(0, 5).join(", ")}
-                              </p>
+                            {entry.bullets.length > 0 ? (
+                              <ul className="bullet-list">
+                                {entry.bullets.map((bullet, index) => (
+                                  <li key={`${entry.experienceId}-${index}`}>
+                                    {bullet}
+                                  </li>
+                                ))}
+                              </ul>
                             ) : null}
-                            {match.reasons[0] ? (
-                              <p className="hint">{match.reasons[0]}</p>
+                          </article>
+                        ))}
+                      </section>
+                    ) : null}
+
+                    {previewedResume.extracted.skills.length > 0 ? (
+                      <section className="resume-section">
+                        <h2>Skills</h2>
+                        <div className="skills-list">
+                          {previewedResume.extracted.skills.join(", ")}
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {previewedResume.extracted.education.length > 0 ? (
+                      <section className="resume-section">
+                        <h2>Education</h2>
+                        {previewedResume.extracted.education.map((entry) => (
+                          <div key={entry.educationId} className="edu-line">
+                            <strong>
+                              {[entry.degree, entry.field].filter(Boolean).join(" in ") ||
+                                "Education"}
+                              {entry.institution ? ` | ${entry.institution}` : ""}
+                            </strong>
+                            {entry.startDate || entry.endDate ? (
+                              <span>
+                                {[entry.startDate, entry.endDate]
+                                  .filter(Boolean)
+                                  .join(" – ")}
+                              </span>
                             ) : null}
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        ))}
+                      </section>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="hint">Loading resume preview…</p>
+                )}
+              </>
             )}
           </section>
         ) : null}
