@@ -373,31 +373,30 @@ export default function BaseResumeTailor({
             </div>
 
             <fieldset
-              className="profile-field profile-field-full"
-              style={{ border: 0, padding: 0 }}
+              className="profile-field profile-field-full tailor-source-fieldset"
             >
-              <legend className="entry-label" style={{ marginBottom: "0.5rem" }}>
-                Source resume
-              </legend>
-              <div className="section-actions" style={{ flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className={mode === "auto" ? "primary" : "secondary-action"}
-                  aria-pressed={mode === "auto"}
-                  onClick={() => setMode("auto")}
-                >
-                  Auto-find best fit
-                </button>
-                <button
-                  type="button"
-                  className={mode === "upload" ? "primary" : "secondary-action"}
-                  aria-pressed={mode === "upload"}
-                  onClick={() => setMode("upload")}
-                >
-                  Upload resume
-                </button>
-              </div>
-              <p className="hint" style={{ marginTop: "0.65rem" }}>
+              <legend className="entry-label">Source resume</legend>
+              <label className="tailor-radio">
+                <input
+                  type="radio"
+                  name="source-resume"
+                  value="auto"
+                  checked={mode === "auto"}
+                  onChange={() => setMode("auto")}
+                />
+                <span>Auto-find best fit</span>
+              </label>
+              <label className="tailor-radio">
+                <input
+                  type="radio"
+                  name="source-resume"
+                  value="upload"
+                  checked={mode === "upload"}
+                  onChange={() => setMode("upload")}
+                />
+                <span>Upload resume</span>
+              </label>
+              <p className="hint">
                 {mode === "auto"
                   ? baseResumes.length === 0
                     ? "Auto-find needs saved resumes first — add them in the library on the left."
