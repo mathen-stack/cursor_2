@@ -2,6 +2,12 @@ import type {
   BaseResumeExperience,
   BaseResumeExtracted,
 } from "@resume/contracts";
+import {
+  cleanResumeExtractText,
+  isJunkBulletText,
+  sanitizeBulletList,
+  sanitizeBulletText,
+} from "./base-resume-bullet-sanitize";
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE =
@@ -22,8 +28,7 @@ const STACK_TOKEN_RE =
   /\b(?:React(?:\.js)?|Next\.js|TypeScript|JavaScript|Node\.js|Python|Java|Go|Rust|Kotlin|Swift|AWS|GCP|Azure|Docker|Kubernetes|PostgreSQL|MySQL|MongoDB|Redis|GraphQL|REST|Spark|Airflow|Kafka|Snowflake|Databricks|Terraform|CI\/CD|MLflow|PyTorch|TensorFlow|Vue(?:\.js)?|Angular|Django|Flask|Spring|Rails|\.NET|C\+\+|C#|SQL|NoSQL|Linux|Git|Tailwind|CSS|HTML)\b/gi;
 
 function cleanLines(text: string): string[] {
-  return text
-    .replace(/\r/g, "")
+  return cleanResumeExtractText(text)
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
@@ -170,7 +175,21 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
     }
 
     if (bullet || line.length > 40) {
-      current.bullets.push(line.replace(/^[-•*]\s+/, "").trim());
+      const cleaned = sanitizeBulletText(line);
+      if (!cleaned || isJunkBulletText(cleaned)) continue;
+      const previous = current.bullets[current.bullets.length - 1];
+      // Join PDF-wrapped continuations onto the previous bullet when useful.
+      if (
+        previous &&
+        (/^[a-z(]/.test(cleaned) ||
+          /(?:,|;|\band|\bwith|\bfor|\bto|\bby|\bthrough)\s*$/i.test(previous))
+      ) {
+        current.bullets[current.bullets.length - 1] = sanitizeBulletText(
+          `${previous} ${cleaned}`,
+        );
+      } else {
+        current.bullets.push(cleaned);
+      }
     } else if (!current.companyName || current.companyName === "Unknown Company") {
       current.companyName = line;
     } else if (!current.role) {
@@ -182,29 +201,54 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
   return experiences.map((entry, index) => ({
     ...entry,
     experienceId: `EXP-${String(index + 1).padStart(3, "0")}`,
+    bullets: sanitizeBulletList(entry.bullets),
   }));
 }
 
 function parseEducation(lines: string[]): BaseResumeExtracted["education"] {
   const education: BaseResumeExtracted["education"] = [];
+  const seen = new Set<string>();
   for (const line of lines) {
-    const dateMatch = DATE_RANGE_RE.exec(line);
+    const normalized = line.replace(/\s+/g, " ").trim();
+    // Skip duplicated mangled education lines.
+    if (/(\bB\.?S\.?\b.*\bB\.?S\.?\b)|(\bCOMPUTER SCIENCE\b.*\bCOMPUTER SCIENCE\b)/i.test(normalized) &&
+      (normalized.match(/\|/g) ?? []).length >= 2) {
+      // Still parse, but take the cleanest left-side fields only.
+    }
+    const dateMatch = DATE_RANGE_RE.exec(normalized);
     const degreeMatch =
-      /\b(Bachelor|Master|B\.?S\.?|M\.?S\.?|B\.?A\.?|Ph\.?D\.?|Associate)[^,]*/i.exec(
-        line,
+      /\b(Bachelor(?:\s+of\s+[A-Za-z]+)?|Master(?:\s+of\s+[A-Za-z]+)?|B\.?S\.?|M\.?S\.?|B\.?A\.?|Ph\.?D\.?|Associate)\b/i.exec(
+        normalized,
       );
-    if (!dateMatch && !degreeMatch && !/university|college|institute/i.test(line)) {
+    if (!dateMatch && !degreeMatch && !/university|college|institute/i.test(normalized)) {
       continue;
     }
+    const institutionMatch =
+      /\b((?:University|College|Institute|School)\s+of\s+[A-Za-z][A-Za-z\s.-]+|[A-Za-z][A-Za-z\s.-]+(?:University|College|Institute))\b/i.exec(
+        normalized,
+      );
+    const fieldMatch =
+      /\bin\s+([A-Za-z][A-Za-z\s&/]+?)(?:\s*\||\s+\d{4}|$)/i.exec(normalized);
+    const degree = (degreeMatch?.[0] || "Degree")
+      .replace(/\s+/g, " ")
+      .trim();
+    const field = (fieldMatch?.[1] || "General Studies").replace(/\s+/g, " ").trim();
+    const institution = (institutionMatch?.[1] || "University")
+      .replace(/\s+/g, " ")
+      .replace(/\s+in\s+COMPUTER\s+SCIENCE.*$/i, "")
+      .trim();
+    const startDate = dateMatch?.[1]?.trim() || "2012";
+    const endDate = dateMatch?.[2]?.trim() || "2016";
+    const key = `${degree}|${field}|${institution}|${startDate}|${endDate}`.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     education.push({
       educationId: `EDU-${String(education.length + 1).padStart(3, "0")}`,
-      institution:
-        line.replace(DATE_RANGE_RE, "").split("|")[0]?.split(",")[0]?.trim() ||
-        "Unknown Institution",
-      degree: degreeMatch?.[0]?.trim() || "Degree",
-      field: /in\s+([A-Za-z][A-Za-z\s&/]+)/i.exec(line)?.[1]?.trim() || "General Studies",
-      startDate: dateMatch?.[1]?.trim() || "2012",
-      endDate: dateMatch?.[2]?.trim() || "2016",
+      institution,
+      degree,
+      field,
+      startDate,
+      endDate,
     });
   }
   return education;

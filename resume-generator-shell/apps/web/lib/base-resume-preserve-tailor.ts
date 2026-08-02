@@ -8,6 +8,16 @@ import type {
   UserProfile,
 } from "@resume/contracts";
 import { ImmutableFinalResumeAssembler } from "@resume/core";
+import {
+  isBrokenBulletWording,
+  repairBrokenBulletWording,
+} from "@resume/engines";
+import {
+  isJunkBulletText,
+  isWeakOrBrokenBulletText,
+  sanitizeBulletList,
+  sanitizeBulletText,
+} from "./base-resume-bullet-sanitize";
 
 type ExperienceBullet = ExperienceEngineOutput["experiences"][number]["bullets"][number];
 type CareerEntry = UserProfile["careerHistory"][number];
@@ -32,7 +42,7 @@ function cloneBullet(bullet: ExperienceBullet, bulletId: string): ExperienceBull
 }
 
 function asPreservedBullet(text: string, bulletId: string): ExperienceBullet {
-  const trimmed = text.trim();
+  const trimmed = sanitizeBulletText(text);
   const actionVerb = trimmed.split(/\s+/)[0]?.replace(/[^A-Za-z]/g, "") || "Delivered";
   return {
     bulletId,
@@ -48,6 +58,19 @@ function asPreservedBullet(text: string, bulletId: string): ExperienceBullet {
     finalBullet: trimmed,
     strengthScore: bulletQualityScore(trimmed),
     distinctivenessScore: 8,
+    status: "approved",
+  };
+}
+
+function sanitizeJdCandidate(bullet: ExperienceBullet): ExperienceBullet | null {
+  const repaired = sanitizeBulletText(repairBrokenBulletWording(bullet.finalBullet));
+  if (!repaired || isJunkBulletText(repaired) || isWeakOrBrokenBulletText(repaired)) {
+    return null;
+  }
+  if (isBrokenBulletWording(repaired)) return null;
+  return {
+    ...structuredClone(bullet),
+    finalBullet: repaired,
     status: "approved",
   };
 }
@@ -115,8 +138,9 @@ function rankCandidateBullets(
   bullets: readonly ExperienceBullet[],
   options: { roleStacks: readonly string[]; jdText: string },
 ): ExperienceBullet[] {
-  return [...bullets]
-    .filter((bullet) => bullet.status === "approved" && bullet.finalBullet.trim())
+  return bullets
+    .map((bullet) => sanitizeJdCandidate(bullet))
+    .filter((bullet): bullet is ExperienceBullet => Boolean(bullet))
     .filter((bullet) => !WEAK_PHRASE_RE.test(bullet.finalBullet))
     .sort((left, right) => {
       const leftScore =
@@ -201,8 +225,9 @@ function mergeExperienceBullets(input: {
     roleStacks: input.roleStacks,
     jdText: input.jdText,
   };
-  const originalBullets = input.originalTexts.map((text, bulletIndex) =>
-    asPreservedBullet(text, `${input.experienceId}-ORIG-${bulletIndex + 1}`),
+  const originalBullets = sanitizeBulletList(input.originalTexts).map(
+    (text, bulletIndex) =>
+      asPreservedBullet(text, `${input.experienceId}-ORIG-${bulletIndex + 1}`),
   );
   const candidates = candidateJdBulletsForRole({
     generated: input.generated,
@@ -366,9 +391,12 @@ export function assemblePreservedBaseResumeTailor(input: {
         : structuredClone(userProfile.careerHistory),
   };
 
+  const cleanedSummary = sanitizeBulletText(originalSummary)
+    .replace(/\.$/, "")
+    .trim();
   const summary: SummaryEngineOutput = {
     ...structuredClone(generated.summary),
-    summary: originalSummary || generated.summary.summary,
+    summary: cleanedSummary || generated.summary.summary,
   };
 
   const preservedSkillNames = extracted.skills
@@ -419,7 +447,7 @@ export function assemblePreservedBaseResumeTailor(input: {
       experienceIndex,
       userProfile.careerHistory,
     );
-    const originalTexts = entry.bullets.map((text) => text.trim()).filter(Boolean);
+    const originalTexts = sanitizeBulletList(entry.bullets);
     const bullets = mergeExperienceBullets({
       experienceId: header.experienceId,
       experienceIndex,
@@ -435,7 +463,19 @@ export function assemblePreservedBaseResumeTailor(input: {
       startDate: header.startDate,
       endDate: header.endDate,
       assignedRole: header.assignedRole,
-      bullets,
+      // Final guard: never emit junk/broken strings into the assembled resume.
+      bullets: bullets
+        .map((bullet) => ({
+          ...bullet,
+          finalBullet: sanitizeBulletText(bullet.finalBullet),
+        }))
+        .filter(
+          (bullet) =>
+            bullet.finalBullet &&
+            !isJunkBulletText(bullet.finalBullet) &&
+            (bullet.requirementId === "PRESERVED-ORIGINAL" ||
+              !isWeakOrBrokenBulletText(bullet.finalBullet)),
+        ),
     };
   });
 

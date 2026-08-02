@@ -1,5 +1,6 @@
 import mammoth from "mammoth";
 import { extractText } from "unpdf";
+import { cleanResumeExtractText } from "./base-resume-bullet-sanitize";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -41,7 +42,7 @@ export async function extractResumeText(
     lower.endsWith(".md")
   ) {
     return {
-      text: new TextDecoder("utf-8").decode(file.bytes).trim(),
+      text: cleanResumeExtractText(new TextDecoder("utf-8").decode(file.bytes)),
       mimeType: "text/plain",
     };
   }
@@ -56,16 +57,16 @@ export async function extractResumeText(
       throw new Error("Legacy .doc files are not supported. Upload .docx, .pdf, or .txt.");
     }
     const result = await mammoth.extractRawText({ buffer: Buffer.from(file.bytes) });
-    const text = (result.value || "").replace(/\r/g, "").trim();
+    const text = cleanResumeExtractText(result.value || "");
     if (!text) throw new Error("Could not extract text from the Word resume.");
     return { text, mimeType };
   }
 
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
     const result = await extractText(file.bytes, { mergePages: true });
-    const text = (Array.isArray(result.text) ? result.text.join("\n") : String(result.text || ""))
-      .replace(/\r/g, "")
-      .trim();
+    const text = cleanResumeExtractText(
+      Array.isArray(result.text) ? result.text.join("\n") : String(result.text || ""),
+    );
     if (!text) throw new Error("Could not extract text from the PDF resume.");
     return { text, mimeType: "application/pdf" };
   }

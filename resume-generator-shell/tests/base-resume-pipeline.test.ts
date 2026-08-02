@@ -17,6 +17,11 @@ import {
   pickBestBaseResumeMatch,
 } from "../apps/web/lib/base-resume-match";
 import {
+  isJunkBulletText,
+  sanitizeBulletList,
+  sanitizeBulletText,
+} from "../apps/web/lib/base-resume-bullet-sanitize";
+import {
   __baseResumeBulletMergeForTests,
   assemblePreservedBaseResumeTailor,
 } from "../apps/web/lib/base-resume-preserve-tailor";
@@ -146,6 +151,34 @@ Integrate WebSockets and collaborate with product teams.`,
     expect(matches[0]?.baseResumeId).toBe("BR-FE");
     expect(pickBestBaseResumeMatch(matches)?.title).toBe("Frontend base");
     expect(matches[0]?.matchedStacks.length).toBeGreaterThan(0);
+  });
+});
+
+describe("base-resume bullet sanitization", () => {
+  it("removes mojibake bullets, junk lines, and broken fragments", () => {
+    expect(sanitizeBulletText("ð •  Built React apps with TypeScript")).toMatch(
+      /^Built React apps with TypeScript/i,
+    );
+    expect(isJunkBulletText("Tultepec, México, Mexico +52 1 56 5638 1831")).toBe(true);
+    expect(isJunkBulletText("1 of 3")).toBe(true);
+    expect(isJunkBulletText("2018 - Present")).toBe(true);
+    expect(
+      isJunkBulletText(
+        "Improved comfortable translating product requirements into technical tasks",
+      ),
+    ).toBe(true);
+
+    const cleaned = sanitizeBulletList([
+      "ð • Engineered a multi-modal deepfake verification pipeline that fuses Vision Transformers",
+      "(ViT), Wav2Vec2,",
+      "and TensorRT for GPU-accelerated feature extraction.",
+      "nssoftware2025@outlook.com",
+      "Page 2 of 3",
+      "Helped with assorted UI tasks across the board for stakeholders.",
+    ]);
+    expect(cleaned.some((bullet) => /multi-modal deepfake/i.test(bullet))).toBe(true);
+    expect(cleaned.join(" ")).toMatch(/Vision Transformers/i);
+    expect(cleaned.every((bullet) => !/ð|outlook\.com|Page 2/i.test(bullet))).toBe(true);
   });
 });
 
