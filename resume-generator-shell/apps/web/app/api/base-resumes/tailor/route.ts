@@ -153,6 +153,8 @@ export async function POST(request: Request): Promise<Response> {
       generated,
       extracted: base.extracted,
       userProfile,
+      // Re-parse summary/skills from raw text when older uploads left them empty.
+      rawText: base.rawText,
     });
 
     return NextResponse.json(

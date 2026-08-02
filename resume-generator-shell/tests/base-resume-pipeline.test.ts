@@ -21,6 +21,7 @@ import {
   sanitizeBulletList,
   sanitizeBulletText,
 } from "../apps/web/lib/base-resume-bullet-sanitize";
+import { ensurePreservedExtractedFields } from "../apps/web/lib/base-resume-preserve-fields";
 import {
   __baseResumeBulletMergeForTests,
   assemblePreservedBaseResumeTailor,
@@ -309,6 +310,18 @@ describe("base-resume JD bullet merge rules", () => {
 });
 
 describe("preserved base-resume tailor", () => {
+  it("recovers summary/skills from rawText when stored extract left them empty", () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    const hollow = {
+      ...extracted,
+      summary: "",
+      skills: [] as string[],
+    };
+    const recovered = ensurePreservedExtractedFields(hollow, SAMPLE_RESUME);
+    expect(recovered.summary).toMatch(/Frontend engineer focused on React/i);
+    expect(recovered.skills.join(" ")).toMatch(/React|TypeScript/i);
+  });
+
   it("preserves original content, overlays profile headers, and applies bullet rules", async () => {
     const extracted = parseBaseResumeText(SAMPLE_RESUME);
     expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
@@ -376,10 +389,17 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
       locale: "en-US",
     });
 
+    // Simulate older uploads with empty summary/skills in stored extract.
+    const hollowExtracted = {
+      ...extracted,
+      summary: "",
+      skills: [] as string[],
+    };
     const tailored = assemblePreservedBaseResumeTailor({
       generated,
-      extracted,
+      extracted: hollowExtracted,
       userProfile,
+      rawText: SAMPLE_RESUME,
     });
 
     const contact = tailored.document.sections.find((section) => section.id === "contact");
@@ -399,8 +419,19 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
     expect(summary?.id === "professional-summary" && summary.content).toMatch(
       /Frontend engineer focused on React/i,
     );
+    // Must keep the uploaded summary — not the JD-generated one.
+    expect(summary?.id === "professional-summary" && summary.content).toBe(
+      extracted.summary,
+    );
+    expect(summary?.id === "professional-summary" && summary.content).not.toBe(
+      generated.summary.summary,
+    );
     expect(skills?.id === "skills" && skills.content[0]?.skills.join(" ")).toMatch(
       /React|TypeScript/i,
+    );
+    // Must keep uploaded skills — not JD-generated skill categories.
+    expect(skills?.id === "skills" && skills.content[0]?.skills).toEqual(
+      expect.arrayContaining(extracted.skills.slice(0, 5)),
     );
     expect(education?.id === "education" && education.content[0]?.institution).toBe(
       "Kenny University",

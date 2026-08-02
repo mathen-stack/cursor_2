@@ -18,6 +18,10 @@ import {
   sanitizeBulletList,
   sanitizeBulletText,
 } from "./base-resume-bullet-sanitize";
+import {
+  ensurePreservedExtractedFields,
+  preserveOriginalSummaryText,
+} from "./base-resume-preserve-fields";
 import { sanitizeEncodedField } from "./pdf-encoding-decode";
 
 type ExperienceBullet = ExperienceEngineOutput["experiences"][number]["bullets"][number];
@@ -132,7 +136,7 @@ function originalBulletWeakness(
 }
 
 function normalizeOriginalSummary(extracted: BaseResumeExtracted): string {
-  return extracted.summary?.trim() || "";
+  return preserveOriginalSummaryText(extracted.summary || "");
 }
 
 function rankCandidateBullets(
@@ -374,8 +378,11 @@ export function assemblePreservedBaseResumeTailor(input: {
   extracted: BaseResumeExtracted;
   /** Full saved user profile — identity, career headers, education. */
   userProfile: UserProfile;
+  /** Optional raw resume text used to recover summary/skills for older uploads. */
+  rawText?: string;
 }): FinalResumeData {
-  const { generated, extracted, userProfile } = input;
+  const { generated, userProfile } = input;
+  const extracted = ensurePreservedExtractedFields(input.extracted, input.rawText);
   const originalSummary = normalizeOriginalSummary(extracted);
   const jdText = generated.jobDescription.rawText || "";
 
@@ -403,18 +410,19 @@ export function assemblePreservedBaseResumeTailor(input: {
         : structuredClone(userProfile.careerHistory),
   };
 
-  const cleanedSummary = sanitizeBulletText(originalSummary)
-    .replace(/\.$/, "")
-    .trim();
+  // Always prefer the uploaded summary. Only if the upload had none do we keep
+  // the generated summary (legacy resumes without a Summary section).
   const summary: SummaryEngineOutput = {
     ...structuredClone(generated.summary),
-    summary: cleanedSummary || generated.summary.summary,
+    summary: originalSummary || generated.summary.summary,
   };
 
   const preservedSkillNames = extracted.skills
     .map((skill) => skill.trim())
     .filter(Boolean)
     .slice(0, 40);
+  // Always prefer uploaded skills — never replace them with JD-generated skills
+  // when the original resume had a Skills section.
   const skills: SkillsEngineOutput =
     preservedSkillNames.length > 0
       ? {

@@ -283,6 +283,24 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
   }));
 }
 
+/** Pull skill names from the Skills section, preserving original labels. */
+export function parseSkillNames(skillLines: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const line of skillLines) {
+    const cleaned = line.replace(/^skills?\s*:\s*/i, "").trim();
+    if (!cleaned) continue;
+    const categorized = /^([^:]{2,48}):\s*(.+)$/.exec(cleaned);
+    const payload = (categorized?.[2] || cleaned).trim();
+    for (const part of payload.split(/[,|•]/)) {
+      const name = part.replace(/^[-*]\s*/, "").trim();
+      if (name.length >= 2 && name.length <= 48 && !/^skills?$/i.test(name)) {
+        names.push(name);
+      }
+    }
+  }
+  return uniqueStrings(names).slice(0, 40);
+}
+
 function parseEducation(lines: string[]): BaseResumeExtracted["education"] {
   const education: BaseResumeExtracted["education"] = [];
   const seen = new Set<string>();
@@ -368,17 +386,11 @@ export function parseBaseResumeText(rawText: string): BaseResumeExtracted {
 
   const experiences = parseExperiences(experienceLines);
   const education = parseEducation(educationLines);
-  const skillStacks = detectStacks(skillLines.join("\n") || text);
+  // Preserve skills from the Skills section only (do not mix in experience stacks).
+  const skills = parseSkillNames(skillLines);
+  const skillStacks = detectStacks(skillLines.join("\n") || skills.join("\n"));
   const roleStacks = uniqueStrings(experiences.flatMap((entry) => entry.stacks));
-  const stacks = uniqueStrings([...skillStacks, ...roleStacks]);
-  const skills = uniqueStrings([
-    ...stacks,
-    ...skillLines
-      .join(",")
-      .split(/[,|•]/)
-      .map((part) => part.trim())
-      .filter((part) => part.length >= 2 && part.length <= 40),
-  ]).slice(0, 40);
+  const stacks = uniqueStrings([...skillStacks, ...roleStacks, ...skills]);
 
   if (experiences.length === 0) {
     experiences.push({
