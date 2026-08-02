@@ -307,6 +307,72 @@ describe("base-resume JD bullet merge rules", () => {
       replaced.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
     ).toBe(2);
   });
+
+  it("creates a full JD bullet set for profile-only roles with no uploaded bullets", () => {
+    const { createBulletsForNewExperience, NEW_ROLE_BULLET_TARGET } =
+      __baseResumeBulletMergeForTests;
+
+    const strongJdBullets = Array.from({ length: 5 }, (_, index) => ({
+      bulletId: `G${index + 1}`,
+      requirementId: `R${index + 1}`,
+      situation: "s",
+      task: "t",
+      action: "a",
+      result: "r",
+      actionVerb: "Built",
+      directKeywords: ["React", "TypeScript"],
+      supportingKeywords: [],
+      outcomeKeywords: [],
+      finalBullet: `Built React platform capability ${index + 1} with TypeScript, improving delivery reliability by ${20 + index}%.`,
+      strengthScore: 9.5,
+      distinctivenessScore: 9,
+      status: "approved" as const,
+    }));
+
+    const generatedStub = {
+      jobDescription: {
+        rawText:
+          "Senior Frontend Engineer React TypeScript delivery reliability platforms",
+      },
+      experience: {
+        experiences: [
+          {
+            experienceId: "EXP-GEN-1",
+            companyName: "Generated Co",
+            startDate: "2020",
+            endDate: "2022",
+            assignedRole: "Frontend Engineer",
+            bullets: strongJdBullets.slice(0, 2),
+          },
+          {
+            experienceId: "EXP-GEN-2",
+            companyName: "Generated Labs",
+            startDate: "2018",
+            endDate: "2020",
+            assignedRole: "Software Engineer",
+            bullets: strongJdBullets,
+          },
+        ],
+      },
+    } as unknown as import("@resume/contracts").FinalResumeData;
+
+    const created = createBulletsForNewExperience({
+      experienceId: "EXP-NEW",
+      experienceIndex: 1,
+      roleStacks: ["React", "TypeScript"],
+      jdText: generatedStub.jobDescription.rawText,
+      generated: generatedStub,
+    });
+
+    expect(NEW_ROLE_BULLET_TARGET).toBe(5);
+    expect(created.length).toBe(NEW_ROLE_BULLET_TARGET);
+    expect(
+      created.every((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL"),
+    ).toBe(true);
+    expect(created.every((bullet) => /React|TypeScript/i.test(bullet.finalBullet))).toBe(
+      true,
+    );
+  });
 });
 
 describe("preserved base-resume tailor", () => {
@@ -445,12 +511,17 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
       throw new Error("Expected professional experience section");
     }
 
+    expect(experience.content.length).toBe(userProfile.careerHistory.length);
     expect(experience.content[0]?.companyName).toBe("Kenny Corp");
     expect(experience.content[0]?.assignedRole).toBe("Staff Frontend Engineer");
     expect(experience.content[1]?.companyName).toBe("Kenny Labs");
 
     experience.content.forEach((entry, index) => {
       const original = extracted.experiences[index]?.bullets ?? [];
+      if (original.length === 0) {
+        expect(entry.bullets.length).toBeGreaterThanOrEqual(2);
+        return;
+      }
       if (original.length > 4) {
         expect(entry.bullets.length).toBe(original.length);
         expect(entry.bullets).not.toContain("Helped with assorted UI tasks");
@@ -479,6 +550,185 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
     expect(new TextDecoder().decode(txt.bytes)).toMatch(/Kenny User/);
     expect(new TextDecoder().decode(txt.bytes)).toMatch(
       /Built React and TypeScript interfaces/i,
+    );
+  }, 60_000);
+
+  it("matches profile experience count and creates bullets for extra profile roles", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.experiences.length).toBe(2);
+
+    const userProfile = {
+      profileId: "PROFILE-COUNT",
+      personalInformation: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Corp",
+          role: "Staff Frontend Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Kenny Labs",
+          role: "Frontend Engineer",
+          startDate: "2019-06",
+          endDate: "2022-02",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Kenny Start",
+          role: "Junior Engineer",
+          startDate: "2017-01",
+          endDate: "2019-05",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: userProfile,
+      locale: "en-US",
+      approvalPolicy: "preserve-tailor",
+    });
+
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted,
+      userProfile,
+      rawText: SAMPLE_RESUME,
+    });
+
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    expect(experience.content.length).toBe(3);
+    expect(experience.content.map((entry) => entry.companyName)).toEqual([
+      "Kenny Corp",
+      "Kenny Labs",
+      "Kenny Start",
+    ]);
+    expect(experience.content[2]?.assignedRole).toBe("Junior Engineer");
+    expect(experience.content[2]?.bullets.length).toBeGreaterThanOrEqual(2);
+    // Extra profile role has no uploaded originals to preserve.
+    for (const bullet of experience.content[2]?.bullets ?? []) {
+      expect(extracted.experiences.flatMap((entry) => entry.bullets)).not.toContain(
+        bullet,
+      );
+    }
+    // Surplus uploaded roles are not the driver; count stays at profile length.
+    expect(tailored.profile.careerHistory.length).toBe(3);
+  }, 60_000);
+
+  it("drops surplus uploaded experiences when profile has fewer roles", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.experiences.length).toBeGreaterThanOrEqual(2);
+
+    const userProfile = {
+      profileId: "PROFILE-SHORT",
+      personalInformation: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        location: "Austin, TX",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Only",
+          role: "Staff Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: userProfile,
+      locale: "en-US",
+      approvalPolicy: "preserve-tailor",
+    });
+
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted,
+      userProfile,
+    });
+
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    expect(experience.content.length).toBe(1);
+    expect(experience.content[0]?.companyName).toBe("Kenny Only");
+    expect(experience.content[0]?.assignedRole).toBe("Staff Engineer");
+    // First uploaded role keeps strong originals (weakest may be replaced).
+    expect(experience.content[0]?.bullets.join(" ")).toMatch(
+      /Built React and TypeScript interfaces/i,
+    );
+    expect(experience.content[0]?.bullets.join(" ")).toMatch(
+      /Improved WebSocket reliability/i,
+    );
+    expect(experience.content[0]?.bullets).not.toContain(
+      "Helped with assorted UI tasks",
     );
   }, 60_000);
 });

@@ -448,10 +448,11 @@ export default function BaseResumeTailor({
               <div>
                 <h2>Tailor to a job description</h2>
                 <p className="hint">
-                  Auto-find or upload a resume, then tailor. We preserve the original
-                  resume content, overlay identity/career/education from your Home
-                  profile, and either replace the poorest 1–2 bullets (when a role
-                  has more than 4) or add 1–2 new JD bullets.
+                  Auto-find or upload a resume, then tailor. Experience count follows
+                  your Home profile. We preserve overlapping uploaded bullets,
+                  overlay identity/career/education from profile, replace/add 1–2 JD
+                  bullets on matching roles, and create new JD bullets for extra
+                  profile roles.
                 </p>
               </div>
             </div>

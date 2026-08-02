@@ -24,9 +24,11 @@ type TailorMode = "auto" | "manual";
 
 /**
  * Tailor an uploaded base resume to a JD while:
- * 1) preserving the original resume content (summary, skills, bullets)
- * 2) overlaying identity + career headers + education from the user profile
- * 3) if a role has >4 bullets, replace poorest 1–2; else append 1–2 JD bullets
+ * 1) preserving the original resume content (summary, skills, overlapping bullets)
+ * 2) experience count follows the user profile career list
+ * 3) overlaying identity + career headers + education from the user profile
+ * 4) matching roles: if >4 bullets, replace poorest 1–2; else append 1–2 JD bullets
+ * 5) extra profile roles (upload shorter): create new JD bullets for those roles
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -175,10 +177,12 @@ export async function POST(request: Request): Promise<Response> {
           identityFromProfile: true,
           careerHeadersFromProfile: true,
           educationFromProfile: true,
+          experienceCountFromProfile: true,
           preservedSummary: true,
           preservedSkills: true,
           preservedOriginalBullets: true,
           bulletRule: "replace-poorest-1-2-when-more-than-4-else-append-1-2",
+          extraProfileRoles: "create-new-jd-bullets",
         },
       },
       { status: 201 },

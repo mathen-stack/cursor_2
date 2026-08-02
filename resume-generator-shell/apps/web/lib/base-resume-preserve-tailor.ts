@@ -32,6 +32,8 @@ type EducationEntry = UserProfile["education"][number];
 const JD_BULLETS_PER_ROLE = 2;
 /** Experiences with more than this many bullets replace poorest instead of appending. */
 const REPLACE_THRESHOLD_EXCLUSIVE = 4;
+/** Profile-only roles (no uploaded bullets) get a full generated bullet set. */
+const NEW_ROLE_BULLET_TARGET = 5;
 
 const STRONG_VERB_RE =
   /\b(led|built|improved|reduced|increased|delivered|launched|designed|implemented|optimized|owned|drove|created|architected|scaled|automated|migrated|engineered|accelerated|strengthened)\b/i;
@@ -289,13 +291,13 @@ function mergeExperienceBullets(input: {
 }
 
 /**
- * Overlay company / period / role from the user's profile onto each original
- * experience (by index). Bullets stay from the uploaded resume.
+ * Build experience headers from the user profile (source of truth for count).
+ * Uploaded resume fields only fill gaps when the profile value is missing.
  */
 function careerHeaderFromProfile(
-  entry: BaseResumeExperience,
+  profileEntry: CareerEntry | undefined,
   index: number,
-  profileCareer: readonly CareerEntry[],
+  uploaded?: BaseResumeExperience | null,
 ): {
   experienceId: string;
   companyName: string;
@@ -303,21 +305,20 @@ function careerHeaderFromProfile(
   startDate: string;
   endDate: string;
 } {
-  const fromProfile = profileCareer[index];
   const experienceId =
-    entry.experienceId ||
-    fromProfile?.experienceId ||
+    profileEntry?.experienceId ||
+    uploaded?.experienceId ||
     `EXP-${String(index + 1).padStart(3, "0")}`;
-  const profileCompany = sanitizeEncodedField(fromProfile?.companyName?.trim() || "", "")
+  const profileCompany = sanitizeEncodedField(profileEntry?.companyName?.trim() || "", "")
     .replace(/\s*\|\s*$/g, "")
     .trim();
-  const profileRole = sanitizeEncodedField(fromProfile?.role?.trim() || "", "")
+  const profileRole = sanitizeEncodedField(profileEntry?.role?.trim() || "", "")
     .replace(/\s*\|\s*$/g, "")
     .trim();
-  const entryCompany = sanitizeEncodedField(entry.companyName || "", "")
+  const entryCompany = sanitizeEncodedField(uploaded?.companyName || "", "")
     .replace(/\s*\|\s*$/g, "")
     .trim();
-  const entryRole = sanitizeEncodedField(entry.role?.trim() || "", "")
+  const entryRole = sanitizeEncodedField(uploaded?.role?.trim() || "", "")
     .replace(/\s*\|\s*$/g, "")
     .trim();
   return {
@@ -325,9 +326,55 @@ function careerHeaderFromProfile(
     // Profile wins for headers; never emit undecoded PDF cipher text.
     companyName: profileCompany || entryCompany || "Company",
     assignedRole: profileRole || entryRole || "Professional",
-    startDate: fromProfile?.startDate?.trim() || entry.startDate || "2018",
-    endDate: fromProfile?.endDate?.trim() || entry.endDate || "Present",
+    startDate: profileEntry?.startDate?.trim() || uploaded?.startDate || "2018",
+    endDate: profileEntry?.endDate?.trim() || uploaded?.endDate || "Present",
   };
+}
+
+/**
+ * Extra profile roles with no uploaded bullets get a full set of JD bullets
+ * (not the 1–2 replace/append budget used for preserved roles).
+ */
+function createBulletsForNewExperience(input: {
+  experienceId: string;
+  experienceIndex: number;
+  roleStacks: readonly string[];
+  jdText: string;
+  generated: FinalResumeData;
+}): ExperienceBullet[] {
+  const roleGenerated =
+    input.generated.experience.experiences[input.experienceIndex]?.bullets ?? [];
+  const fromRole: ExperienceBullet[] = [];
+  const seen = new Set<string>();
+  for (const bullet of roleGenerated) {
+    const cleaned = sanitizeJdCandidate(bullet);
+    if (!cleaned) continue;
+    const key = cleaned.finalBullet.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    fromRole.push(
+      cloneBullet(cleaned, `${input.experienceId}-NEW-${fromRole.length + 1}`),
+    );
+  }
+  if (fromRole.length >= NEW_ROLE_BULLET_TARGET) {
+    return fromRole.slice(0, NEW_ROLE_BULLET_TARGET);
+  }
+
+  const fillers = pickUniqueJdBullets(
+    candidateJdBulletsForRole({
+      generated: input.generated,
+      experienceIndex: input.experienceIndex,
+      roleStacks: input.roleStacks,
+      jdText: input.jdText,
+    }),
+    NEW_ROLE_BULLET_TARGET - fromRole.length,
+    seen,
+    input.experienceId,
+  ).map((bullet, offset) =>
+    cloneBullet(bullet, `${input.experienceId}-NEW-${fromRole.length + offset + 1}`),
+  );
+
+  return [...fromRole, ...fillers].slice(0, NEW_ROLE_BULLET_TARGET);
 }
 
 /**
@@ -367,11 +414,30 @@ function roleStacksForExperience(
     .filter(Boolean);
 }
 
+function finalizeExperienceBullets(
+  bullets: readonly ExperienceBullet[],
+): ExperienceBullet[] {
+  return bullets
+    .map((bullet) => ({
+      ...bullet,
+      finalBullet: sanitizeBulletText(bullet.finalBullet),
+    }))
+    .filter(
+      (bullet) =>
+        bullet.finalBullet &&
+        !isJunkBulletText(bullet.finalBullet) &&
+        (bullet.requirementId === "PRESERVED-ORIGINAL" ||
+          !isWeakOrBrokenBulletText(bullet.finalBullet)),
+    );
+}
+
 /**
- * Preserve the uploaded resume content (summary, skills, bullets).
- * From the user profile only: identity, career headers (company/period/role),
- * and education (school/period/degree/discipline).
- * Bullets: if count > 4 replace poorest 1–2; else append 1–2 new JD bullets.
+ * Preserve uploaded resume content (summary, skills, overlapping-role bullets).
+ * Experience count follows the user profile career list.
+ * - Matching indexes: overlay profile headers; keep uploaded bullets; replace/append 1–2 JD bullets.
+ * - Extra profile roles (upload shorter): create new JD bullets for those roles.
+ * - Extra uploaded roles (upload longer): dropped so count matches profile.
+ * Also overlays identity + education from the user profile.
  */
 export function assemblePreservedBaseResumeTailor(input: {
   generated: FinalResumeData;
@@ -387,27 +453,36 @@ export function assemblePreservedBaseResumeTailor(input: {
   const jdText = generated.jobDescription.rawText || "";
 
   const education = educationFromProfile(extracted, userProfile.education);
+  const profileCareer =
+    userProfile.careerHistory.length > 0
+      ? userProfile.careerHistory
+      : extracted.experiences.map((entry, index) => ({
+          experienceId:
+            entry.experienceId || `EXP-${String(index + 1).padStart(3, "0")}`,
+          companyName: entry.companyName,
+          ...(entry.role ? { role: entry.role } : {}),
+          startDate: entry.startDate,
+          endDate: entry.endDate,
+        }));
+
   const profile: UserProfile = {
     profileId: userProfile.profileId || generated.profile.profileId,
     personalInformation: structuredClone(userProfile.personalInformation),
     education,
-    careerHistory:
-      extracted.experiences.length > 0
-        ? extracted.experiences.map((entry, index) => {
-            const header = careerHeaderFromProfile(
-              entry,
-              index,
-              userProfile.careerHistory,
-            );
-            return {
-              experienceId: header.experienceId,
-              companyName: header.companyName,
-              ...(header.assignedRole ? { role: header.assignedRole } : {}),
-              startDate: header.startDate,
-              endDate: header.endDate,
-            };
-          })
-        : structuredClone(userProfile.careerHistory),
+    careerHistory: profileCareer.map((entry, index) => {
+      const header = careerHeaderFromProfile(
+        entry,
+        index,
+        extracted.experiences[index],
+      );
+      return {
+        experienceId: header.experienceId,
+        companyName: header.companyName,
+        ...(header.assignedRole ? { role: header.assignedRole } : {}),
+        startDate: header.startDate,
+        endDate: header.endDate,
+      };
+    }),
   };
 
   // Always prefer the uploaded summary. Only if the upload had none do we keep
@@ -448,34 +523,44 @@ export function assemblePreservedBaseResumeTailor(input: {
         }
       : structuredClone(generated.skills);
 
-  const sourceExperiences: BaseResumeExperience[] =
-    extracted.experiences.length > 0
-      ? extracted.experiences
-      : generated.experience.experiences.map((entry) => ({
-          experienceId: entry.experienceId,
-          companyName: entry.companyName,
-          role: entry.assignedRole,
-          startDate: entry.startDate,
-          endDate: entry.endDate,
-          bullets: [] as string[],
-          stacks: [] as string[],
-        }));
-
-  const experiences = sourceExperiences.map((entry, experienceIndex) => {
+  const experiences = profileCareer.map((profileEntry, experienceIndex) => {
+    const uploaded = extracted.experiences[experienceIndex] ?? null;
     const header = careerHeaderFromProfile(
-      entry,
+      profileEntry,
       experienceIndex,
-      userProfile.careerHistory,
+      uploaded,
     );
-    const originalTexts = sanitizeBulletList(entry.bullets);
-    const bullets = mergeExperienceBullets({
-      experienceId: header.experienceId,
-      experienceIndex,
-      originalTexts,
-      roleStacks: roleStacksForExperience(entry, header.assignedRole),
-      jdText,
-      generated,
-    });
+    const originalTexts = sanitizeBulletList(uploaded?.bullets ?? []);
+    const roleStacks = roleStacksForExperience(
+      uploaded ?? {
+        experienceId: header.experienceId,
+        companyName: header.companyName,
+        role: header.assignedRole,
+        startDate: header.startDate,
+        endDate: header.endDate,
+        bullets: [],
+        stacks: [],
+      },
+      header.assignedRole,
+    );
+
+    const bullets =
+      originalTexts.length > 0
+        ? mergeExperienceBullets({
+            experienceId: header.experienceId,
+            experienceIndex,
+            originalTexts,
+            roleStacks,
+            jdText,
+            generated,
+          })
+        : createBulletsForNewExperience({
+            experienceId: header.experienceId,
+            experienceIndex,
+            roleStacks,
+            jdText,
+            generated,
+          });
 
     return {
       experienceId: header.experienceId,
@@ -483,19 +568,7 @@ export function assemblePreservedBaseResumeTailor(input: {
       startDate: header.startDate,
       endDate: header.endDate,
       assignedRole: header.assignedRole,
-      // Final guard: never emit junk/broken strings into the assembled resume.
-      bullets: bullets
-        .map((bullet) => ({
-          ...bullet,
-          finalBullet: sanitizeBulletText(bullet.finalBullet),
-        }))
-        .filter(
-          (bullet) =>
-            bullet.finalBullet &&
-            !isJunkBulletText(bullet.finalBullet) &&
-            (bullet.requirementId === "PRESERVED-ORIGINAL" ||
-              !isWeakOrBrokenBulletText(bullet.finalBullet)),
-        ),
+      bullets: finalizeExperienceBullets(bullets),
     };
   });
 
@@ -520,10 +593,12 @@ export function assemblePreservedBaseResumeTailor(input: {
 export const __baseResumeBulletMergeForTests = {
   jdBulletBudget,
   mergeExperienceBullets,
+  createBulletsForNewExperience,
   originalBulletWeakness,
   bulletQualityScore,
   careerHeaderFromProfile,
   educationFromProfile,
   JD_BULLETS_PER_ROLE,
   REPLACE_THRESHOLD_EXCLUSIVE,
+  NEW_ROLE_BULLET_TARGET,
 };
