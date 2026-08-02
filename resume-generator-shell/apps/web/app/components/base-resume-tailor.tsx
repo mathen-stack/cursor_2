@@ -520,7 +520,7 @@ export default function BaseResumeTailor({
             <div className="empty-board">
               <p>No tailored resume yet.</p>
               <ol>
-                <li>Build a library (for auto-find) or upload one resume</li>
+                <li>Add resumes on the left (for auto-find) or upload one</li>
                 <li>Paste a JD and choose Auto-find or Upload resume</li>
                 <li>Tailor — preview and download when ready</li>
               </ol>
