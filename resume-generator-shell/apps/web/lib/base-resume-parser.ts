@@ -92,6 +92,13 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
 
     if (dateMatch) {
       const before = line.slice(0, dateMatch.index).trim();
+      // Role/company on previous line, dates alone on this line → keep same experience.
+      if (!before && current && current.bullets.length === 0) {
+        current.startDate = dateMatch[1]!.trim();
+        current.endDate = dateMatch[2]!.trim();
+        continue;
+      }
+
       let role = "";
       let company = "";
       const roleCompany = ROLE_COMPANY_RE.exec(before);
@@ -131,11 +138,16 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
       continue;
     }
 
-    if (!current) {
-      // Title/company line before dates
-      if (ROLE_COMPANY_RE.test(line) || line.includes("|")) {
-        const roleCompany = ROLE_COMPANY_RE.exec(line);
-        const [left, right] = line.split("|").map((part) => part.trim());
+    // New role/company heading — start a fresh experience when the current one
+    // already has bullets (or none exists yet).
+    if (
+      !bullet &&
+      (ROLE_COMPANY_RE.test(line) || (line.includes("|") && line.length < 90))
+    ) {
+      const roleCompany = ROLE_COMPANY_RE.exec(line);
+      const [left, right] = line.split("|").map((part) => part.trim());
+      if (!current || current.bullets.length > 0) {
+        pushCurrent();
         current = {
           experienceId: `EXP-${String(experiences.length + 1).padStart(3, "0")}`,
           companyName: roleCompany?.[2]?.trim() || right || "Unknown Company",
@@ -145,7 +157,15 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
           bullets: [],
           stacks: [],
         };
+      } else {
+        current.companyName =
+          roleCompany?.[2]?.trim() || right || current.companyName;
+        current.role = roleCompany?.[1]?.trim() || left || current.role;
       }
+      continue;
+    }
+
+    if (!current) {
       continue;
     }
 

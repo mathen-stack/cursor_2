@@ -16,7 +16,10 @@ import {
   matchBaseResumesToJd,
   pickBestBaseResumeMatch,
 } from "../apps/web/lib/base-resume-match";
-import { assemblePreservedBaseResumeTailor } from "../apps/web/lib/base-resume-preserve-tailor";
+import {
+  __baseResumeBulletMergeForTests,
+  assemblePreservedBaseResumeTailor,
+} from "../apps/web/lib/base-resume-preserve-tailor";
 import { baseResumeToUserProfile } from "../apps/web/lib/base-resume-to-profile";
 
 const SAMPLE_RESUME = `Alex Morgan
@@ -33,11 +36,14 @@ Mar 2022 - Present
 - Built React and TypeScript interfaces with Next.js and Tailwind CSS
 - Collaborated with product stakeholders on delivery planning
 - Improved WebSocket reliability for real-time gameplay features
+- Helped with assorted UI tasks
+- Worked on various frontend tickets
 
 Frontend Engineer | Visa
 Jun 2019 - Feb 2022
 - Implemented RESTful API integrations and Cypress test coverage
 - Optimized React performance for high-traffic checkout flows
+- Delivered accessible component library updates across checkout
 
 Education
 State University
@@ -143,8 +149,96 @@ Integrate WebSockets and collaborate with product teams.`,
   });
 });
 
+describe("base-resume JD bullet merge rules", () => {
+  it("adds 1–2 bullets to reach more than 4, or replaces poorest 2 when already above 4", () => {
+    const { jdBulletBudget, mergeExperienceBullets, MIN_BULLETS_EXCLUSIVE } =
+      __baseResumeBulletMergeForTests;
+
+    expect(jdBulletBudget(3)).toBe(2); // 3 + 2 = 5
+    expect(jdBulletBudget(4)).toBe(1); // 4 + 1 = 5
+    expect(jdBulletBudget(5)).toBe(2); // replace mode
+    expect(jdBulletBudget(6)).toBe(2);
+
+    const strongPool = [
+      {
+        bulletId: "G1",
+        requirementId: "R1",
+        situation: "s",
+        task: "t",
+        action: "a",
+        result: "r",
+        actionVerb: "Built",
+        directKeywords: [],
+        supportingKeywords: [],
+        outcomeKeywords: [],
+        finalBullet:
+          "Built React and Next.js delivery pipelines with TypeScript, cutting release defects by 28%.",
+        strengthScore: 9.5,
+        distinctivenessScore: 9,
+        status: "approved" as const,
+      },
+      {
+        bulletId: "G2",
+        requirementId: "R2",
+        situation: "s",
+        task: "t",
+        action: "a",
+        result: "r",
+        actionVerb: "Improved",
+        directKeywords: [],
+        supportingKeywords: [],
+        outcomeKeywords: [],
+        finalBullet:
+          "Improved WebSocket reliability for realtime UX, sustaining 99.9% session continuity.",
+        strengthScore: 9.2,
+        distinctivenessScore: 8.8,
+        status: "approved" as const,
+      },
+    ];
+
+    const appended = mergeExperienceBullets({
+      experienceId: "EXP-APPEND",
+      experienceIndex: 0,
+      originalTexts: [
+        "Implemented RESTful API integrations and Cypress test coverage",
+        "Optimized React performance for high-traffic checkout flows",
+        "Delivered accessible component library updates across checkout",
+      ],
+      strongPool,
+    });
+    expect(appended.length).toBeGreaterThan(MIN_BULLETS_EXCLUSIVE);
+    expect(appended.length).toBe(5);
+    expect(
+      appended.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+    ).toBe(2);
+
+    const replaced = mergeExperienceBullets({
+      experienceId: "EXP-REPLACE",
+      experienceIndex: 0,
+      originalTexts: [
+        "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
+        "Improved WebSocket reliability for real-time gameplay features",
+        "Collaborated with product stakeholders on delivery planning",
+        "Helped with assorted UI tasks",
+        "Worked on various frontend tickets",
+      ],
+      strongPool,
+    });
+    expect(replaced.length).toBe(5);
+    expect(replaced.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
+      false,
+    );
+    expect(
+      replaced.some((bullet) => /Worked on various frontend tickets/i.test(bullet.finalBullet)),
+    ).toBe(false);
+    expect(
+      replaced.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+    ).toBe(2);
+  });
+});
+
 describe("preserved base-resume tailor", () => {
-  it("keeps original content, swaps identity, and appends JD bullets to every role", async () => {
+  it("keeps original content, swaps identity, and mixes in 1–2 JD bullets per role", async () => {
     const extracted = parseBaseResumeText(SAMPLE_RESUME);
     expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
 
@@ -212,15 +306,23 @@ Integrate WebSockets and collaborate with product teams on delivery.`),
     }
 
     for (const entry of experience.content) {
-      for (const original of extracted.experiences.find(
-        (item) => item.companyName === entry.companyName,
-      )?.bullets ?? []) {
-        expect(entry.bullets).toContain(original);
-      }
-      expect(entry.bullets.length).toBeGreaterThan(
+      const original =
         extracted.experiences.find((item) => item.companyName === entry.companyName)
-          ?.bullets.length ?? 0,
-      );
+          ?.bullets ?? [];
+      expect(entry.bullets.length).toBeGreaterThan(4);
+      if (original.length > 4) {
+        // Replace mode: same count, poorest originals dropped.
+        expect(entry.bullets.length).toBe(original.length);
+        expect(entry.bullets).not.toContain("Helped with assorted UI tasks");
+        expect(entry.bullets).not.toContain("Worked on various frontend tickets");
+      } else {
+        // Append mode: keep all originals and add 1–2 JD bullets.
+        for (const bullet of original) {
+          expect(entry.bullets).toContain(bullet);
+        }
+        expect(entry.bullets.length).toBeGreaterThan(original.length);
+        expect(entry.bullets.length - original.length).toBeLessThanOrEqual(2);
+      }
     }
 
     // Uploaded identity must not appear on the tailored contact block.

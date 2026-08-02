@@ -10,7 +10,10 @@ import { ImmutableFinalResumeAssembler } from "@resume/core";
 
 type ExperienceBullet = ExperienceEngineOutput["experiences"][number]["bullets"][number];
 
-const STRONG_BULLETS_PER_ROLE = 5;
+/** Add/replace at most this many JD bullets per experience. */
+const JD_BULLETS_PER_ROLE = 2;
+/** Every experience should end with more than this many bullets when possible. */
+const MIN_BULLETS_EXCLUSIVE = 4;
 
 function cloneBullet(bullet: ExperienceBullet, bulletId: string): ExperienceBullet {
   return {
@@ -41,10 +44,29 @@ function asPreservedBullet(text: string, bulletId: string): ExperienceBullet {
   };
 }
 
+/** Higher score = weaker / poorer original bullet (better candidate to replace). */
+function originalBulletWeakness(text: string): number {
+  const trimmed = text.trim();
+  let weakness = 0;
+  if (trimmed.length < 90) weakness += 2;
+  if (trimmed.length < 60) weakness += 2;
+  if (trimmed.length < 40) weakness += 2;
+  if (!/\d/.test(trimmed)) weakness += 3;
+  if (
+    !/\b(led|built|improved|reduced|increased|delivered|launched|designed|implemented|optimized|owned|drove|created|architected)\b/i.test(
+      trimmed,
+    )
+  ) {
+    weakness += 2;
+  }
+  if (/\b(collaborated|worked on|helped|responsible for|participated)\b/i.test(trimmed)) {
+    weakness += 2;
+  }
+  return weakness;
+}
+
 function normalizeOriginalSummary(extracted: BaseResumeExtracted): string {
-  const fromField = extracted.summary?.trim() || "";
-  if (fromField) return fromField;
-  return "";
+  return extracted.summary?.trim() || "";
 }
 
 function strongestGeneratedBullets(
@@ -73,6 +95,96 @@ function strongestGeneratedBullets(
   return unique;
 }
 
+function pickJdBulletsForRole(
+  pool: readonly ExperienceBullet[],
+  experienceIndex: number,
+  count: number,
+  blockedTexts: ReadonlySet<string>,
+): ExperienceBullet[] {
+  if (pool.length === 0 || count <= 0) return [];
+  const picked: ExperienceBullet[] = [];
+  const used = new Set<string>();
+  // Rotate through the strong pool so each role gets different JD bullets when possible.
+  for (let offset = 0; offset < pool.length && picked.length < count; offset += 1) {
+    const bullet = pool[(experienceIndex * JD_BULLETS_PER_ROLE + offset) % pool.length]!;
+    const key = bullet.finalBullet.trim().toLocaleLowerCase();
+    if (blockedTexts.has(key) || used.has(key)) continue;
+    used.add(key);
+    picked.push(bullet);
+  }
+  // Fallback: fill remaining from pool start if rotation collided with originals.
+  for (const bullet of pool) {
+    if (picked.length >= count) break;
+    const key = bullet.finalBullet.trim().toLocaleLowerCase();
+    if (blockedTexts.has(key) || used.has(key)) continue;
+    used.add(key);
+    picked.push(bullet);
+  }
+  return picked;
+}
+
+/**
+ * How many JD bullets to introduce for this role (1 or 2).
+ * - original > 4: always 2 (replace poorest)
+ * - otherwise: enough to push count above 4, capped at 2
+ */
+function jdBulletBudget(originalCount: number): number {
+  if (originalCount > MIN_BULLETS_EXCLUSIVE) return JD_BULLETS_PER_ROLE;
+  const neededForMoreThanFour = MIN_BULLETS_EXCLUSIVE + 1 - originalCount;
+  if (neededForMoreThanFour <= 0) return 1;
+  return Math.min(JD_BULLETS_PER_ROLE, Math.max(1, neededForMoreThanFour));
+}
+
+function mergeExperienceBullets(input: {
+  experienceId: string;
+  experienceIndex: number;
+  originalTexts: readonly string[];
+  strongPool: readonly ExperienceBullet[];
+}): ExperienceBullet[] {
+  const originalBullets = input.originalTexts.map((text, bulletIndex) =>
+    asPreservedBullet(text, `${input.experienceId}-ORIG-${bulletIndex + 1}`),
+  );
+  const budget = jdBulletBudget(originalBullets.length);
+  const originalKeys = new Set(
+    originalBullets.map((bullet) => bullet.finalBullet.trim().toLocaleLowerCase()),
+  );
+  const jdSource = pickJdBulletsForRole(
+    input.strongPool,
+    input.experienceIndex,
+    budget,
+    originalKeys,
+  );
+  const jdBullets = jdSource.map((bullet, bulletIndex) =>
+    cloneBullet(bullet, `${input.experienceId}-JD-${bulletIndex + 1}`),
+  );
+
+  if (jdBullets.length === 0) {
+    return originalBullets;
+  }
+
+  // Already more than 4 originals → replace the poorest 2 (or fewer if budget < 2).
+  if (originalBullets.length > MIN_BULLETS_EXCLUSIVE) {
+    const rankedByWeakness = originalBullets
+      .map((bullet, index) => ({
+        bullet,
+        index,
+        weakness: originalBulletWeakness(bullet.finalBullet),
+      }))
+      .sort((left, right) => {
+        if (right.weakness !== left.weakness) return right.weakness - left.weakness;
+        return right.index - left.index;
+      });
+    const replaceIndexes = new Set(
+      rankedByWeakness.slice(0, jdBullets.length).map((item) => item.index),
+    );
+    const kept = originalBullets.filter((_, index) => !replaceIndexes.has(index));
+    return [...kept, ...jdBullets];
+  }
+
+  // Otherwise append 1–2 JD bullets so the role has more than 4 when possible.
+  return [...originalBullets, ...jdBullets];
+}
+
 function preservedEducation(
   extracted: BaseResumeExtracted,
   fallback: UserProfile["education"],
@@ -90,8 +202,8 @@ function preservedEducation(
 
 /**
  * Keep the uploaded resume's summary / skills / experience / education intact,
- * stamp the signed-in user's identity, and append the strongest JD-generated
- * bullets onto every experience entry.
+ * stamp the signed-in user's identity, and introduce 1–2 strongest JD bullets
+ * per experience (append, or replace poorest when originals already exceed 4).
  */
 export function assemblePreservedBaseResumeTailor(input: {
   generated: FinalResumeData;
@@ -100,10 +212,7 @@ export function assemblePreservedBaseResumeTailor(input: {
 }): FinalResumeData {
   const { generated, extracted, identityProfile } = input;
   const originalSummary = normalizeOriginalSummary(extracted);
-  const strongBullets = strongestGeneratedBullets(
-    generated,
-    Math.max(STRONG_BULLETS_PER_ROLE, 5),
-  );
+  const strongPool = strongestGeneratedBullets(generated, 24);
 
   const profile: UserProfile = {
     ...structuredClone(identityProfile),
@@ -167,47 +276,19 @@ export function assemblePreservedBaseResumeTailor(input: {
           role: entry.assignedRole,
           startDate: entry.startDate,
           endDate: entry.endDate,
-          bullets: [],
-          stacks: [],
+          bullets: [] as string[],
+          stacks: [] as string[],
         }))
   ).map((entry, experienceIndex) => {
     const experienceId =
       entry.experienceId || `EXP-${String(experienceIndex + 1).padStart(3, "0")}`;
-    const originalBullets = entry.bullets
-      .map((text) => text.trim())
-      .filter(Boolean)
-      .map((text, bulletIndex) =>
-        asPreservedBullet(text, `${experienceId}-ORIG-${bulletIndex + 1}`),
-      );
-
-    const originalKeys = new Set(
-      originalBullets.map((bullet) => bullet.finalBullet.trim().toLocaleLowerCase()),
-    );
-
-    const jdBullets = strongBullets
-      .filter((bullet) => !originalKeys.has(bullet.finalBullet.trim().toLocaleLowerCase()))
-      .map((bullet, bulletIndex) =>
-        cloneBullet(bullet, `${experienceId}-JD-${bulletIndex + 1}`),
-      );
-
-    // Guarantee enough bullets for export/engine shape while keeping originals first.
-    let merged = [...originalBullets, ...jdBullets];
-    if (merged.length < 5) {
-      const fillers = strongestGeneratedBullets(generated, 12)
-        .filter(
-          (bullet) =>
-            !merged.some(
-              (existing) =>
-                existing.finalBullet.trim().toLocaleLowerCase() ===
-                bullet.finalBullet.trim().toLocaleLowerCase(),
-            ),
-        )
-        .slice(0, 5 - merged.length)
-        .map((bullet, bulletIndex) =>
-          cloneBullet(bullet, `${experienceId}-FILL-${bulletIndex + 1}`),
-        );
-      merged = [...merged, ...fillers];
-    }
+    const originalTexts = entry.bullets.map((text) => text.trim()).filter(Boolean);
+    const bullets = mergeExperienceBullets({
+      experienceId,
+      experienceIndex,
+      originalTexts,
+      strongPool,
+    });
 
     return {
       experienceId,
@@ -215,7 +296,7 @@ export function assemblePreservedBaseResumeTailor(input: {
       startDate: entry.startDate || "2018",
       endDate: entry.endDate || "Present",
       assignedRole: entry.role?.trim() || "Professional",
-      bullets: merged,
+      bullets,
     };
   });
 
@@ -235,3 +316,12 @@ export function assemblePreservedBaseResumeTailor(input: {
     orchestration: generated.orchestration,
   });
 }
+
+/** Exported for unit tests. */
+export const __baseResumeBulletMergeForTests = {
+  jdBulletBudget,
+  mergeExperienceBullets,
+  originalBulletWeakness,
+  MIN_BULLETS_EXCLUSIVE,
+  JD_BULLETS_PER_ROLE,
+};
