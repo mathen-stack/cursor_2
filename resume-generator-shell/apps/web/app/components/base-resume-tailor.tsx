@@ -17,7 +17,8 @@ type SessionUser = {
   role: "admin" | "user";
 };
 
-type TailorMode = "auto" | "manual";
+/** UI modes: auto-find from library, or upload a resume to tailor. */
+type TailorMode = "auto" | "upload";
 
 type TailorResult = {
   id: string;
@@ -39,7 +40,9 @@ export default function BaseResumeTailor({
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<TailorMode>("auto");
-  const [selectedBaseResumeId, setSelectedBaseResumeId] = useState("");
+  const [uploadedForTailor, setUploadedForTailor] = useState<BaseResumeSummary | null>(
+    null,
+  );
   const [jobDescription, setJobDescription] = useState("");
   const [matches, setMatches] = useState<BaseResumeMatchResult[]>([]);
   const [tailoring, setTailoring] = useState(false);
@@ -48,40 +51,45 @@ export default function BaseResumeTailor({
   const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
   const [exportError, setExportError] = useState("");
   const [exportSavedAs, setExportSavedAs] = useState("");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryInputRef = useRef<HTMLInputElement | null>(null);
+  const tailorUploadRef = useRef<HTMLInputElement | null>(null);
 
   const canTailor = useMemo(() => {
     if (jobDescription.trim().length < 50) return false;
-    if (baseResumes.length === 0) return false;
-    if (mode === "manual" && !selectedBaseResumeId) return false;
-    return true;
-  }, [baseResumes.length, jobDescription, mode, selectedBaseResumeId]);
+    if (mode === "auto") return baseResumes.length > 0;
+    return Boolean(uploadedForTailor);
+  }, [baseResumes.length, jobDescription, mode, uploadedForTailor]);
 
-  async function refreshBaseResumes(): Promise<void> {
+  async function refreshBaseResumes(): Promise<BaseResumeSummary[]> {
     const response = await fetch("/api/base-resumes", { cache: "no-store" });
     const payload = (await response.json()) as {
       resumes?: BaseResumeSummary[];
       error?: { message?: string };
     };
     if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Could not load base resumes.");
+      throw new Error(payload.error?.message ?? "Could not load resumes.");
     }
-    setBaseResumes(payload.resumes ?? []);
+    const resumes = payload.resumes ?? [];
+    setBaseResumes(resumes);
+    return resumes;
   }
 
   useEffect(() => {
     void refreshBaseResumes().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "Could not load base resumes.");
+      setError(caught instanceof Error ? caught.message : "Could not load resumes.");
     });
   }, [user.username]);
 
-  async function uploadBaseResumes(fileList: FileList | null): Promise<void> {
-    if (!fileList || fileList.length === 0) return;
+  async function uploadFiles(
+    fileList: FileList | null,
+    options?: { selectForTailor?: boolean },
+  ): Promise<BaseResumeSummary[]> {
+    if (!fileList || fileList.length === 0) return [];
     setError("");
     setMessage("");
     setUploading(true);
     try {
-      const uploaded: string[] = [];
+      const created: BaseResumeSummary[] = [];
       for (const file of Array.from(fileList)) {
         const body = new FormData();
         body.append("file", file);
@@ -94,37 +102,30 @@ export default function BaseResumeTailor({
         if (!response.ok || !payload.resume) {
           throw new Error(payload.error?.message ?? `Could not upload ${file.name}.`);
         }
-        uploaded.push(payload.resume.title);
+        created.push(payload.resume);
       }
       await refreshBaseResumes();
-      setMessage(
-        uploaded.length === 1
-          ? `Uploaded “${uploaded[0]}” and extracted role/stack data.`
-          : `Uploaded ${uploaded.length} resumes and extracted role/stack data.`,
-      );
+      if (options?.selectForTailor && created[0]) {
+        setUploadedForTailor(created[0]);
+        setMode("upload");
+        setMessage(
+          `Uploaded “${created[0].title}”. Paste a JD and tailor from this resume.`,
+        );
+      } else {
+        setMessage(
+          created.length === 1
+            ? `Saved “${created[0].title}” for auto-find matching.`
+            : `Saved ${created.length} resumes for auto-find matching.`,
+        );
+      }
+      return created;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Upload failed.");
+      return [];
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  async function toggleFavorite(resume: BaseResumeSummary): Promise<void> {
-    setError("");
-    try {
-      const response = await fetch(`/api/base-resumes/${resume.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isFavorite: !resume.isFavorite }),
-      });
-      const payload = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Could not update favorite.");
-      }
-      await refreshBaseResumes();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update favorite.");
+      if (libraryInputRef.current) libraryInputRef.current.value = "";
+      if (tailorUploadRef.current) tailorUploadRef.current.value = "";
     }
   }
 
@@ -138,9 +139,9 @@ export default function BaseResumeTailor({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Could not delete resume.");
       }
-      if (selectedBaseResumeId === resumeId) setSelectedBaseResumeId("");
+      if (uploadedForTailor?.id === resumeId) setUploadedForTailor(null);
       await refreshBaseResumes();
-      setMessage("Base resume removed.");
+      setMessage("Resume removed.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete resume.");
     }
@@ -151,6 +152,10 @@ export default function BaseResumeTailor({
     setMatches([]);
     if (jobDescription.trim().length < 50) {
       setError("Paste a job description of at least 50 characters.");
+      return;
+    }
+    if (baseResumes.length === 0) {
+      setError("Upload at least one resume so auto-find has something to score.");
       return;
     }
     try {
@@ -182,13 +187,14 @@ export default function BaseResumeTailor({
     setResult(null);
     setShowPreview(false);
     try {
+      const apiMode = mode === "auto" ? "auto" : "manual";
       const response = await fetch("/api/base-resumes/tailor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobDescriptionText: jobDescription,
-          mode,
-          baseResumeId: mode === "manual" ? selectedBaseResumeId : undefined,
+          mode: apiMode,
+          baseResumeId: mode === "upload" ? uploadedForTailor?.id : undefined,
           locale: "en-US",
         }),
       });
@@ -203,14 +209,17 @@ export default function BaseResumeTailor({
       }
       const next: TailorResult = {
         id: `TAILOR-${Date.now()}`,
-        title: `${payload.baseResume?.title || "Base resume"} → tailored`,
+        title: `${payload.baseResume?.title || "Resume"} → tailored`,
         resume: payload.resume,
         match: payload.match ?? null,
-        baseResumeTitle: payload.baseResume?.title || "Base resume",
+        baseResumeTitle: payload.baseResume?.title || "Resume",
       };
       setResult(next);
-      setMessage(`Tailored from “${next.baseResumeTitle}”.`);
-      // Auto PDF download after tailor completes.
+      setMessage(
+        mode === "auto"
+          ? `Auto-found “${next.baseResumeTitle}” as the best fit, then tailored it.`
+          : `Tailored from uploaded “${next.baseResumeTitle}”.`,
+      );
       try {
         const saved = await downloadResumeFile(
           payload.resume,
@@ -283,143 +292,84 @@ export default function BaseResumeTailor({
       </header>
 
       <main className="main">
-        <section className="profile-card">
-          <div className="section-head">
-            <div>
-              <h2>Upload base resumes</h2>
-              <p className="hint">
-                Upload as many perfect resumes as you want (PDF, DOCX, or TXT).
-                We extract and store role-by-role / stack-by-stack data for matching.
-              </p>
-            </div>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-            multiple
-            hidden
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              void uploadBaseResumes(event.target.files)
-            }
-          />
-
-          <div className="section-actions">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? "Uploading…" : "Upload resumes"}
-            </button>
-          </div>
-
-          {baseResumes.length === 0 ? (
-            <p className="hint">
-              No base resumes yet. Upload at least one before matching a JD.
-            </p>
-          ) : (
-            <div className="entry-block">
-              {baseResumes.map((resume) => (
-                <div
-                  key={resume.id}
-                  className="entry-head"
-                  style={{ marginBottom: "0.75rem" }}
-                >
-                  <div>
-                    <p className="entry-label">
-                      {resume.isFavorite ? "★ " : ""}
-                      {resume.title}
-                    </p>
-                    <p className="hint">
-                      {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
-                      {resume.stacks.length
-                        ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="section-actions">
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      onClick={() => {
-                        setSelectedBaseResumeId(resume.id);
-                        setMode("manual");
-                      }}
-                    >
-                      Use
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      onClick={() => void toggleFavorite(resume)}
-                    >
-                      {resume.isFavorite ? "Unfavorite" : "Favorite"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action entry-remove"
-                      onClick={() => void removeResume(resume.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         <section className="composer">
           <div className="section-head">
             <div>
-              <h2>Match &amp; tailor to JD</h2>
+              <h2>Tailor to a job description</h2>
               <p className="hint">
-                Auto-pick the strongest uploaded resume, or choose your favorite,
-                then tailor it. Existing bullet quality rules still apply.
+                Choose how to pick the source resume: auto-find the best fit from
+                your uploads, or upload a resume for this JD.
               </p>
             </div>
           </div>
 
-          <div className="profile-grid">
-            <label className="profile-field">
-              <span>Match mode</span>
-              <select
-                value={mode}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                  setMode(event.target.value as TailorMode)
-                }
+          <fieldset className="profile-field profile-field-full" style={{ border: 0, padding: 0 }}>
+            <legend className="entry-label" style={{ marginBottom: "0.5rem" }}>
+              Source resume
+            </legend>
+            <div className="section-actions" style={{ flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={mode === "auto" ? "primary" : "secondary-action"}
+                aria-pressed={mode === "auto"}
+                onClick={() => setMode("auto")}
               >
-                <option value="auto" disabled={baseResumes.length === 0}>
-                  Auto-match strongest resume
-                </option>
-                <option value="manual" disabled={baseResumes.length === 0}>
-                  Manual pick / favorite
-                </option>
-              </select>
-            </label>
-            {mode === "manual" ? (
-              <label className="profile-field">
-                <span>Selected resume</span>
-                <select
-                  value={selectedBaseResumeId}
-                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                    setSelectedBaseResumeId(event.target.value)
-                  }
+                Auto-find best fit
+              </button>
+              <button
+                type="button"
+                className={mode === "upload" ? "primary" : "secondary-action"}
+                aria-pressed={mode === "upload"}
+                onClick={() => setMode("upload")}
+              >
+                Upload resume
+              </button>
+            </div>
+            <p className="hint" style={{ marginTop: "0.65rem" }}>
+              {mode === "auto"
+                ? baseResumes.length === 0
+                  ? "Auto-find needs saved resumes first — add them in the library below."
+                  : `Will score ${baseResumes.length} saved resume${baseResumes.length === 1 ? "" : "s"} and tailor the strongest match.`
+                : uploadedForTailor
+                  ? `Using uploaded “${uploadedForTailor.title}” for this tailor.`
+                  : "Upload a PDF, DOCX, or TXT resume to tailor against this JD."}
+            </p>
+          </fieldset>
+
+          {mode === "upload" ? (
+            <div className="section-actions" style={{ marginTop: "0.75rem" }}>
+              <input
+                ref={tailorUploadRef}
+                type="file"
+                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                hidden
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  void uploadFiles(event.target.files, { selectForTailor: true })
+                }
+              />
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={uploading}
+                onClick={() => tailorUploadRef.current?.click()}
+              >
+                {uploading
+                  ? "Uploading…"
+                  : uploadedForTailor
+                    ? "Replace uploaded resume"
+                    : "Choose resume file"}
+              </button>
+              {uploadedForTailor ? (
+                <button
+                  type="button"
+                  className="secondary-action entry-remove"
+                  onClick={() => setUploadedForTailor(null)}
                 >
-                  <option value="">Choose a resume</option>
-                  {baseResumes.map((resume) => (
-                    <option key={resume.id} value={resume.id}>
-                      {resume.isFavorite ? "★ " : ""}
-                      {resume.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <label className="profile-field profile-field-full" style={{ marginTop: "1rem" }}>
             <span>Job description</span>
@@ -433,14 +383,16 @@ export default function BaseResumeTailor({
           </label>
 
           <div className="composer-footer">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={jobDescription.trim().length < 50 || baseResumes.length === 0}
-              onClick={() => void previewMatches()}
-            >
-              Preview matches
-            </button>
+            {mode === "auto" ? (
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={jobDescription.trim().length < 50 || baseResumes.length === 0}
+                onClick={() => void previewMatches()}
+              >
+                Preview best fits
+              </button>
+            ) : null}
             <button
               type="button"
               className="primary"
@@ -450,17 +402,19 @@ export default function BaseResumeTailor({
               {tailoring ? "Tailoring…" : "Tailor resume"}
             </button>
             <p className="inline-status">
-              {baseResumes.length === 0
-                ? "Upload at least one base resume to continue."
+              {!canTailor
+                ? mode === "auto"
+                  ? "Need a JD (50+ chars) and at least one saved resume."
+                  : "Need a JD (50+ chars) and an uploaded resume."
                 : mode === "auto"
-                  ? "Ready to auto-match the strongest uploaded resume."
-                  : "Choose a resume, then tailor it to this JD."}
+                  ? "Ready to auto-find the best fit and tailor it."
+                  : "Ready to tailor your uploaded resume to this JD."}
             </p>
           </div>
 
-          {matches.length > 0 ? (
+          {mode === "auto" && matches.length > 0 ? (
             <div className="entry-block" style={{ marginTop: "1rem" }}>
-              <p className="entry-label">Match ranking</p>
+              <p className="entry-label">Best-fit ranking</p>
               {matches.slice(0, 5).map((match, index) => (
                 <p key={match.baseResumeId} className="hint">
                   {index + 1}. {match.title} — score {match.score}
@@ -476,6 +430,73 @@ export default function BaseResumeTailor({
           {error ? <p className="error">{error}</p> : null}
         </section>
 
+        <section className="profile-card">
+          <div className="section-head">
+            <div>
+              <h2>Resume library</h2>
+              <p className="hint">
+                Save many perfect resumes here. Auto-find uses this library to pick
+                the most fit resume for each JD.
+              </p>
+            </div>
+          </div>
+
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+            multiple
+            hidden
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              void uploadFiles(event.target.files)
+            }
+          />
+
+          <div className="section-actions">
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={uploading}
+              onClick={() => libraryInputRef.current?.click()}
+            >
+              {uploading ? "Uploading…" : "Add resumes to library"}
+            </button>
+          </div>
+
+          {baseResumes.length === 0 ? (
+            <p className="hint">No saved resumes yet.</p>
+          ) : (
+            <div className="entry-block">
+              {baseResumes.map((resume) => (
+                <div
+                  key={resume.id}
+                  className="entry-head"
+                  style={{ marginBottom: "0.75rem" }}
+                >
+                  <div>
+                    <p className="entry-label">{resume.title}</p>
+                    <p className="hint">
+                      {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
+                      {resume.stacks.length
+                        ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="section-actions">
+                    <button
+                      type="button"
+                      className="secondary-action entry-remove"
+                      onClick={() => void removeResume(resume.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="board" aria-live="polite">
           <div className="section-head">
             <div>
@@ -488,8 +509,8 @@ export default function BaseResumeTailor({
             <div className="empty-board">
               <p>No tailored resume yet.</p>
               <ol>
-                <li>Upload one or more perfect base resumes</li>
-                <li>Paste a JD and choose auto-match or manual pick</li>
+                <li>Build a library (for auto-find) or upload one resume</li>
+                <li>Paste a JD and choose Auto-find or Upload resume</li>
                 <li>Tailor — preview and download when ready</li>
               </ol>
             </div>
@@ -556,10 +577,12 @@ export default function BaseResumeTailor({
                   </div>
                   {exportSavedAs ? (
                     <p className="pdf-ready-status is-ready">
-                      Downloaded {exportSavedAs || resumeFilenameFromFullName(
-                        result.resume.profile.personalInformation.fullName,
-                        "pdf",
-                      )}
+                      Downloaded{" "}
+                      {exportSavedAs ||
+                        resumeFilenameFromFullName(
+                          result.resume.profile.personalInformation.fullName,
+                          "pdf",
+                        )}
                     </p>
                   ) : null}
                   {exportError ? <p className="error">{exportError}</p> : null}
