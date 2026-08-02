@@ -18,6 +18,7 @@ import {
   sanitizeBulletList,
   sanitizeBulletText,
 } from "./base-resume-bullet-sanitize";
+import { sanitizeEncodedField } from "./pdf-encoding-decode";
 
 type ExperienceBullet = ExperienceEngineOutput["experiences"][number]["bullets"][number];
 type CareerEntry = UserProfile["careerHistory"][number];
@@ -303,12 +304,23 @@ function careerHeaderFromProfile(
     entry.experienceId ||
     fromProfile?.experienceId ||
     `EXP-${String(index + 1).padStart(3, "0")}`;
+  const profileCompany = sanitizeEncodedField(fromProfile?.companyName?.trim() || "", "")
+    .replace(/\s*\|\s*$/g, "")
+    .trim();
+  const profileRole = sanitizeEncodedField(fromProfile?.role?.trim() || "", "")
+    .replace(/\s*\|\s*$/g, "")
+    .trim();
+  const entryCompany = sanitizeEncodedField(entry.companyName || "", "")
+    .replace(/\s*\|\s*$/g, "")
+    .trim();
+  const entryRole = sanitizeEncodedField(entry.role?.trim() || "", "")
+    .replace(/\s*\|\s*$/g, "")
+    .trim();
   return {
     experienceId,
-    companyName:
-      fromProfile?.companyName?.trim() || entry.companyName || "Company",
-    assignedRole:
-      fromProfile?.role?.trim() || entry.role?.trim() || "Professional",
+    // Profile wins for headers; never emit undecoded PDF cipher text.
+    companyName: profileCompany || entryCompany || "Company",
+    assignedRole: profileRole || entryRole || "Professional",
     startDate: fromProfile?.startDate?.trim() || entry.startDate || "2018",
     endDate: fromProfile?.endDate?.trim() || entry.endDate || "Present",
   };

@@ -5,6 +5,7 @@ import {
   decodeEncodedPdfDocument,
   decodeEncodedPdfText,
   looksLikeEncodedPdfText,
+  sanitizeEncodedField,
 } from "../apps/web/lib/pdf-encoding-decode";
 import { extractResumeText } from "../apps/web/lib/base-resume-extract";
 import { parseBaseResumeText } from "../apps/web/lib/base-resume-parser";
@@ -39,6 +40,51 @@ describe("pdf encoding decode", () => {
       "Optimized state management and REST API through adaptive batching and caching.";
     expect(looksLikeEncodedPdfText(normal)).toBe(false);
     expect(decodeEncodedPdfText(normal)).toBe(normal);
+  });
+
+  it("decodes cipher text even when spaces were inserted between glyphs", () => {
+    const spaced =
+      "a É ä á î É ê É Ç = ê É ~ ä J í á ã É = Ç É í É Å í á ç å = ö = P R = c m p";
+    expect(decodeEncodedPdfText(spaced)).toMatch(
+      /Delivered real-time detection @ 45 FPS/i,
+    );
+  });
+
+  it("sanitizes corrupt header fields to a safe fallback", () => {
+    expect(
+      sanitizeEncodedField("=aÉäáîÉêÉÇ=êÉ~äJíáãÉ=ÇÉíÉÅíáçå=ö=PR=cmp", "Professional"),
+    ).toMatch(/Delivered real-time detection/i);
+    expect(sanitizeEncodedField("===ëáÉçãå===", "Professional")).toBe("Professional");
+    expect(sanitizeEncodedField("SENIOR AI/ML ENGINEER", "Professional")).toBe(
+      "SENIOR AI/ML ENGINEER",
+    );
+  });
+
+  it("maps React/Redux/gRPC/js tokens from the custom encoding", () => {
+    expect(decodeEncodedPdfText("oÉ~Åí")).toMatch(/^React$/i);
+    expect(decodeEncodedPdfText("oÉÇìñ")).toMatch(/^Redux$/i);
+    expect(decodeEncodedPdfText("Öom`")).toMatch(/^gRPC$/i);
+    expect(decodeEncodedPdfText("Kàë")).toMatch(/^\.js$/i);
+  });
+
+  it("does not create fake experiences from margin-date bullet leaks", async () => {
+    const { parseBaseResumeText } = await import("../apps/web/lib/base-resume-parser");
+    const parsed = parseBaseResumeText(`PROFESSIONAL EXPERIENCE
+SENIOR AI/ML ENGINEER | SPARKCOGNITION (US) | JULY 2023 - PRESENT
+- Built monitoring frameworks for AI models
+high-volume traffic | low latency, decreasing 2018 - Present
+- Optimized inference latency
+AI/ML OPS ENGINEER | THOUGHT MACHINE (UK) | OCTOBER 2020 - JUNE 2023
+- Transformed ML pipeline infrastructure
+`);
+    expect(parsed.experiences).toHaveLength(2);
+    expect(parsed.experiences.map((e) => e.role?.toUpperCase())).toEqual([
+      "SENIOR AI/ML ENGINEER",
+      "AI/ML OPS ENGINEER",
+    ]);
+    expect(
+      parsed.experiences.some((e) => /latency|decreasing|high-volume/i.test(e.role || "")),
+    ).toBe(false);
   });
 
   it("decodes Stephen resume PDF bullets into readable English", async () => {

@@ -9,7 +9,11 @@ import {
   sanitizeBulletText,
   softCleanBulletText,
 } from "./base-resume-bullet-sanitize";
-import { decodeEncodedPdfText } from "./pdf-encoding-decode";
+import {
+  decodeEncodedPdfText,
+  isCorruptEncodedText,
+  sanitizeEncodedField,
+} from "./pdf-encoding-decode";
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE =
@@ -147,6 +151,25 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
         company = current.role || current.companyName;
       }
 
+      role = sanitizeEncodedField(role, "");
+      company = sanitizeEncodedField(company, "");
+      // Bullet/body fragments with leaked margin dates must not become fake jobs.
+      const beforeLooksLikeBody =
+        before.length > 70 ||
+        /^(?:•|-|\*|and|the|with|for|that|through|using|traffic|latency|decreasing|feature|accuracy)\b/i.test(
+          before,
+        ) ||
+        isCorruptEncodedText(before);
+      if (beforeLooksLikeBody) {
+        if (current) {
+          const soft = softCleanBulletText(before);
+          if (soft && !isJunkBulletText(sanitizeBulletText(soft))) {
+            current.bullets.push(soft);
+          }
+        }
+        continue;
+      }
+
       pushCurrent();
       current = {
         experienceId: `EXP-${String(experiences.length + 1).padStart(3, "0")}`,
@@ -172,17 +195,22 @@ function parseExperiences(lines: string[]): BaseResumeExperience[] {
         pushCurrent();
         current = {
           experienceId: `EXP-${String(experiences.length + 1).padStart(3, "0")}`,
-          companyName: roleCompany?.[2]?.trim() || right || "Unknown Company",
-          role: roleCompany?.[1]?.trim() || left || undefined,
+          companyName:
+            sanitizeEncodedField(roleCompany?.[2]?.trim() || right || "", "Unknown Company"),
+          role: sanitizeEncodedField(roleCompany?.[1]?.trim() || left || "", "") || undefined,
           startDate: "2018",
           endDate: "Present",
           bullets: [],
           stacks: [],
         };
       } else {
-        current.companyName =
-          roleCompany?.[2]?.trim() || right || current.companyName;
-        current.role = roleCompany?.[1]?.trim() || left || current.role;
+        current.companyName = sanitizeEncodedField(
+          roleCompany?.[2]?.trim() || right || current.companyName,
+          current.companyName,
+        );
+        current.role =
+          sanitizeEncodedField(roleCompany?.[1]?.trim() || left || current.role || "", "") ||
+          current.role;
       }
       continue;
     }

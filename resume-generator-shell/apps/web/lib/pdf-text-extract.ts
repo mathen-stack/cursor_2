@@ -38,14 +38,20 @@ export function reconstructTextFromPdfItems(
   );
 }
 
+const MARGIN_DATE_RE =
+  /^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4}\s*[-–—]\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4})$/i;
+
 function reconstructPageText(pageItems: readonly StructuredTextItem[]): string {
   const runs = pageItems
     .map((item) => normalizeRun(item))
     .filter((item): item is TextRun => Boolean(item));
   if (runs.length === 0) return "";
 
+  // Drop repeated right-margin date watermarks (keep dates beside real role headers).
+  const cleaned = stripMarginDateNoise(runs);
+
   // Detect simple two-column resumes and read left column then right.
-  const columns = splitColumns(runs);
+  const columns = splitColumns(cleaned);
   if (columns.length > 1) {
     return columns
       .map((columnRuns) => linesFromRuns(columnRuns).join("\n"))
@@ -53,7 +59,57 @@ function reconstructPageText(pageItems: readonly StructuredTextItem[]): string {
       .join("\n\n");
   }
 
-  return linesFromRuns(runs).join("\n");
+  return linesFromRuns(cleaned).join("\n");
+}
+
+/**
+ * Many tailored/source PDFs paint "2018 - Present" on the right margin of body
+ * lines. Joining those into bullets creates fake experience headers later.
+ * Keep right-side dates only when the left side looks like a role heading.
+ */
+function stripMarginDateNoise(runs: readonly TextRun[]): TextRun[] {
+  const maxX = runs.reduce((max, run) => Math.max(max, run.x), 0);
+  if (maxX < 360) return [...runs];
+
+  const byY = new Map<number, TextRun[]>();
+  for (const run of runs) {
+    const key = Math.round(run.y * 2) / 2;
+    const bucket = byY.get(key) ?? [];
+    bucket.push(run);
+    byY.set(key, bucket);
+  }
+
+  const keep = new Set<TextRun>();
+  for (const bucket of byY.values()) {
+    const ordered = [...bucket].sort((a, b) => a.x - b.x);
+    const left = ordered.filter((run) => run.x < maxX * 0.72);
+    const right = ordered.filter((run) => run.x >= maxX * 0.72);
+    const leftText = left
+      .map((run) => run.str)
+      .join(" ")
+      .trim();
+    const leftLooksLikeRoleHeader =
+      leftText.length > 0 &&
+      leftText.length < 90 &&
+      (/\|/.test(leftText) ||
+        /\b(?:engineer|developer|manager|director|lead|architect|analyst|consultant|intern|scientist)\b/i.test(
+          leftText,
+        ) ||
+        (/^[A-Z0-9][A-Z0-9 /|&()',.-]{6,}$/.test(leftText) && leftText === leftText.toUpperCase()));
+
+    for (const run of ordered) {
+      if (
+        run.x >= maxX * 0.72 &&
+        MARGIN_DATE_RE.test(run.str.trim()) &&
+        !leftLooksLikeRoleHeader
+      ) {
+        continue;
+      }
+      keep.add(run);
+    }
+  }
+
+  return runs.filter((run) => keep.has(run));
 }
 
 function normalizeRun(item: StructuredTextItem): TextRun | null {
