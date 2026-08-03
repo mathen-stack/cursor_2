@@ -1,10 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "../../../../lib/auth";
-import {
-  matchBaseResumesToJd,
-  pickBestBaseResumeMatch,
-} from "../../../../lib/base-resume-match";
 import { assemblePreservedBaseResumeTailor } from "../../../../lib/base-resume-preserve-tailor";
 import { baseResumeToUserProfile } from "../../../../lib/base-resume-to-profile";
 import {
@@ -20,10 +16,8 @@ import { readUserProfileRecord } from "../../../../lib/user-profile-store";
 
 export const runtime = "nodejs";
 
-type TailorMode = "auto" | "manual";
-
 /**
- * Tailor an uploaded base resume to a JD while:
+ * Tailor a selected base resume to a JD while:
  * 1) preserving the original resume content (summary, skills, overlapping bullets)
  * 2) experience count follows the user profile career list
  * 3) overlaying identity + career headers + education from the user profile
@@ -43,7 +37,6 @@ export async function POST(request: Request): Promise<Response> {
 
     const payload = await readJsonWithLimit<{
       jobDescriptionText?: string;
-      mode?: TailorMode;
       baseResumeId?: string;
       locale?: string;
     }>(request);
@@ -61,7 +54,19 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const mode: TailorMode = payload.mode === "manual" ? "manual" : "auto";
+    const selectedId = payload.baseResumeId?.trim() || "";
+    if (!selectedId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "BASE_RESUME_REQUIRED",
+            message: "Select a base resume to tailor.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     const records = await listBaseResumeRecords(session.username);
     if (records.length === 0) {
       return NextResponse.json(
@@ -69,25 +74,6 @@ export async function POST(request: Request): Promise<Response> {
           error: {
             code: "NO_BASE_RESUMES",
             message: "Upload at least one base resume before tailoring.",
-          },
-        },
-        { status: 400 },
-      );
-    }
-
-    const matches = matchBaseResumesToJd(jd, records);
-    let selectedId = payload.baseResumeId?.trim() || "";
-    let match = matches.find((item) => item.baseResumeId === selectedId) ?? null;
-
-    if (mode === "auto") {
-      match = pickBestBaseResumeMatch(matches);
-      selectedId = match?.baseResumeId || "";
-    } else if (!selectedId) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "BASE_RESUME_REQUIRED",
-            message: "Choose a base resume for manual tailor mode.",
           },
         },
         { status: 400 },
@@ -171,8 +157,6 @@ export async function POST(request: Request): Promise<Response> {
           originalFilename: base.originalFilename,
           isFavorite: base.isFavorite,
         },
-        match,
-        mode,
         preserveMode: {
           identityFromProfile: true,
           careerHeadersFromProfile: true,
