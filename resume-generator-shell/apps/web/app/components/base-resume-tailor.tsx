@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   BaseResumeSummary,
   FinalResumeData,
@@ -30,7 +30,6 @@ export default function BaseResumeTailor({
   user: SessionUser;
   onLogout: () => void | Promise<void>;
 }) {
-  const [baseResumes, setBaseResumes] = useState<BaseResumeSummary[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -44,97 +43,40 @@ export default function BaseResumeTailor({
   const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
   const [exportError, setExportError] = useState("");
   const [exportSavedAs, setExportSavedAs] = useState("");
-  const libraryInputRef = useRef<HTMLInputElement | null>(null);
   const tailorUploadRef = useRef<HTMLInputElement | null>(null);
 
   const canTailor = useMemo(() => {
     return jobDescription.trim().length >= 50 && Boolean(selectedResume);
   }, [jobDescription, selectedResume]);
 
-  async function refreshBaseResumes(): Promise<BaseResumeSummary[]> {
-    const response = await fetch("/api/base-resumes", { cache: "no-store" });
-    const payload = (await response.json()) as {
-      resumes?: BaseResumeSummary[];
-      error?: { message?: string };
-    };
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Could not load resumes.");
-    }
-    const resumes = payload.resumes ?? [];
-    setBaseResumes(resumes);
-    return resumes;
-  }
-
-  useEffect(() => {
-    void refreshBaseResumes().catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "Could not load resumes.");
-    });
-  }, [user.username]);
-
-  async function uploadFiles(
-    fileList: FileList | null,
-    options?: { selectForTailor?: boolean },
-  ): Promise<BaseResumeSummary[]> {
-    if (!fileList || fileList.length === 0) return [];
+  async function uploadResume(fileList: FileList | null): Promise<void> {
+    if (!fileList || fileList.length === 0) return;
     setError("");
     setMessage("");
     setUploading(true);
     try {
-      const created: BaseResumeSummary[] = [];
-      for (const file of Array.from(fileList)) {
-        const body = new FormData();
-        body.append("file", file);
-        body.append("title", file.name.replace(/\.[^.]+$/, ""));
-        const response = await fetch("/api/base-resumes", { method: "POST", body });
-        const payload = (await response.json()) as {
-          resume?: BaseResumeSummary;
-          error?: { message?: string };
-        };
-        if (!response.ok || !payload.resume) {
-          throw new Error(payload.error?.message ?? `Could not upload ${file.name}.`);
-        }
-        created.push(payload.resume);
+      const file = fileList[0];
+      if (!file) return;
+      const body = new FormData();
+      body.append("file", file);
+      body.append("title", file.name.replace(/\.[^.]+$/, ""));
+      const response = await fetch("/api/base-resumes", { method: "POST", body });
+      const payload = (await response.json()) as {
+        resume?: BaseResumeSummary;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.resume) {
+        throw new Error(payload.error?.message ?? `Could not upload ${file.name}.`);
       }
-      await refreshBaseResumes();
-      if (options?.selectForTailor && created[0]) {
-        setSelectedResume(created[0]);
-        setMessage(
-          `Selected “${created[0].title}”. Paste a JD and tailor from this resume.`,
-        );
-      } else {
-        const first = created[0];
-        setMessage(
-          created.length === 1 && first
-            ? `Saved “${first.title}” to your library.`
-            : `Saved ${created.length} resumes to your library.`,
-        );
-      }
-      return created;
+      setSelectedResume(payload.resume);
+      setMessage(
+        `Uploaded “${payload.resume.title}”. Paste a JD and tailor from this resume.`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Upload failed.");
-      return [];
     } finally {
       setUploading(false);
-      if (libraryInputRef.current) libraryInputRef.current.value = "";
       if (tailorUploadRef.current) tailorUploadRef.current.value = "";
-    }
-  }
-
-  async function removeResume(resumeId: string): Promise<void> {
-    setError("");
-    try {
-      const response = await fetch(`/api/base-resumes/${resumeId}`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Could not delete resume.");
-      }
-      if (selectedResume?.id === resumeId) setSelectedResume(null);
-      await refreshBaseResumes();
-      setMessage("Resume removed.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete resume.");
     }
   }
 
@@ -245,183 +187,91 @@ export default function BaseResumeTailor({
       </header>
 
       <main className="main">
-        <div className="tailor-layout">
-          <section className="profile-card">
-            <div className="section-head">
-              <div>
-                <h2>Resume library</h2>
-                <p className="hint">
-                  Save resumes here, then select one to tailor against a JD.
-                </p>
-              </div>
-            </div>
-
-            <input
-              ref={libraryInputRef}
-              type="file"
-              accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-              multiple
-              hidden
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                void uploadFiles(event.target.files)
-              }
-            />
-
-            <div className="section-actions">
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={uploading}
-                onClick={() => libraryInputRef.current?.click()}
-              >
-                {uploading ? "Uploading…" : "Add resumes to library"}
-              </button>
-            </div>
-
-            {baseResumes.length === 0 ? (
-              <p className="hint">No saved resumes yet.</p>
-            ) : (
-              <div className="entry-block">
-                {baseResumes.map((resume) => {
-                  const isSelected = selectedResume?.id === resume.id;
-                  return (
-                    <div
-                      key={resume.id}
-                      className={`entry-head library-resume${isSelected ? " is-ranked" : ""}`}
-                    >
-                      <div>
-                        <p className="entry-label">
-                          {isSelected ? (
-                            <span
-                              className="badge badge-company"
-                              style={{ marginRight: "0.4rem" }}
-                            >
-                              Selected
-                            </span>
-                          ) : null}
-                          {resume.title}
-                        </p>
-                        <p className="hint">
-                          {resume.roleCount} role{resume.roleCount === 1 ? "" : "s"}
-                          {resume.stacks.length
-                            ? ` · ${resume.stacks.slice(0, 6).join(", ")}`
-                            : ""}
-                        </p>
-                      </div>
-                      <div className="section-actions">
-                        <button
-                          type="button"
-                          className="secondary-action"
-                          onClick={() => {
-                            setSelectedResume(resume);
-                            setMessage(
-                              `Selected “${resume.title}”. Paste a JD and tailor.`,
-                            );
-                          }}
-                        >
-                          {isSelected ? "Selected" : "Use"}
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-action entry-remove"
-                          onClick={() => void removeResume(resume.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="composer">
-            <div className="section-head">
-              <div>
-                <h2>Tailor to a job description</h2>
-                <p className="hint">
-                  Upload or select a resume, then tailor. Experience count follows
-                  your Home profile. We preserve overlapping uploaded bullets,
-                  overlay identity/career/education from profile, replace/add 1–2 JD
-                  bullets on matching roles, and create new JD bullets for extra
-                  profile roles.
-                </p>
-              </div>
-            </div>
-
-            <div className="section-actions" style={{ marginTop: "0.25rem" }}>
-              <input
-                ref={tailorUploadRef}
-                type="file"
-                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                hidden
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  void uploadFiles(event.target.files, { selectForTailor: true })
-                }
-              />
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={uploading}
-                onClick={() => tailorUploadRef.current?.click()}
-              >
-                {uploading
-                  ? "Uploading…"
-                  : selectedResume
-                    ? "Upload a different resume"
-                    : "Upload resume"}
-              </button>
-              {selectedResume ? (
-                <button
-                  type="button"
-                  className="secondary-action entry-remove"
-                  onClick={() => setSelectedResume(null)}
-                >
-                  Clear selection
-                </button>
-              ) : null}
-            </div>
-            <p className="hint" style={{ marginTop: "0.6rem" }}>
-              {selectedResume
-                ? `Using “${selectedResume.title}” for this tailor.`
-                : "Upload a resume or click Use on a library resume."}
-            </p>
-
-            <label
-              className="profile-field profile-field-full"
-              style={{ marginTop: "1rem" }}
-            >
-              <span>Job description</span>
-              <textarea
-                value={jobDescription}
-                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                  setJobDescription(event.target.value)
-                }
-                placeholder="Paste the full job description here"
-              />
-            </label>
-
-            <div className="composer-footer">
-              <button
-                type="button"
-                className="primary"
-                disabled={!canTailor || tailoring}
-                onClick={() => void tailor()}
-              >
-                {tailoring ? "Tailoring…" : "Tailor resume"}
-              </button>
-              <p className="inline-status">
-                {!canTailor
-                  ? "Need a JD (50+ chars) and a selected resume."
-                  : "Ready to tailor your selected resume to this JD."}
+        <section className="composer">
+          <div className="section-head">
+            <div>
+              <h2>Tailor to a job description</h2>
+              <p className="hint">
+                Upload a resume, then tailor. Experience count follows your Home
+                profile. We preserve overlapping uploaded bullets, overlay
+                identity/career/education from profile, replace/add 1–2 JD bullets
+                on matching roles, and create new JD bullets for extra profile
+                roles.
               </p>
             </div>
+          </div>
 
-            {message ? <p className="inline-status">{message}</p> : null}
-            {error ? <p className="error">{error}</p> : null}
-          </section>
-        </div>
+          <div className="section-actions" style={{ marginTop: "0.25rem" }}>
+            <input
+              ref={tailorUploadRef}
+              type="file"
+              accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              hidden
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                void uploadResume(event.target.files)
+              }
+            />
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={uploading}
+              onClick={() => tailorUploadRef.current?.click()}
+            >
+              {uploading
+                ? "Uploading…"
+                : selectedResume
+                  ? "Upload a different resume"
+                  : "Upload resume"}
+            </button>
+            {selectedResume ? (
+              <button
+                type="button"
+                className="secondary-action entry-remove"
+                onClick={() => setSelectedResume(null)}
+              >
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+          <p className="hint" style={{ marginTop: "0.6rem" }}>
+            {selectedResume
+              ? `Using “${selectedResume.title}” for this tailor.`
+              : "Upload a PDF, DOCX, or TXT resume to tailor against this JD."}
+          </p>
+
+          <label
+            className="profile-field profile-field-full"
+            style={{ marginTop: "1rem" }}
+          >
+            <span>Job description</span>
+            <textarea
+              value={jobDescription}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                setJobDescription(event.target.value)
+              }
+              placeholder="Paste the full job description here"
+            />
+          </label>
+
+          <div className="composer-footer">
+            <button
+              type="button"
+              className="primary"
+              disabled={!canTailor || tailoring}
+              onClick={() => void tailor()}
+            >
+              {tailoring ? "Tailoring…" : "Tailor resume"}
+            </button>
+            <p className="inline-status">
+              {!canTailor
+                ? "Need a JD (50+ chars) and an uploaded resume."
+                : "Ready to tailor your uploaded resume to this JD."}
+            </p>
+          </div>
+
+          {message ? <p className="inline-status">{message}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
+        </section>
 
         <section className="board" aria-live="polite">
           <div className="section-head">
@@ -435,7 +285,7 @@ export default function BaseResumeTailor({
             <div className="empty-board">
               <p>No tailored resume yet.</p>
               <ol>
-                <li>Upload a resume or select one from the library</li>
+                <li>Upload a resume</li>
                 <li>Paste a JD</li>
                 <li>Tailor — preview and download when ready</li>
               </ol>
