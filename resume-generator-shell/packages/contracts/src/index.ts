@@ -5,6 +5,7 @@ export * from "./engines/base";
 export * from "./engines/experience";
 export * from "./engines/skills";
 export * from "./engines/summary";
+export * from "./engines/cover-letter";
 export * from "./engines/template";
 export * from "./resume/final-resume";
 export * from "./resume/export";
