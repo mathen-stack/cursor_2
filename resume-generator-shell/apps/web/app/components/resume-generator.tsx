@@ -14,6 +14,7 @@ import {
   formatJdResultHeadline,
   isFallbackJobRole,
 } from "../lib/detect-company-from-jd";
+import { downloadCoverLetterFile } from "../../lib/cover-letter-download-client";
 import {
   createEmptyProfile,
 } from "../../lib/saved-profile-store";
@@ -225,6 +226,8 @@ type GenerationJob = {
   title: string;
   role: string;
   company?: string;
+  /** JD text used for this generation — needed for cover letter download. */
+  jobDescriptionText: string;
   status: "running" | "finishing" | "done" | "error";
   progress: GenerationProgress | null;
   pdfReady: PdfReadyState;
@@ -775,6 +778,7 @@ export default function ResumeGenerator({
         title: labels.headline,
         role: labels.role,
         company: labels.company,
+        jobDescriptionText: draft.text,
         status: "running" as const,
         progress: initialGenerationProgress(),
         pdfReady: initialPdfReadyState(),
@@ -1237,6 +1241,7 @@ export default function ResumeGenerator({
                       resume={job.resume}
                       index={index + 1}
                       title={job.title}
+                      jobDescriptionText={job.jobDescriptionText}
                       pdfReady={job.pdfReady}
                       autoDownloadError={job.autoDownloadError}
                       onClose={() => closeJob(job.id)}
@@ -1424,6 +1429,7 @@ function ResumePreview({
   resume,
   index,
   title,
+  jobDescriptionText,
   pdfReady,
   autoDownloadError,
   onClose,
@@ -1431,13 +1437,16 @@ function ResumePreview({
   resume: FinalResumeData;
   index: number;
   title: string;
+  jobDescriptionText: string;
   pdfReady: PdfReadyState;
   autoDownloadError?: string | undefined;
   onClose: () => void;
 }) {
   const template = resume.template.template;
   const [showPreview, setShowPreview] = useState(false);
-  const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
+  const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | "cover" | null>(
+    null,
+  );
   const [exportError, setExportError] = useState("");
   const [exportSavedAs, setExportSavedAs] = useState("");
   const [externalOverallScore, setExternalOverallScore] = useState("");
@@ -1459,6 +1468,26 @@ function ResumePreview({
       setExportSavedAs(saved.filename);
     } catch (caught) {
       setExportError(caught instanceof Error ? caught.message : "Resume export failed.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function downloadCoverLetter() {
+    if (exporting) return;
+    setExporting("cover");
+    setExportError("");
+    setExportSavedAs("");
+    try {
+      const saved = await downloadCoverLetterFile({
+        jobDescriptionText,
+        fullName: resume.profile.personalInformation.fullName,
+      });
+      setExportSavedAs(saved.filename);
+    } catch (caught) {
+      setExportError(
+        caught instanceof Error ? caught.message : "Cover letter download failed.",
+      );
     } finally {
       setExporting(null);
     }
@@ -1586,6 +1615,16 @@ function ResumePreview({
                   : format.toUpperCase()}
               </button>
             ))}
+            <button
+              type="button"
+              className="download-btn"
+              disabled={exporting !== null || jobDescriptionText.trim().length < 50}
+              onClick={() => void downloadCoverLetter()}
+            >
+              {exporting === "cover"
+                ? "Downloading cover letter…"
+                : "Cover letter"}
+            </button>
           </div>
         </div>
         {exportSavedAs ? (

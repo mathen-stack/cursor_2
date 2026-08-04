@@ -5,6 +5,7 @@ import type {
   BaseResumeSummary,
   FinalResumeData,
 } from "@resume/contracts";
+import { downloadCoverLetterFile } from "../../lib/cover-letter-download-client";
 import {
   downloadResumeFile,
   resumeFilenameFromFullName,
@@ -21,30 +22,9 @@ type TailorResult = {
   title: string;
   resume: FinalResumeData;
   baseResumeTitle: string;
+  baseResumeId: string;
+  jobDescriptionText: string;
 };
-
-type CoverLetterResult = {
-  coverLetter: string;
-  wordCount: number;
-  targetRoleTitle: string;
-  companyName: string | null;
-};
-
-function downloadTextFile(text: string, filename: string): void {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  anchor.rel = "noopener";
-  anchor.style.display = "none";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => {
-    URL.revokeObjectURL(objectUrl);
-  }, 10_000);
-}
 
 export default function BaseResumeTailor({
   user,
@@ -63,21 +43,16 @@ export default function BaseResumeTailor({
   const [tailoring, setTailoring] = useState(false);
   const [result, setResult] = useState<TailorResult | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | null>(null);
+  const [exporting, setExporting] = useState<"docx" | "pdf" | "txt" | "cover" | null>(
+    null,
+  );
   const [exportError, setExportError] = useState("");
   const [exportSavedAs, setExportSavedAs] = useState("");
-  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
-  const [coverLetter, setCoverLetter] = useState<CoverLetterResult | null>(null);
-  const [showCoverLetter, setShowCoverLetter] = useState(false);
   const tailorUploadRef = useRef<HTMLInputElement | null>(null);
 
   const canTailor = useMemo(() => {
     return jobDescription.trim().length >= 50 && Boolean(selectedResume);
   }, [jobDescription, selectedResume]);
-
-  const canGenerateCoverLetter = useMemo(() => {
-    return jobDescription.trim().length >= 50;
-  }, [jobDescription]);
 
   async function uploadResume(fileList: FileList | null): Promise<void> {
     if (!fileList || fileList.length === 0) return;
@@ -131,7 +106,7 @@ export default function BaseResumeTailor({
       });
       const payload = (await response.json()) as {
         resume?: FinalResumeData;
-        baseResume?: { title?: string };
+        baseResume?: { id?: string; title?: string };
         error?: { message?: string };
       };
       if (!response.ok || !payload.resume) {
@@ -142,6 +117,8 @@ export default function BaseResumeTailor({
         title: `${payload.baseResume?.title || "Resume"} → tailored`,
         resume: payload.resume,
         baseResumeTitle: payload.baseResume?.title || "Resume",
+        baseResumeId: payload.baseResume?.id || selectedResume.id,
+        jobDescriptionText: jobDescription,
       };
       setResult(next);
       setMessage(`Tailored from “${next.baseResumeTitle}”.`);
@@ -185,49 +162,25 @@ export default function BaseResumeTailor({
     }
   }
 
-  async function generateCoverLetter(): Promise<void> {
-    if (!canGenerateCoverLetter || generatingCoverLetter) return;
-    setError("");
-    setMessage("");
-    setGeneratingCoverLetter(true);
+  async function downloadCoverLetter(): Promise<void> {
+    if (!result || exporting) return;
+    setExporting("cover");
+    setExportError("");
+    setExportSavedAs("");
     try {
-      const response = await fetch("/api/cover-letter/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobDescriptionText: jobDescription,
-          ...(selectedResume ? { baseResumeId: selectedResume.id } : {}),
-          locale: "en-US",
-        }),
+      const saved = await downloadCoverLetterFile({
+        jobDescriptionText: result.jobDescriptionText,
+        baseResumeId: result.baseResumeId,
+        fullName: result.resume.profile.personalInformation.fullName,
       });
-      const payload = (await response.json()) as {
-        coverLetter?: string;
-        wordCount?: number;
-        targetRole?: { title?: string };
-        companyName?: string | null;
-        error?: { message?: string };
-      };
-      if (!response.ok || !payload.coverLetter) {
-        throw new Error(payload.error?.message ?? "Could not generate cover letter.");
-      }
-      setCoverLetter({
-        coverLetter: payload.coverLetter,
-        wordCount: payload.wordCount ?? 0,
-        targetRoleTitle: payload.targetRole?.title || "Role",
-        companyName: payload.companyName ?? null,
-      });
-      setShowCoverLetter(true);
-      setMessage(
-        payload.companyName
-          ? `Cover letter ready for ${payload.targetRole?.title || "the role"} at ${payload.companyName}.`
-          : `Cover letter ready for ${payload.targetRole?.title || "the role"}.`,
-      );
+      setExportSavedAs(saved.filename);
+      setMessage("Cover letter downloaded.");
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Could not generate cover letter.",
+      setExportError(
+        caught instanceof Error ? caught.message : "Cover letter download failed.",
       );
     } finally {
-      setGeneratingCoverLetter(false);
+      setExporting(null);
     }
   }
 
@@ -268,12 +221,8 @@ export default function BaseResumeTailor({
             <div>
               <h2>Tailor to a job description</h2>
               <p className="hint">
-                Upload a resume to tailor, or generate a cover letter from the JD
-                using your Home profile. Experience count follows your profile.
-                We preserve overlapping uploaded bullets, overlay
-                identity/career/education from profile, replace/add 1–2 JD bullets
-                on matching roles, and create new JD bullets for extra profile
-                roles.
+                Upload a resume, then tailor. Afterward you can download the resume
+                and a cover letter. Experience count follows your Home profile.
               </p>
             </div>
           </div>
@@ -339,20 +288,10 @@ export default function BaseResumeTailor({
             >
               {tailoring ? "Tailoring…" : "Tailor resume"}
             </button>
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={!canGenerateCoverLetter || generatingCoverLetter}
-              onClick={() => void generateCoverLetter()}
-            >
-              {generatingCoverLetter ? "Writing cover letter…" : "Generate cover letter"}
-            </button>
             <p className="inline-status">
-              {!canTailor && !canGenerateCoverLetter
-                ? "Need a JD (50+ chars). Upload a resume to tailor."
-                : !canTailor
-                  ? "Cover letter ready to generate. Upload a resume to also tailor."
-                  : "Ready to tailor your uploaded resume or generate a cover letter."}
+              {!canTailor
+                ? "Need a JD (50+ chars) and an uploaded resume."
+                : "Ready to tailor your uploaded resume to this JD."}
             </p>
           </div>
 
@@ -360,93 +299,14 @@ export default function BaseResumeTailor({
           {error ? <p className="error">{error}</p> : null}
         </section>
 
-        {coverLetter ? (
-          <section className="board" aria-live="polite">
-            <div className="section-head">
-              <div>
-                <h2>Cover letter</h2>
-                <p className="hint">
-                  Generated from the JD and your Home profile
-                  {coverLetter.companyName ? ` for ${coverLetter.companyName}` : ""}.
-                </p>
-              </div>
-            </div>
-            <div className="job-board">
-              <div className="job-row status-done">
-                <div className="job-list-main">
-                  <div className="job-list-head job-list-head--compact">
-                    <div className="job-index">CL</div>
-                    <div className="job-list-copy">
-                      <div className="job-status-row">
-                        <span className="badge badge-done">ready</span>
-                      </div>
-                      <strong className="job-headline">
-                        {coverLetter.targetRoleTitle}
-                        {coverLetter.companyName ? ` · ${coverLetter.companyName}` : ""}
-                      </strong>
-                      <p className="hint">{coverLetter.wordCount} words</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="job-close"
-                      aria-label="Clear cover letter"
-                      onClick={() => {
-                        setCoverLetter(null);
-                        setShowCoverLetter(false);
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="download-row">
-                    <span className="download-label">Actions</span>
-                    <div className="download-actions">
-                      <button
-                        type="button"
-                        className="download-btn"
-                        aria-pressed={showCoverLetter}
-                        onClick={() => setShowCoverLetter((current) => !current)}
-                      >
-                        {showCoverLetter ? "Hide preview" : "Preview"}
-                      </button>
-                      <button
-                        type="button"
-                        className="download-btn"
-                        onClick={() => {
-                          const stem = resumeFilenameFromFullName(
-                            user.displayName || "cover-letter",
-                            "txt",
-                          ).replace(/\.txt$/i, "");
-                          downloadTextFile(
-                            coverLetter.coverLetter,
-                            `${stem}-cover-letter.txt`,
-                          );
-                        }}
-                      >
-                        TXT
-                      </button>
-                    </div>
-                  </div>
-                  {showCoverLetter ? (
-                    <div className="resume-paper" style={{ marginTop: "1rem" }}>
-                      {coverLetter.coverLetter.split("\n").map((line, index) => (
-                        <p key={`cl-${index}`} style={{ margin: line ? "0 0 0.65rem" : 0 }}>
-                          {line || "\u00a0"}
-                        </p>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
         <section className="board" aria-live="polite">
           <div className="section-head">
             <div>
               <h2>Result</h2>
-              <p className="hint">Preview the tailored resume, then download PDF or DOCX.</p>
+              <p className="hint">
+                Preview the tailored resume, then download resume files or a cover
+                letter.
+              </p>
             </div>
           </div>
 
@@ -454,9 +314,9 @@ export default function BaseResumeTailor({
             <div className="empty-board">
               <p>No tailored resume yet.</p>
               <ol>
+                <li>Upload a resume</li>
                 <li>Paste a JD</li>
-                <li>Upload a resume to tailor, or generate a cover letter</li>
-                <li>Preview and download when ready</li>
+                <li>Tailor — then download resume or cover letter</li>
               </ol>
             </div>
           ) : (
@@ -512,6 +372,16 @@ export default function BaseResumeTailor({
                             : format.toUpperCase()}
                         </button>
                       ))}
+                      <button
+                        type="button"
+                        className="download-btn"
+                        disabled={exporting !== null}
+                        onClick={() => void downloadCoverLetter()}
+                      >
+                        {exporting === "cover"
+                          ? "Downloading cover letter…"
+                          : "Cover letter"}
+                      </button>
                     </div>
                   </div>
                   {exportSavedAs ? (
