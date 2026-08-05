@@ -140,7 +140,14 @@ class LinkedInWorkflow:
 
     def _capture(self) -> bytes:
         self.state.set_state(WorkflowState.CAPTURE)
+        logger.info("Capturing screenshot…")
         result = self.screenshots.capture()
+        logger.info(
+            "Screenshot ok %sx%s bytes=%s",
+            result.width,
+            result.height,
+            len(result.image_bytes),
+        )
         return result.image_bytes
 
     def _stopped(self) -> bool:

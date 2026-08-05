@@ -69,16 +69,29 @@ def main() -> int:
 
     # Isolated agent process mode — no Qt window.
     if len(sys.argv) > 1 and sys.argv[1] == "--agent-worker":
+        from platform_support import harden_windows_process
+
+        harden_windows_process(role="worker")
         from agent.worker_main import run_worker
 
         return run_worker(sys.argv[2:])
 
+    from platform_support import harden_windows_process
+
+    harden_windows_process(role="ui")
     crash_path = _install_crash_logging()
 
+    from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
     from ui.main_window import MainWindow
     from ui.settings import load_settings
+
+    # Must be set before QApplication on some Qt builds
+    try:
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseSoftwareOpenGL, True)
+    except Exception:  # noqa: BLE001
+        pass
 
     app = QApplication(sys.argv)
     app.setApplicationName("LinkedIn JD Collector Agent")

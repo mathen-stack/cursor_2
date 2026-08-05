@@ -68,6 +68,8 @@ def _load_pyautogui() -> MouseBackend:
     import pyautogui
 
     # Corner failsafe: slamming mouse into a screen corner aborts PyAutoGUI.
+    # Keep enabled, but never call size()/position() during import — that has
+    # faulted on some Windows DPI setups inside frozen EXEs.
     pyautogui.FAILSAFE = True
     # Prefer our explicit safety delay over PyAutoGUI's global PAUSE.
     pyautogui.PAUSE = 0

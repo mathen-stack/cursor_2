@@ -138,6 +138,23 @@ class AgentController(QObject):
         # Don't pass the API key via the system shell; argv is fine for local use.
         program = cmd[0]
         args = cmd[1:]
+        # Frozen onedir: run with EXE directory as CWD so _internal DLLs resolve.
+        if getattr(sys, "frozen", False):
+            self._process.setWorkingDirectory(str(Path(sys.executable).resolve().parent))
+        if sys.platform.startswith("win"):
+            # Hide worker console; keep it out of the user's face if it faults.
+            create_no_window = 0x08000000
+
+            def _win_modifier(proc_args) -> None:
+                try:
+                    proc_args.flags |= create_no_window
+                except Exception:  # noqa: BLE001
+                    pass
+
+            try:
+                self._process.setCreateProcessArgumentsModifier(_win_modifier)
+            except Exception:  # noqa: BLE001
+                logger.debug("Could not set CREATE_NO_WINDOW", exc_info=True)
         self._process.start(program, args)
         if not self._process.waitForStarted(8000):
             self._running = False

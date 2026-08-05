@@ -1,5 +1,5 @@
 """
-Screenshot capture service (MSS + Pillow).
+Screenshot capture service (Pillow primary on Windows; mss optional).
 
 Tracks scale/offset so AI image coordinates can be mapped back to screen
 coordinates reliably (critical when images are resized for OpenRouter).
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import io
 import logging
+import os
+import sys
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -48,6 +50,19 @@ class ScreenshotResult:
         return a[0], a[1], b[0], b[1]
 
 
+def _prefer_pil() -> bool:
+    """mss has caused Windows access-violation crashes in frozen EXEs."""
+    if os.getenv("USE_MSS", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    backend = os.getenv("SCREENSHOT_BACKEND", "").strip().lower()
+    if backend in {"mss", "mssgrab"}:
+        return False
+    if backend in {"pil", "pillow", "imagegrab"}:
+        return True
+    # Default: PIL on Windows, mss elsewhere (tests often inject a grabber).
+    return sys.platform.startswith("win")
+
+
 class ScreenshotService:
     """Capture the screen (or a region) as PNG bytes for the vision agent."""
 
@@ -73,12 +88,16 @@ class ScreenshotService:
     def _capture_with_pil(
         self, region: dict[str, int] | None, limit: int | None
     ) -> ScreenshotResult:
-        """Fallback grabber when mss fails/crashes are avoided via alternate path."""
-        from PIL import Image, ImageGrab
+        """Stable Windows capture path (GDI via Pillow)."""
+        from PIL import ImageGrab
 
-        logger.warning("Falling back to PIL ImageGrab for screenshot")
+        logger.info("Capturing screenshot via PIL ImageGrab")
         if region is None:
-            img = ImageGrab.grab()
+            # all_screens=True includes virtual desktop when available
+            try:
+                img = ImageGrab.grab(all_screens=True)
+            except TypeError:
+                img = ImageGrab.grab()
             offset_left = 0
             offset_top = 0
         else:
@@ -91,6 +110,30 @@ class ScreenshotService:
             offset_top = top
         if img.mode != "RGB":
             img = img.convert("RGB")
+        return self._finalize_image(img, offset_left, offset_top, limit)
+
+    def _capture_with_mss(
+        self, region: dict[str, int] | None, limit: int | None
+    ) -> ScreenshotResult:
+        from PIL import Image
+
+        grabber = self._get_grabber()
+        offset_left = 0
+        offset_top = 0
+        if region is None:
+            monitor = grabber.monitors[0] if hasattr(grabber, "monitors") else None
+            if monitor is not None:
+                offset_left = int(monitor.get("left", 0))
+                offset_top = int(monitor.get("top", 0))
+                shot = grabber.grab(monitor)
+            else:
+                shot = grabber.grab()
+        else:
+            offset_left = int(region.get("left", 0))
+            offset_top = int(region.get("top", 0))
+            shot = grabber.grab(region)
+
+        img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
         return self._finalize_image(img, offset_left, offset_top, limit)
 
     def _finalize_image(
@@ -152,36 +195,40 @@ class ScreenshotService:
 
         region: optional mss-style dict {left, top, width, height}
         """
-        from PIL import Image
-
         limit = self.max_width if max_width is None else max_width
-        try:
-            grabber = self._get_grabber()
-            offset_left = 0
-            offset_top = 0
-            if region is None:
-                monitor = grabber.monitors[0] if hasattr(grabber, "monitors") else None
-                if monitor is not None:
-                    offset_left = int(monitor.get("left", 0))
-                    offset_top = int(monitor.get("top", 0))
-                    shot = grabber.grab(monitor)
-                else:
-                    shot = grabber.grab()
-            else:
-                offset_left = int(region.get("left", 0))
-                offset_top = int(region.get("top", 0))
-                shot = grabber.grab(region)
 
-            img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
-            return self._finalize_image(img, offset_left, offset_top, limit)
+        # Injected grabber (unit/integration tests) always wins.
+        if self._grabber is not None:
+            return self._capture_with_mss(region, limit)
+
+        prefer_pil = _prefer_pil()
+        errors: list[str] = []
+
+        if prefer_pil:
+            try:
+                return self._capture_with_pil(region, limit)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"pil:{exc}")
+                logger.exception("PIL screenshot failed; trying mss")
+                try:
+                    return self._capture_with_mss(region, limit)
+                except Exception as exc2:  # noqa: BLE001
+                    errors.append(f"mss:{exc2}")
+                    raise RuntimeError(
+                        "Screenshot capture failed: " + "; ".join(errors)
+                    ) from exc2
+
+        try:
+            return self._capture_with_mss(region, limit)
         except Exception as exc:  # noqa: BLE001
-            logger.exception("mss screenshot failed; trying PIL fallback (%s)", exc)
+            errors.append(f"mss:{exc}")
+            logger.exception("mss screenshot failed; trying PIL")
             try:
                 return self._capture_with_pil(region, limit)
             except Exception as exc2:  # noqa: BLE001
-                logger.exception("PIL screenshot fallback failed")
+                errors.append(f"pil:{exc2}")
                 raise RuntimeError(
-                    f"Screenshot capture failed: {exc}; fallback: {exc2}"
+                    "Screenshot capture failed: " + "; ".join(errors)
                 ) from exc2
 
     def to_screen(self, x: int, y: int) -> tuple[int, int]:

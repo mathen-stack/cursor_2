@@ -93,15 +93,20 @@ def run_worker(argv: list[str] | None = None) -> int:
             return {}
 
     try:
+        from platform_support import harden_windows_process
+
+        harden_windows_process(role="worker")
         _heartbeat(heartbeat_path, "worker_boot")
         emit("log", message="Agent worker process started", level="INFO")
 
         os.environ["OPENROUTER_API_KEY"] = args.api_key.strip()
         os.environ["OPENROUTER_MODEL"] = args.model.strip()
         os.environ["OUTPUT_DIR"] = args.output_dir.strip()
-        # Avoid Win32 hooks / pywinauto in the worker unless explicitly enabled.
+        # Avoid Win32 hooks / pywinauto / mss in the worker unless explicitly enabled.
         os.environ.setdefault("ENABLE_EMERGENCY_HOTKEY", "0")
         os.environ.setdefault("ENABLE_PYWINAUTO", "0")
+        os.environ.setdefault("SCREENSHOT_BACKEND", "pil")
+        os.environ.setdefault("USE_MSS", "0")
 
         if sys.platform.startswith("win"):
             try:
