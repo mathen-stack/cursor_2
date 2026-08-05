@@ -13,12 +13,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from storage.file_manager import default_output_dir
+from ui.paths import env_path, is_frozen, settings_path
 
 logger = logging.getLogger(__name__)
 
+# Resolved at call time so tests can monkeypatch ui.paths helpers.
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-_ENV_PATH = _PACKAGE_ROOT / ".env"
-_SETTINGS_PATH = _PACKAGE_ROOT / "ui_settings.json"
 
 
 @dataclass
@@ -41,10 +41,23 @@ class AppSettings:
             os.environ["OUTPUT_DIR"] = self.output_dir.strip()
 
 
+def _settings_file(path: Path | None = None) -> Path:
+    return path or settings_path()
+
+
+def _env_file() -> Path:
+    return env_path()
+
+
 def load_settings(path: Path | None = None) -> AppSettings:
-    """Load settings from ui_settings.json and .env (env wins for secrets if present)."""
-    if _ENV_PATH.exists():
-        load_dotenv(dotenv_path=_ENV_PATH, override=False)
+    """Load settings from user ui_settings.json and .env (env wins for secrets if present)."""
+    env_file = _env_file()
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file, override=False)
+    # Also allow a package-local .env during source development
+    package_env = _PACKAGE_ROOT / ".env"
+    if not is_frozen() and package_env.exists() and package_env != env_file:
+        load_dotenv(dotenv_path=package_env, override=False)
     else:
         load_dotenv(override=False)
 
@@ -54,10 +67,10 @@ def load_settings(path: Path | None = None) -> AppSettings:
         output_dir=os.getenv("OUTPUT_DIR") or str(default_output_dir()),
     )
 
-    settings_path = path or _SETTINGS_PATH
-    if settings_path.exists():
+    settings_file = _settings_file(path)
+    if settings_file.exists():
         try:
-            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            data = json.loads(settings_file.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 if data.get("openrouter_api_key") and not settings.openrouter_api_key:
                     settings.openrouter_api_key = str(data["openrouter_api_key"])
@@ -71,7 +84,7 @@ def load_settings(path: Path | None = None) -> AppSettings:
                 if data.get("output_dir"):
                     settings.output_dir = str(data["output_dir"])
         except Exception:  # noqa: BLE001
-            logger.exception("Failed to load UI settings from %s", settings_path)
+            logger.exception("Failed to load UI settings from %s", settings_file)
 
     # Ignore obvious placeholders
     if settings.openrouter_api_key.startswith("your_openrouter_api_key"):
@@ -83,34 +96,39 @@ def load_settings(path: Path | None = None) -> AppSettings:
 
 
 def save_settings(settings: AppSettings, path: Path | None = None) -> None:
-    """Persist settings to ui_settings.json and update package .env key/model lines."""
-    settings_path = path or _SETTINGS_PATH
+    """Persist settings to a user-writable ui_settings.json (+ optional .env sync)."""
+    settings_file = _settings_file(path)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(settings)
-    settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    logger.info("Saved UI settings to %s", settings_path)
+    settings_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    logger.info("Saved UI settings to %s", settings_file)
 
-    # Keep .env in sync for non-UI runs
-    _upsert_env(
-        {
-            "OPENROUTER_API_KEY": settings.openrouter_api_key,
-            "OPENROUTER_MODEL": settings.vision_model,
-            "OUTPUT_DIR": settings.output_dir,
-        }
-    )
+    # Keep .env in sync for non-UI / OpenRouter client loads
+    try:
+        _upsert_env(
+            {
+                "OPENROUTER_API_KEY": settings.openrouter_api_key,
+                "OPENROUTER_MODEL": settings.vision_model,
+                "OUTPUT_DIR": settings.output_dir,
+            }
+        )
+    except OSError as exc:
+        # Never crash the UI if .env cannot be written (install dir / AV / permissions).
+        logger.warning("Could not sync .env (%s); settings JSON was saved", exc)
+
     settings.apply_to_environ()
 
 
 def _upsert_env(values: dict[str, str]) -> None:
+    env_file = _env_file()
+    env_file.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, str] = {}
-    order: list[str] = []
-    if _ENV_PATH.exists():
-        for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
             if not line.strip() or line.strip().startswith("#") or "=" not in line:
-                order.append(line)
                 continue
             key, val = line.split("=", 1)
             existing[key.strip()] = val
-            order.append(line)
 
     for key, value in values.items():
         existing[key] = value
@@ -118,8 +136,8 @@ def _upsert_env(values: dict[str, str]) -> None:
     # Rewrite file preserving comments/blank lines where possible
     written_keys: set[str] = set()
     out_lines: list[str] = []
-    if _ENV_PATH.exists():
-        for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
             if not line.strip() or line.strip().startswith("#") or "=" not in line:
                 out_lines.append(line)
                 continue
@@ -133,4 +151,4 @@ def _upsert_env(values: dict[str, str]) -> None:
         if key not in written_keys:
             out_lines.append(f"{key}={value}")
 
-    _ENV_PATH.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    env_file.write_text("\n".join(out_lines) + "\n", encoding="utf-8")

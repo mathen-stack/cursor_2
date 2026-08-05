@@ -88,7 +88,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX causes AV false positives and occasional frozen-EXE crashes
     console=False,  # GUI app — no console window
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -104,7 +104,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="LinkedIn_JD_Collector",
 )

@@ -53,6 +53,16 @@ python build\build_exe.py --installer
 4. Launch the app — UI title **LinkedIn JD Collector Agent**.
 5. Enter OpenRouter API key + vision model in Settings.
 6. Open LinkedIn job results in a browser, then click **Start Agent**.
+
+### If the app closes when clicking Start Agent
+
+Settings and crash logs are written under the user data folder (not the install folder):
+
+- Windows: `%LOCALAPPDATA%\LinkedInJDCollector\`
+  - `ui_settings.json` — API key / model
+  - `logs\crash.log` — uncaught errors / native fault traces
+
+Open that log after a crash and share the last lines for diagnosis. The UI is also hardened to show an error dialog instead of exiting on Python exceptions.
 7. Confirm logs update and files appear under `Documents\LinkedIn_JD\`.
 8. Use **Open Folder**, **Pause**, **Stop**.
 

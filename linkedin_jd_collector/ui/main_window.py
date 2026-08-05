@@ -160,20 +160,41 @@ class MainWindow(QMainWindow):
         )
 
     def on_start(self) -> None:
-        settings = self._read_settings_from_form()
-        if not settings.openrouter_api_key:
-            QMessageBox.warning(
+        try:
+            settings = self._read_settings_from_form()
+            if not settings.openrouter_api_key:
+                QMessageBox.warning(
+                    self,
+                    "Missing API Key",
+                    "Please enter your OpenRouter API Key in Settings.",
+                )
+                return
+            try:
+                save_settings(settings)
+            except OSError as exc:
+                # Common when the install folder is locked/read-only.
+                logger.exception("Failed to persist settings")
+                QMessageBox.warning(
+                    self,
+                    "Settings Save Failed",
+                    "Could not save settings to disk, but the agent can still start "
+                    f"for this session.\n\n{exc}",
+                )
+            self.settings = settings
+            self.settings.apply_to_environ()
+            self.log_panel.clear()
+            self.log_panel.info("Starting agent…")
+            self._set_buttons_running()
+            self.controller.start(settings)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Start Agent failed")
+            self._set_buttons_idle()
+            QMessageBox.critical(
                 self,
-                "Missing API Key",
-                "Please enter your OpenRouter API Key in Settings.",
+                "Start Failed",
+                "The agent could not start. The app will stay open.\n\n"
+                f"{type(exc).__name__}: {exc}",
             )
-            return
-        save_settings(settings)
-        self.settings = settings
-        self.log_panel.clear()
-        self.log_panel.info("Settings saved. Starting agent…")
-        self._set_buttons_running()
-        self.controller.start(settings)
 
     def on_pause(self) -> None:
         self.controller.pause()

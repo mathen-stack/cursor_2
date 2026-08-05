@@ -68,10 +68,22 @@ class KeyboardController:
         self.copy_settle_s = max(0.0, copy_settle_s)
 
         if enable_emergency_hotkey:
-            started = self.guard.start_emergency_hotkey_listener()
-            if started:
-                logger.info(
-                    "Emergency stop armed on hotkey=%s", self.guard.emergency_hotkey
+            try:
+                started = self.guard.start_emergency_hotkey_listener()
+                if started:
+                    logger.info(
+                        "Emergency stop armed on hotkey=%s",
+                        self.guard.emergency_hotkey,
+                    )
+                else:
+                    logger.warning(
+                        "Emergency hotkey listener unavailable; use Stop button "
+                        "or move mouse to a screen corner (FAILSAFE)."
+                    )
+            except Exception:  # noqa: BLE001
+                # Never let hotkey setup kill the agent process / UI.
+                logger.exception(
+                    "Emergency hotkey listener failed to start; continuing without it"
                 )
 
         logger.info(

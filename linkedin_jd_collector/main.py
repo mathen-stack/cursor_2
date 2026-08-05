@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -18,15 +19,52 @@ def _ensure_import_path() -> None:
         sys.path.insert(0, str(root))
 
 
+def _install_crash_logging() -> Path | None:
+    """
+    Route uncaught exceptions + faulthandler to a user-writable log file.
+
+    Windowed PyInstaller builds (`console=False`) hide stderr, so without this
+    Start-Agent crashes look like the app simply closed.
+    """
+    try:
+        import faulthandler
+
+        from ui.paths import crash_log_path, log_dir
+
+        log_dir()
+        path = crash_log_path()
+        mode = "a"
+        if path.exists() and path.stat().st_size > 2_000_000:
+            mode = "w"
+        # Kept open for the process lifetime for faulthandler
+        crash_fp = open(path, mode, encoding="utf-8")  # noqa: SIM115
+        faulthandler.enable(file=crash_fp, all_threads=True)
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            handlers=[
+                logging.FileHandler(path, encoding="utf-8"),
+                logging.StreamHandler(sys.stderr),
+            ],
+            force=True,
+        )
+        logging.getLogger(__name__).info("Crash/log file: %s", path)
+        return path
+    except Exception:  # noqa: BLE001
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+        logging.getLogger(__name__).exception("Failed to install crash logging")
+        return None
+
+
 def main() -> int:
     _ensure_import_path()
+    crash_path = _install_crash_logging()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-
-    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtWidgets import QApplication, QMessageBox
 
     from ui.main_window import MainWindow
     from ui.settings import load_settings
@@ -35,10 +73,42 @@ def main() -> int:
     app.setApplicationName("LinkedIn JD Collector Agent")
     app.setOrganizationName("LinkedInJDCollector")
 
-    settings = load_settings()
-    window = MainWindow(settings=settings)
-    window.show()
-    return app.exec()
+    def _excepthook(exc_type, exc, tb) -> None:
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
+        logging.getLogger(__name__).error("Uncaught exception:\n%s", text)
+        try:
+            QMessageBox.critical(
+                None,
+                "Unexpected Error",
+                "The app hit an unexpected error and recovered.\n\n"
+                f"{exc_type.__name__}: {exc}\n\n"
+                + (
+                    f"Details were written to:\n{crash_path}"
+                    if crash_path
+                    else "Check the log panel / crash log."
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _excepthook
+
+    try:
+        settings = load_settings()
+        window = MainWindow(settings=settings)
+        window.show()
+        return app.exec()
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).exception("Fatal startup error")
+        try:
+            QMessageBox.critical(
+                None,
+                "Startup Error",
+                f"LinkedIn JD Collector Agent failed to start:\n\n{exc}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return 1
 
 
 if __name__ == "__main__":

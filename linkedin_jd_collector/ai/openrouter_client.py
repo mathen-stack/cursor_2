@@ -49,14 +49,30 @@ class OpenRouterResponseError(OpenRouterError):
 
 
 def _load_env() -> None:
-    """Load environment variables from the package .env if present."""
-    if _ENV_PATH.exists():
-        load_dotenv(dotenv_path=_ENV_PATH, override=False)
-        logger.debug("Loaded env from %s", _ENV_PATH)
-    else:
+    """Load environment variables from user/package .env if present."""
+    loaded = False
+    # Frozen EXE: prefer user-data .env written by the Settings UI
+    try:
+        from ui.paths import env_path, is_frozen
+
+        user_env = env_path()
+        if user_env.exists():
+            load_dotenv(dotenv_path=user_env, override=False)
+            logger.debug("Loaded env from %s", user_env)
+            loaded = True
+        elif not is_frozen() and _ENV_PATH.exists():
+            load_dotenv(dotenv_path=_ENV_PATH, override=False)
+            logger.debug("Loaded env from %s", _ENV_PATH)
+            loaded = True
+    except Exception:  # noqa: BLE001
+        if _ENV_PATH.exists():
+            load_dotenv(dotenv_path=_ENV_PATH, override=False)
+            logger.debug("Loaded env from %s", _ENV_PATH)
+            loaded = True
+    if not loaded:
         # Still allow process environment / CWD .env
         load_dotenv(override=False)
-        logger.debug("Package .env not found at %s; using process env", _ENV_PATH)
+        logger.debug("No app .env found; using process env")
 
 
 def _guess_mime(image_bytes: bytes, filename_hint: str | None = None) -> str:

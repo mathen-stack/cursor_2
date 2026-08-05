@@ -37,6 +37,7 @@ class LinkedInDetector:
             logger.debug("pywinauto unavailable for window focus", exc_info=True)
             return False
 
+        # Caller (agent worker thread) must CoInitialize on Windows before this.
         try:
             desktop = Desktop(backend="uia")
             candidates = []

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
 from typing import Callable
@@ -51,6 +52,7 @@ class AutomationGuard:
         self._listener_stop = threading.Event()
         self._listener_thread: threading.Thread | None = None
         self._lock = threading.RLock()
+        self._listener_backend: str | None = None
 
     @property
     def stopped(self) -> bool:
@@ -105,31 +107,120 @@ class AutomationGuard:
         """
         Start a background listener for the emergency hotkey.
 
-        Returns True if a listener was started. Uses pynput when available;
-        otherwise logs a warning (FAILSAFE corner still works via PyAutoGUI).
+        On Windows, prefer RegisterHotKey (stable in frozen EXEs). pynput is a
+        fallback only — it has caused hard process exits in windowed PyInstaller
+        builds when the keyboard hook is installed.
         """
         with self._lock:
             if self._listener_thread and self._listener_thread.is_alive():
                 return True
 
-            try:
-                from pynput import keyboard as pynput_keyboard
-            except ImportError:
+            self._listener_stop.clear()
+
+            if sys.platform.startswith("win"):
+                started = self._start_windows_hotkey_listener()
+                if started:
+                    return True
                 logger.warning(
-                    "pynput not installed; emergency hotkey listener unavailable. "
-                    "Use AutomationGuard.trigger_emergency_stop() or PyAutoGUI FAILSAFE "
-                    "(mouse to screen corner). Desired hotkey=%s",
-                    self.emergency_hotkey,
+                    "Windows RegisterHotKey listener failed; "
+                    "falling back to UI Stop / FAILSAFE corner "
+                    "(pynput disabled to avoid EXE hard-crashes)."
                 )
                 return False
 
-            combo = self._parse_hotkey(self.emergency_hotkey)
-            self._listener_stop.clear()
+            return self._start_pynput_hotkey_listener()
 
-            def _run() -> None:
-                current = set()
-                target = set(combo)
+    def _start_windows_hotkey_listener(self) -> bool:
+        """Use Win32 RegisterHotKey — no global keyboard hook, safer for EXE."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+        except Exception:  # noqa: BLE001
+            logger.exception("ctypes unavailable for Windows hotkey listener")
+            return False
 
+        mods, vk = self._windows_hotkey_parts(self.emergency_hotkey)
+        if vk is None:
+            logger.warning(
+                "Unsupported emergency hotkey for RegisterHotKey: %s",
+                self.emergency_hotkey,
+            )
+            return False
+
+        user32 = ctypes.windll.user32
+        HOTKEY_ID = 0x4A44  # 'JD'
+        WM_HOTKEY = 0x0312
+        PM_REMOVE = 0x0001
+
+        def _run() -> None:
+            registered = False
+            try:
+                if not user32.RegisterHotKey(None, HOTKEY_ID, mods, vk):
+                    err = ctypes.get_last_error()
+                    logger.warning(
+                        "RegisterHotKey failed for %s (winerr=%s)",
+                        self.emergency_hotkey,
+                        err,
+                    )
+                    return
+                registered = True
+                self._listener_backend = "win32"
+                logger.info(
+                    "Emergency stop hotkey listener started via RegisterHotKey (%s)",
+                    self.emergency_hotkey,
+                )
+                msg = wintypes.MSG()
+                while not self._listener_stop.is_set():
+                    # Peek so we can observe the stop event promptly
+                    has_msg = user32.PeekMessageW(
+                        ctypes.byref(msg), None, 0, 0, PM_REMOVE
+                    )
+                    if has_msg:
+                        if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+                            self.trigger_emergency_stop(
+                                f"hotkey pressed: {self.emergency_hotkey}"
+                            )
+                        user32.TranslateMessage(ctypes.byref(msg))
+                        user32.DispatchMessageW(ctypes.byref(msg))
+                    else:
+                        time.sleep(0.05)
+            except Exception:  # noqa: BLE001
+                logger.exception("Windows emergency hotkey listener crashed")
+            finally:
+                if registered:
+                    try:
+                        user32.UnregisterHotKey(None, HOTKEY_ID)
+                    except Exception:  # noqa: BLE001
+                        logger.debug("UnregisterHotKey failed", exc_info=True)
+                logger.info("Emergency stop hotkey listener stopped")
+
+        self._listener_thread = threading.Thread(
+            target=_run, name="emergency-stop-listener", daemon=True
+        )
+        self._listener_thread.start()
+        # Give the thread a moment to register; failure is logged inside.
+        time.sleep(0.05)
+        return self._listener_thread.is_alive()
+
+    def _start_pynput_hotkey_listener(self) -> bool:
+        try:
+            from pynput import keyboard as pynput_keyboard
+        except ImportError:
+            logger.warning(
+                "pynput not installed; emergency hotkey listener unavailable. "
+                "Use AutomationGuard.trigger_emergency_stop() or PyAutoGUI FAILSAFE "
+                "(mouse to screen corner). Desired hotkey=%s",
+                self.emergency_hotkey,
+            )
+            return False
+
+        combo = self._parse_hotkey(self.emergency_hotkey)
+
+        def _run() -> None:
+            current: set[str] = set()
+            target = set(combo)
+            listener = None
+            try:
                 def on_press(key: object) -> None:
                     try:
                         current.add(self._normalize_pynput_key(key))
@@ -150,25 +241,74 @@ class AutomationGuard:
                     on_press=on_press, on_release=on_release
                 )
                 listener.start()
+                self._listener_backend = "pynput"
                 logger.info(
                     "Emergency stop hotkey listener started (%s)", self.emergency_hotkey
                 )
                 self._listener_stop.wait()
-                listener.stop()
+            except Exception:  # noqa: BLE001
+                logger.exception("pynput emergency hotkey listener failed")
+            finally:
+                if listener is not None:
+                    try:
+                        listener.stop()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("pynput listener stop failed", exc_info=True)
                 logger.info("Emergency stop hotkey listener stopped")
 
-            self._listener_thread = threading.Thread(
-                target=_run, name="emergency-stop-listener", daemon=True
-            )
-            self._listener_thread.start()
-            return True
+        self._listener_thread = threading.Thread(
+            target=_run, name="emergency-stop-listener", daemon=True
+        )
+        self._listener_thread.start()
+        return True
 
     def stop_emergency_hotkey_listener(self) -> None:
         with self._lock:
             self._listener_stop.set()
             thread = self._listener_thread
         if thread and thread.is_alive():
-            thread.join(timeout=1.0)
+            thread.join(timeout=1.5)
+        self._listener_backend = None
+
+    @staticmethod
+    def _windows_hotkey_parts(hotkey: str) -> tuple[int, int | None]:
+        """Map 'ctrl+shift+f12' → (MOD flags, virtual-key)."""
+        MOD_ALT = 0x0001
+        MOD_CONTROL = 0x0002
+        MOD_SHIFT = 0x0004
+        MOD_WIN = 0x0008
+        parts = {p.strip().lower() for p in hotkey.split("+") if p.strip()}
+        mods = 0
+        key_part = None
+        for part in parts:
+            if part in {"ctrl", "control", "ctl"}:
+                mods |= MOD_CONTROL
+            elif part == "shift":
+                mods |= MOD_SHIFT
+            elif part == "alt" or part == "option":
+                mods |= MOD_ALT
+            elif part in {"win", "cmd", "super"}:
+                mods |= MOD_WIN
+            else:
+                key_part = part
+        if not key_part:
+            return mods, None
+        # Function keys F1–F24
+        if key_part.startswith("f") and key_part[1:].isdigit():
+            n = int(key_part[1:])
+            if 1 <= n <= 24:
+                return mods, 0x70 + (n - 1)  # VK_F1 = 0x70
+        if len(key_part) == 1:
+            return mods, ord(key_part.upper())
+        named = {
+            "esc": 0x1B,
+            "escape": 0x1B,
+            "space": 0x20,
+            "tab": 0x09,
+            "enter": 0x0D,
+            "return": 0x0D,
+        }
+        return mods, named.get(key_part)
 
     @staticmethod
     def _parse_hotkey(hotkey: str) -> frozenset[str]:

@@ -5,6 +5,7 @@ Top-level agent controller (bridge between PyQt6 UI and workflow).
 from __future__ import annotations
 
 import logging
+import sys
 import traceback
 from typing import Any
 
@@ -35,7 +36,18 @@ class AgentWorker(QObject):
 
     @pyqtSlot()
     def run(self) -> None:
+        com_ready = False
         try:
+            # pywinauto / UIAutomation require COM on this background thread.
+            if sys.platform.startswith("win"):
+                try:
+                    import pythoncom
+
+                    pythoncom.CoInitialize()
+                    com_ready = True
+                except Exception:  # noqa: BLE001
+                    logger.debug("Worker CoInitialize skipped", exc_info=True)
+
             self.settings.apply_to_environ()
             default_guard.clear_emergency_stop()
             self.state.clear_stop()
@@ -61,6 +73,14 @@ class AgentWorker(QObject):
         except Exception as exc:  # noqa: BLE001
             logger.exception("Agent worker crashed")
             self.failed.emit(f"{exc}\n{traceback.format_exc()}")
+        finally:
+            if com_ready:
+                try:
+                    import pythoncom
+
+                    pythoncom.CoUninitialize()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Worker CoUninitialize failed", exc_info=True)
 
     def _on_event(self, name: str, payload: dict[str, Any]) -> None:
         self.event.emit(name, payload)

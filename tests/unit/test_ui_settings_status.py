@@ -19,7 +19,7 @@ def test_ui_status_mapping():
 
 
 def test_save_and_load_settings(tmp_path: Path, monkeypatch):
-    settings_path = tmp_path / "ui_settings.json"
+    settings_file = tmp_path / "ui_settings.json"
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("OPENROUTER_MODEL", "")
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "out"))
@@ -32,10 +32,29 @@ def test_save_and_load_settings(tmp_path: Path, monkeypatch):
     # Avoid rewriting package .env during unit test: patch helper
     import ui.settings as settings_mod
 
-    monkeypatch.setattr(settings_mod, "_SETTINGS_PATH", settings_path)
     monkeypatch.setattr(settings_mod, "_upsert_env", lambda values: None)
 
-    save_settings(original, path=settings_path)
-    loaded = load_settings(path=settings_path)
+    save_settings(original, path=settings_file)
+    loaded = load_settings(path=settings_file)
     assert loaded.openrouter_api_key == "sk-test-key"
     assert loaded.vision_model == "test/vision-model"
+
+
+def test_user_data_settings_path(tmp_path: Path, monkeypatch):
+    import ui.paths as paths_mod
+    import ui.settings as settings_mod
+
+    monkeypatch.setattr(paths_mod, "user_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(settings_mod, "_upsert_env", lambda values: None)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.setenv("OPENROUTER_MODEL", "")
+
+    original = AppSettings(
+        openrouter_api_key="sk-path-test",
+        vision_model="openai/gpt-4o",
+        output_dir=str(tmp_path / "out"),
+    )
+    save_settings(original)
+    assert (tmp_path / "ui_settings.json").exists()
+    loaded = load_settings()
+    assert loaded.openrouter_api_key == "sk-path-test"
