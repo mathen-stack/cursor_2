@@ -41,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.3")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.4")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.3")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.4")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)

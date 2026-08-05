@@ -62,6 +62,7 @@ class AgentWorker(QObject):
             config = WorkflowConfig(output_dir=output_dir)
 
             try:
+                logger.info("Constructing LinkedInWorkflow…")
                 self.workflow = LinkedInWorkflow(
                     config=config,
                     state=self.state,
@@ -70,6 +71,7 @@ class AgentWorker(QObject):
                     guard=default_guard,
                     on_event=self._on_workflow_event,
                 )
+                logger.info("LinkedInWorkflow constructed; entering run()")
             except Exception as exc:  # noqa: BLE001
                 # Surface init failures (pyautogui/mss/etc.) instead of dying quietly.
                 logger.exception("Workflow init failed")

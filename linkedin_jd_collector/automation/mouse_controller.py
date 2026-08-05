@@ -64,12 +64,14 @@ class MouseBackend(Protocol):
 
 
 def _load_pyautogui() -> MouseBackend:
+    logger.info("Loading pyautogui mouse backend…")
     import pyautogui
 
     # Corner failsafe: slamming mouse into a screen corner aborts PyAutoGUI.
     pyautogui.FAILSAFE = True
     # Prefer our explicit safety delay over PyAutoGUI's global PAUSE.
     pyautogui.PAUSE = 0
+    logger.info("pyautogui mouse backend loaded failsafe=%s", pyautogui.FAILSAFE)
     return pyautogui
 
 
@@ -82,15 +84,30 @@ class MouseController:
         backend: MouseBackend | None = None,
         *,
         move_duration_s: float = 0.15,
+        lazy_backend: bool = True,
     ) -> None:
         self.guard = guard or default_guard
-        self.backend = backend or _load_pyautogui()
+        # Lazy-load by default: importing pyautogui during workflow construction
+        # has hard-crashed some Windows EXE sessions before any UI event fires.
+        self._backend = backend
+        self._lazy_backend = lazy_backend and backend is None
         self.move_duration_s = max(0.0, move_duration_s)
+        if not self._lazy_backend and self._backend is None:
+            self._backend = _load_pyautogui()
         logger.info(
-            "MouseController ready safety_delay=%.3fs failsafe=%s",
+            "MouseController created safety_delay=%.3fs lazy_backend=%s",
             self.guard.safety_delay_s,
-            getattr(self.backend, "FAILSAFE", None),
+            self._lazy_backend,
         )
+
+    @property
+    def backend(self) -> MouseBackend:
+        if self._backend is None:
+            try:
+                self._backend = _load_pyautogui()
+            except Exception as exc:  # noqa: BLE001
+                raise AutomationError(f"Failed to load mouse backend: {exc}") from exc
+        return self._backend
 
     def _clamp(self, x: int, y: int) -> tuple[int, int]:
         try:

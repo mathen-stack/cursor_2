@@ -90,20 +90,22 @@ class LinkedInWorkflow:
         )
         self.state = state or StateManager()
         self.guard = guard or default_guard
+        logger.info("Workflow init: creating VisionAgent…")
         self.vision = vision or VisionAgent()
+        logger.info("Workflow init: creating ScreenshotService…")
         self.screenshots = screenshots or ScreenshotService()
         try:
-            raw_mouse = mouse or MouseController(guard=self.guard)
-            # Map AI screenshot coordinates → absolute screen coordinates
+            # Do NOT import pyautogui / arm hotkeys here — that has killed the
+            # Windows EXE immediately after "VisionAgent initialized".
+            logger.info("Workflow init: creating MouseController (lazy)…")
+            raw_mouse = mouse or MouseController(guard=self.guard, lazy_backend=True)
             self.mouse = MappedMouse(raw_mouse, self.screenshots)
-            # Start hotkey after controllers exist; never let it abort construction.
+            logger.info("Workflow init: creating KeyboardController (lazy)…")
             self.keyboard = keyboard or KeyboardController(
-                guard=self.guard, enable_emergency_hotkey=False
+                guard=self.guard,
+                enable_emergency_hotkey=False,
+                lazy_backend=True,
             )
-            try:
-                self.guard.start_emergency_hotkey_listener()
-            except Exception:  # noqa: BLE001
-                logger.exception("Emergency hotkey listener skipped")
         except Exception as exc:  # noqa: BLE001
             raise WorkflowError(
                 f"Could not initialize mouse/keyboard automation: {exc}"
@@ -112,6 +114,7 @@ class LinkedInWorkflow:
         self.history = history or HistoryStore.create(self.files.output_root)
         self.on_event = on_event
 
+        logger.info("Workflow init: wiring detectors…")
         self.jobs = JobDetector(self.vision, completed_signatures=set(self.history.completed))
         self.pages = PageNavigator(self.vision, self.mouse)
         self.linkedin = LinkedInDetector(self.vision)
@@ -121,6 +124,7 @@ class LinkedInWorkflow:
             self.keyboard,
             detail_wait_s=self.config.detail_wait_s,
         )
+        logger.info("Workflow init complete (pyautogui deferred until first action)")
 
     def _emit(self, event: str, **payload) -> None:
         logger.info("EVENT %s %s", event, payload)
@@ -146,6 +150,14 @@ class LinkedInWorkflow:
         """Execute the full collection workflow until completion, stop, or error."""
         self.state.set_state(WorkflowState.START)
         self._emit("started", run_dir=str(self.files.output_root))
+        # Optional hotkey — off by default because Win32 hooks have crashed
+        # some frozen EXE sessions during startup.
+        if os.getenv("ENABLE_EMERGENCY_HOTKEY", "").strip() in {"1", "true", "yes"}:
+            try:
+                logger.info("Arming emergency hotkey listener…")
+                self.guard.start_emergency_hotkey_listener()
+            except Exception:  # noqa: BLE001
+                logger.exception("Emergency hotkey listener skipped")
 
         try:
             if self.config.require_linkedin_detection:

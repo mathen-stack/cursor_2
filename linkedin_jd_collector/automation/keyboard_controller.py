@@ -37,10 +37,12 @@ class ClipboardBackend(Protocol):
 
 
 def _load_pyautogui() -> KeyboardBackend:
+    logger.info("Loading pyautogui keyboard backend…")
     import pyautogui
 
     pyautogui.FAILSAFE = True
     pyautogui.PAUSE = 0
+    logger.info("pyautogui keyboard backend loaded")
     return pyautogui
 
 
@@ -60,12 +62,17 @@ class KeyboardController:
         clipboard: ClipboardBackend | None = None,
         *,
         copy_settle_s: float = 0.15,
-        enable_emergency_hotkey: bool = True,
+        enable_emergency_hotkey: bool = False,
+        lazy_backend: bool = True,
     ) -> None:
         self.guard = guard or default_guard
-        self.backend = backend or _load_pyautogui()
+        self._backend = backend
+        self._lazy_backend = lazy_backend and backend is None
         self._clipboard = clipboard
         self.copy_settle_s = max(0.0, copy_settle_s)
+
+        if not self._lazy_backend and self._backend is None:
+            self._backend = _load_pyautogui()
 
         if enable_emergency_hotkey:
             try:
@@ -87,9 +94,19 @@ class KeyboardController:
                 )
 
         logger.info(
-            "KeyboardController ready safety_delay=%.3fs",
+            "KeyboardController created safety_delay=%.3fs lazy_backend=%s",
             self.guard.safety_delay_s,
+            self._lazy_backend,
         )
+
+    @property
+    def backend(self) -> KeyboardBackend:
+        if self._backend is None:
+            try:
+                self._backend = _load_pyautogui()
+            except Exception as exc:  # noqa: BLE001
+                raise AutomationError(f"Failed to load keyboard backend: {exc}") from exc
+        return self._backend
 
     @property
     def clipboard(self) -> ClipboardBackend:
