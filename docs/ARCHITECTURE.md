@@ -4,7 +4,10 @@
 **Platform:** Windows Desktop EXE  
 **AI Provider:** OpenRouter (vision-capable model)  
 **Approach:** Computer-use agent (screenshot → vision plan → OS actuation)  
-**Non-goals:** LinkedIn API, backend scraping, JD parsing/summarization, manual copy/paste
+**Stack:** Python, PyQt6, PyAutoGUI, PyWinAuto, MSS, Pillow, Pyperclip, PyInstaller  
+**Non-goals:** LinkedIn API, backend scraping, JD parsing/summarization, manual copy/paste  
+
+Full stack rationale: [TECH_STACK.md](./TECH_STACK.md).
 
 ---
 
