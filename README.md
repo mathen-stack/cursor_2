@@ -4,7 +4,9 @@ Windows desktop EXE that uses an OpenRouter vision AI computer-use agent to coll
 
 ## Status
 
-Project structure and architecture are defined. **Application logic is not implemented yet.**
+Architecture and project structure are in place.  
+**Implemented:** OpenRouter AI vision module (`ai/openrouter_client.py`, `ai/vision_agent.py`).  
+Other modules remain stubs.
 
 ## Documentation
 

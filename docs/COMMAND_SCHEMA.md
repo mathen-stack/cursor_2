@@ -1,38 +1,40 @@
 # AI Vision Agent — Structured JSON Command Schema
 
 Provider: **OpenRouter API** (vision-capable model).  
-Consumer: `ResponseValidator` → `NavigationEngine` / `ActionExecutor`.
+Implemented by: `linkedin_jd_collector/ai/vision_agent.py`  
+Consumer: Navigation / automation layers (later).
 
 ---
 
-## 1. Canonical Command Object
+## 1. Canonical Command Object (implemented)
 
 ```json
 {
   "action": "click",
   "target": "job_card",
   "coordinates": {
-    "x": 450,
-    "y": 300
+    "x": 300,
+    "y": 450
   },
   "confidence": 0.86,
-  "observation": "Left list shows 7 job cards; card 3 is unprocessed",
-  "keys": null,
+  "observation": "Left list shows job cards; click next unprocessed card",
   "scroll": null,
   "wait_ms": null,
-  "select": null,
-  "metadata": {
-    "job_index": 3,
-    "job_title": "Software Engineer",
-    "company": "Example Corp",
-    "page_hint": 2,
-    "about_job_visible": false,
-    "show_more_visible": false,
-    "next_enabled": true,
-    "prev_enabled": true
+  "detections": {
+    "linkedin_page": true,
+    "job_list": true,
+    "job_cards": true,
+    "selected_job": false,
+    "about_the_job": false,
+    "next_button": true,
+    "previous_button": true
   }
 }
 ```
+
+### Implemented actions
+
+`click` | `scroll` | `wait` | `copy` | `next_page` | `finish`
 
 ---
 

@@ -22,3 +22,6 @@ pydantic
 
 # Packaging (dev/build)
 pyinstaller
+
+# Tests
+pytest
