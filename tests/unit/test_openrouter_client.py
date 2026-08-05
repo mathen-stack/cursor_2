@@ -10,8 +10,10 @@ import pytest
 from ai.openrouter_client import (
     OpenRouterAuthError,
     OpenRouterClient,
+    OpenRouterCreditsError,
     OpenRouterError,
     encode_image_to_data_url,
+    format_openrouter_user_error,
 )
 
 
@@ -106,6 +108,39 @@ def test_auth_error_no_retry():
         or_client.complete([{"role": "user", "content": "hi"}])
     assert transport.calls == 1
     or_client.close()
+
+
+def test_credits_error_402_no_retry():
+    transport = _FakeTransport(
+        [
+            lambda req: httpx.Response(
+                402,
+                text='{"error":{"message":"Insufficient credits","code":402}}',
+            )
+        ]
+    )
+    client = httpx.Client(transport=transport)
+    or_client = OpenRouterClient(
+        api_key="test-key",
+        model="openai/gpt-4o",
+        client=client,
+        max_retries=3,
+        backoff_s=0.01,
+    )
+    with pytest.raises(OpenRouterCreditsError) as excinfo:
+        or_client.complete([{"role": "user", "content": "hi"}])
+    assert "credits" in str(excinfo.value).lower()
+    assert transport.calls == 1
+    or_client.close()
+
+
+def test_format_openrouter_user_error_credits():
+    msg = format_openrouter_user_error(
+        'OpenRouter HTTP 402: {"error":{"message":"Insufficient credits"}}'
+    )
+    assert "no credits" in msg.lower()
+    assert "openrouter.ai/settings/credits" in msg
+    assert "qwen" in msg.lower() or "free" in msg.lower()
 
 
 def test_missing_api_key_raises(monkeypatch):

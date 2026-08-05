@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from agent.controller import AgentController
+from ai.openrouter_client import DEFAULT_MODEL, format_openrouter_user_error
 from storage.file_manager import default_output_dir
 from ui.logger import LogPanel, QtLogHandler
 from ui.settings import AppSettings, load_settings, save_settings
@@ -40,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.2")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.3")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
@@ -61,7 +62,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.2")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.3")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -123,9 +124,16 @@ class MainWindow(QMainWindow):
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_input.setPlaceholderText("sk-or-…")
         self.model_input = QLineEdit()
-        self.model_input.setPlaceholderText("openai/gpt-4o")
+        self.model_input.setPlaceholderText(DEFAULT_MODEL)
         form.addRow("OpenRouter API Key", self.api_key_input)
         form.addRow("Vision Model Name", self.model_input)
+        model_hint = QLabel(
+            "Tip: paid models (e.g. openai/gpt-4o) need OpenRouter credits. "
+            f"Free default: {DEFAULT_MODEL}"
+        )
+        model_hint.setWordWrap(True)
+        model_hint.setStyleSheet("color: #555;")
+        form.addRow("", model_hint)
         layout.addWidget(settings_box)
 
         # Log panel
@@ -158,7 +166,7 @@ class MainWindow(QMainWindow):
     def _read_settings_from_form(self) -> AppSettings:
         return AppSettings(
             openrouter_api_key=self.api_key_input.text().strip(),
-            vision_model=self.model_input.text().strip() or "openai/gpt-4o",
+            vision_model=self.model_input.text().strip() or DEFAULT_MODEL,
             output_dir=self.settings.output_dir or str(default_output_dir()),
         )
 
@@ -275,7 +283,12 @@ class MainWindow(QMainWindow):
     def _on_failed(self, message: str) -> None:
         self._set_buttons_idle()
         self.btn_pause.setText("Pause")
-        QMessageBox.critical(self, "Agent Error", message)
+        friendly = format_openrouter_user_error(message)
+        # If this is a credits issue, also nudge the model field toward free.
+        if "no credits" in friendly.lower() or "402" in message:
+            if "gpt-4o" in self.model_input.text() or not self.model_input.text().strip():
+                self.model_input.setText(DEFAULT_MODEL)
+        QMessageBox.critical(self, "Agent Error", friendly)
 
     def _set_buttons_idle(self) -> None:
         self.btn_start.setEnabled(True)

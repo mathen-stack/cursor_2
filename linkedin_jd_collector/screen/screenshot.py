@@ -55,7 +55,7 @@ class ScreenshotService:
         self,
         grabber: ScreenGrabber | None = None,
         *,
-        max_width: int | None = 1600,
+        max_width: int | None = 1280,
     ) -> None:
         self._grabber = grabber
         self._owns_grabber = grabber is None

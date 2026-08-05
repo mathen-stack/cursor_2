@@ -21,10 +21,14 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openai/gpt-4o"
+# Free multimodal default so the agent can run without a paid OpenRouter balance.
+# Paid alternative: openai/gpt-4o
+DEFAULT_MODEL = "qwen/qwen2.5-vl-72b-instruct:free"
+CREDITS_URL = "https://openrouter.ai/settings/credits"
 DEFAULT_TIMEOUT_S = 60.0
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_S = 1.5
+DEFAULT_MAX_TOKENS = 512
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 # Resolve package-local .env (linkedin_jd_collector/.env)
@@ -40,12 +44,45 @@ class OpenRouterAuthError(OpenRouterError):
     """Raised when the API key is missing or rejected."""
 
 
+class OpenRouterCreditsError(OpenRouterError):
+    """Raised when OpenRouter returns HTTP 402 (insufficient credits)."""
+
+
 class OpenRouterRateLimitError(OpenRouterError):
     """Raised when OpenRouter rate-limits the request after retries."""
 
 
 class OpenRouterResponseError(OpenRouterError):
     """Raised when the API response is malformed or empty."""
+
+
+def format_openrouter_user_error(exc: BaseException | str) -> str:
+    """Turn raw OpenRouter failures into a short, actionable UI message."""
+    text = str(exc)
+    low = text.lower()
+    if (
+        "402" in text
+        or "insufficient credits" in low
+        or "payment required" in low
+        or isinstance(exc, OpenRouterCreditsError)
+    ):
+        return (
+            "OpenRouter has no credits left for this API key.\n\n"
+            "Fix one of these:\n"
+            f"1) Add credits: {CREDITS_URL}\n"
+            "2) In Settings, switch Vision Model to a free model, e.g.\n"
+            f"   {DEFAULT_MODEL}\n\n"
+            "Then click Start Agent again."
+        )
+    if "401" in text or "403" in text or "auth" in low:
+        return (
+            "OpenRouter rejected the API key.\n\n"
+            "Check Settings → OpenRouter API Key, then try again."
+        )
+    # Keep message readable; drop giant JSON blobs when possible.
+    if len(text) > 600:
+        return text[:600] + "…"
+    return text
 
 
 def _load_env() -> None:
@@ -192,7 +229,7 @@ class OpenRouterClient:
         *,
         model: str | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1024,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         extra_body: dict[str, Any] | None = None,
     ) -> str:
         """
@@ -225,6 +262,12 @@ class OpenRouterClient:
                     raise OpenRouterAuthError(
                         f"OpenRouter auth failed ({response.status_code}): {response.text[:500]}"
                     )
+                if response.status_code == 402:
+                    raise OpenRouterCreditsError(
+                        format_openrouter_user_error(
+                            f"OpenRouter HTTP 402: {response.text[:500]}"
+                        )
+                    )
                 if response.status_code in RETRYABLE_STATUS:
                     last_error = OpenRouterError(
                         f"Retryable status {response.status_code}: {response.text[:500]}"
@@ -243,7 +286,7 @@ class OpenRouterClient:
                 logger.info("OpenRouter response ok chars=%s", len(content))
                 return content
 
-            except OpenRouterAuthError:
+            except (OpenRouterAuthError, OpenRouterCreditsError):
                 raise
             except (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError) as exc:
                 last_error = OpenRouterError(f"Network error: {exc}")
@@ -276,7 +319,7 @@ class OpenRouterClient:
         mime_type: str | None = None,
         model: str | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1024,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         force_json_response_format: bool = True,
     ) -> str:
         """Send a system prompt + user text + screenshot image to OpenRouter."""

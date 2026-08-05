@@ -1,11 +1,14 @@
 """AI Vision Agent package: OpenRouter client, prompts, vision planning."""
 
 from .openrouter_client import (
+    DEFAULT_MODEL,
     OpenRouterAuthError,
     OpenRouterClient,
+    OpenRouterCreditsError,
     OpenRouterError,
     OpenRouterRateLimitError,
     OpenRouterResponseError,
+    format_openrouter_user_error,
 )
 from .vision_agent import (
     VisionAction,
@@ -16,8 +19,10 @@ from .vision_agent import (
 )
 
 __all__ = [
+    "DEFAULT_MODEL",
     "OpenRouterAuthError",
     "OpenRouterClient",
+    "OpenRouterCreditsError",
     "OpenRouterError",
     "OpenRouterRateLimitError",
     "OpenRouterResponseError",
@@ -25,5 +30,6 @@ __all__ = [
     "VisionAgent",
     "VisionAgentError",
     "VisionJSONError",
+    "format_openrouter_user_error",
     "validate_action_payload",
 ]

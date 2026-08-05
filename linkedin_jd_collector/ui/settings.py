@@ -12,6 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ai.openrouter_client import DEFAULT_MODEL
 from storage.file_manager import default_output_dir
 from ui.paths import env_path, is_frozen, settings_path
 
@@ -24,7 +25,7 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 @dataclass
 class AppSettings:
     openrouter_api_key: str = ""
-    vision_model: str = "openai/gpt-4o"
+    vision_model: str = DEFAULT_MODEL
     output_dir: str = ""
 
     def __post_init__(self) -> None:
@@ -63,7 +64,7 @@ def load_settings(path: Path | None = None) -> AppSettings:
 
     settings = AppSettings(
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
-        vision_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
+        vision_model=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
         output_dir=os.getenv("OUTPUT_DIR") or str(default_output_dir()),
     )
 
@@ -90,7 +91,7 @@ def load_settings(path: Path | None = None) -> AppSettings:
     if settings.openrouter_api_key.startswith("your_openrouter_api_key"):
         settings.openrouter_api_key = ""
     if settings.vision_model.startswith("your_multimodal_vision_model"):
-        settings.vision_model = "openai/gpt-4o"
+        settings.vision_model = DEFAULT_MODEL
 
     return settings
 
