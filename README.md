@@ -11,9 +11,18 @@ Architecture and project structure are in place.
 - LinkedIn workflow (`agent/workflow.py`, `linkedin/job_detector.py`, `linkedin/page_navigator.py`)
 - JD extraction (`linkedin/jd_detector.py`, `automation/clipboard.py`) — locate → select → Ctrl+C → exact text
 - File storage (`storage/`) → `Documents/LinkedIn_JD/Company_Title_Date_Time.txt` with URL/timestamp/raw JD; duplicate-safe
+- PyQt6 UI (`ui/`, `main.py`, `agent/controller.py`) — Start/Pause/Stop/Open Folder, settings, log panel
 - Supporting: screenshot capture, state manager
 
-Still stubs: desktop UI (`ui/`), controller wiring, EXE build.
+Still stubs: EXE build packaging script.
+
+### Run UI
+
+```bash
+cd linkedin_jd_collector
+pip install -r requirements.txt
+python main.py
+```
 
 ## Documentation
 
