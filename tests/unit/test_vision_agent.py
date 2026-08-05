@@ -68,6 +68,26 @@ def test_validate_invalid_action():
         validate_action_payload({"action": "explode"})
 
 
+def test_validate_target_aliases_and_unknown():
+    action = validate_action_payload(
+        {
+            "action": "click",
+            "target": "job",
+            "coordinates": {"x": 10, "y": 20},
+        }
+    )
+    assert action.target == "job_card"
+
+    soft = validate_action_payload(
+        {
+            "action": "click",
+            "target": "weird_label",
+            "coordinates": {"x": 11, "y": 22},
+        }
+    )
+    assert soft.target == "other"
+
+
 def test_validate_wait_defaults():
     action = validate_action_payload({"action": "wait"})
     assert action.wait_ms == 800

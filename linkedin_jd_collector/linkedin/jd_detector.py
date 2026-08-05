@@ -156,10 +156,23 @@ class JdDetector:
                 continue
             if last.detections.get("about_the_job") or last.detections.get("selected_job"):
                 return last
+            # Small VL models often omit detections — treat copy/about click as ready.
+            if last.action in {"copy", "click"} and last.target in {
+                "about_the_job",
+                "selected_job",
+                "show_more",
+                "other",
+            }:
+                return last
             if last.action == "wait":
                 time.sleep((last.wait_ms or 800) / 1000.0)
             else:
                 time.sleep(0.6)
+        # Proceed optimistically — extract_jd has its own right-panel fallback.
+        logger.warning(
+            "Details panel not confirmed after %s attempts; continuing to JD extract",
+            self.max_detail_attempts,
+        )
         return last
 
     # --- step 1: AI identifies JD location -------------------------------

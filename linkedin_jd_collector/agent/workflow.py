@@ -275,6 +275,25 @@ class LinkedInWorkflow:
 
         return self.state
 
+    def _image_size(self) -> tuple[int, int] | None:
+        last = self.screenshots.last
+        if last is None:
+            return None
+        return int(last.width), int(last.height)
+
+    def _jd_fallback_region(self) -> tuple[int, int, int, int] | None:
+        """Right-side detail panel region in screenshot coordinates."""
+        size = self._image_size()
+        if size is None:
+            return None
+        w, h = size
+        return (
+            max(0, int(w * 0.40)),
+            max(0, int(h * 0.22)),
+            max(1, int(w * 0.97)),
+            max(1, int(h * 0.92)),
+        )
+
     def _process_current_page(self) -> bool:
         """
         Process all visible jobs on the current page.
@@ -283,7 +302,9 @@ class LinkedInWorkflow:
         screenshot = self._capture()
         self.state.set_state(WorkflowState.ANALYZE)
         cards = self.jobs.identify_visible_jobs(
-            screenshot, extra_context=self.state.context_for_ai()
+            screenshot,
+            extra_context=self.state.context_for_ai(),
+            image_size=self._image_size(),
         )
         self._emit(
             "ai_decision",
@@ -306,7 +327,9 @@ class LinkedInWorkflow:
 
             screenshot = self._capture()
             card, action = self.jobs.choose_next_job_action(
-                screenshot, extra_context=self.state.context_for_ai()
+                screenshot,
+                extra_context=self.state.context_for_ai(),
+                image_size=self._image_size(),
             )
             self._emit(
                 "ai_decision",
@@ -326,7 +349,28 @@ class LinkedInWorkflow:
                 )
 
             if card is None:
+                # Don't abandon the page on the first finish/next_page if we never
+                # successfully opened a job this page — try scroll + heuristics first.
                 if action.action in {"next_page", "finish"}:
+                    # Only recover when we never even attempted a job click.
+                    # If jobs were attempted/failed, respect finish/next_page.
+                    if self.state.stats.jobs_seen == 0 and idle_rounds < 3:
+                        logger.info(
+                            "AI said %s before any job click; scrolling/heuristics first",
+                            action.action,
+                        )
+                        size = self._image_size()
+                        if size:
+                            self.jobs.seed_heuristic_cards(size[0], size[1])
+                        last = self.screenshots.last
+                        if last is not None:
+                            self.mouse.scroll(
+                                dy=-500,
+                                x=max(40, last.width // 4),
+                                y=max(80, last.height // 2),
+                            )
+                        idle_rounds += 1
+                        continue
                     logger.info("No more jobs on page (AI action=%s)", action.action)
                     return True
                 if action.action == "scroll":
@@ -412,7 +456,9 @@ class LinkedInWorkflow:
                 self.state.set_state(WorkflowState.SELECT_JD)
                 self.state.set_state(WorkflowState.COPY_JD)
                 extraction = self.jd.extract_jd(
-                    self._capture, should_stop=self._stopped
+                    self._capture,
+                    should_stop=self._stopped,
+                    select_fallback_region=self._jd_fallback_region(),
                 )
                 text = extraction.text  # exact clipboard contents; do not modify
 

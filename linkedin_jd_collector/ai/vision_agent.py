@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_ACTIONS = frozenset(
     {"click", "scroll", "wait", "copy", "next_page", "finish", "need_user"}
 )
-DEFAULT_MIN_CONFIDENCE = 0.45
+DEFAULT_MIN_CONFIDENCE = 0.25
 ALLOWED_TARGETS = frozenset(
     {
         "linkedin_page",
@@ -35,6 +35,33 @@ ALLOWED_TARGETS = frozenset(
         "other",
     }
 )
+# Free/small VL models often invent close-enough labels — normalize them.
+TARGET_ALIASES = {
+    "job": "job_card",
+    "jobs": "job_list",
+    "jobcard": "job_card",
+    "job_cards": "job_card",
+    "card": "job_card",
+    "listing": "job_card",
+    "result": "job_card",
+    "results": "job_list",
+    "list": "job_list",
+    "left_list": "job_list",
+    "details": "selected_job",
+    "detail": "selected_job",
+    "detail_panel": "selected_job",
+    "description": "about_the_job",
+    "jd": "about_the_job",
+    "about": "about_the_job",
+    "about_job": "about_the_job",
+    "job_description": "about_the_job",
+    "next": "next_button",
+    "nextpage": "next_button",
+    "previous": "previous_button",
+    "prev": "previous_button",
+    "showmore": "show_more",
+    "see_more": "show_more",
+}
 
 DETECTION_KEYS = (
     "linkedin_page",
@@ -151,10 +178,13 @@ def validate_action_payload(data: dict[str, Any]) -> VisionAction:
 
     target_raw = data.get("target")
     target = str(target_raw).strip().lower() if target_raw not in (None, "") else None
-    if target is not None and target not in ALLOWED_TARGETS:
-        raise VisionJSONError(
-            f"Invalid target {target!r}. Allowed: {sorted(ALLOWED_TARGETS)}"
-        )
+    if target is not None:
+        target = TARGET_ALIASES.get(target, target)
+        target = TARGET_ALIASES.get(target.replace(" ", "_"), target)
+        if target not in ALLOWED_TARGETS:
+            # Don't abort the whole step for an unknown label from small VL models.
+            logger.warning("Unknown target %r; coercing to 'other'", target)
+            target = "other"
 
     coordinates = _parse_coordinates(data.get("coordinates"))
     scroll = _parse_scroll(data.get("scroll"))
@@ -349,10 +379,23 @@ class VisionAgent:
                     and action.confidence < self.min_confidence
                     and action.action in {"click", "next_page", "copy"}
                 ):
-                    raise VisionJSONError(
-                        f"Low confidence {action.confidence:.2f} < {self.min_confidence:.2f} "
-                        f"for action={action.action}"
-                    )
+                    # Soft gate: free VL models often under-report confidence.
+                    # Keep the action if coordinates exist; otherwise retry.
+                    if action.coordinates is not None or action.action in {
+                        "next_page",
+                        "copy",
+                    }:
+                        logger.warning(
+                            "Low confidence %.2f < %.2f for %s — continuing anyway",
+                            action.confidence,
+                            self.min_confidence,
+                            action.action,
+                        )
+                    else:
+                        raise VisionJSONError(
+                            f"Low confidence {action.confidence:.2f} < {self.min_confidence:.2f} "
+                            f"for action={action.action}"
+                        )
                 logger.info(
                     "Vision action=%s target=%s coords=%s confidence=%s observation=%r",
                     action.action,

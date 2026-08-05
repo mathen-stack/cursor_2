@@ -31,6 +31,10 @@ Rules:
 4. Prefer the smallest useful action that advances collection.
 5. If the page is not LinkedIn jobs UI, use action "wait" or explain via
    observation and keep coordinates null when not clicking.
+6. When collecting jobs: ALWAYS prefer action=click target=job_card on a
+   visible left-list card before wait/finish. Include job_cards when you can.
+7. After a job is open: prefer locating About the job / show_more / copy —
+   do not finish early.
 
 Allowed actions:
 - click

@@ -68,3 +68,53 @@ def test_identify_visible_jobs():
     cards = detector.identify_visible_jobs(b"png")
     assert len(cards) == 1
     assert vision.calls == 1
+
+
+def test_heuristic_slots_when_vision_returns_empty():
+    from linkedin.job_detector import heuristic_job_cards
+
+    slots = heuristic_job_cards(1280, 800, count=5)
+    assert len(slots) == 5
+    assert slots[0].x < 1280 * 0.35  # left rail
+    assert slots[1].y > slots[0].y
+    assert all(s.x == slots[0].x for s in slots)
+
+    vision = FakeVision(
+        [VisionAction(action="wait", wait_ms=200, observation="no cards listed")]
+    )
+    detector = JobDetector(vision=vision)
+    card, action = detector.choose_next_job_action(
+        b"png", image_size=(1280, 800)
+    )
+    assert card is not None
+    assert action.action == "click"
+    assert "heuristic" in (action.observation or "").lower()
+
+
+def test_finish_is_not_overridden_by_heuristics():
+    vision = FakeVision(
+        [VisionAction(action="finish", observation="page done")]
+    )
+    detector = JobDetector(vision=vision)
+    card, action = detector.choose_next_job_action(
+        b"png", image_size=(1280, 800)
+    )
+    assert card is None
+    assert action.action == "finish"
+
+
+def test_accept_click_with_other_target():
+    action = VisionAction(
+        action="click",
+        target="other",
+        coordinates=Coordinates(220, 310),
+        observation="Frontend Engineer at Globex",
+        detections={"job_cards": True},
+        raw={},
+    )
+    vision = FakeVision([action])
+    detector = JobDetector(vision=vision)
+    card, returned = detector.choose_next_job_action(b"png")
+    assert card is not None
+    assert card.x == 220
+    assert "frontend" in card.title.lower()
