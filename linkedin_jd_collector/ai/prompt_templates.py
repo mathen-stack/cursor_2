@@ -34,7 +34,8 @@ Rules:
 6. When collecting jobs: ALWAYS prefer action=click target=job_card on a
    visible left-list card before wait/finish. Include job_cards when you can.
 7. After a job is open: prefer locating About the job / show_more / copy —
-   do not finish early.
+   do not finish early. For copy, prefer a drag "select" box from the
+   About the job heading down through the JD body in the RIGHT panel.
 
 Allowed actions:
 - click

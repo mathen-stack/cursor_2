@@ -282,17 +282,13 @@ class LinkedInWorkflow:
         return int(last.width), int(last.height)
 
     def _jd_fallback_region(self) -> tuple[int, int, int, int] | None:
-        """Right-side detail panel region in screenshot coordinates."""
+        """Right-pane About-the-job → bottom drag box (screenshot coords)."""
         size = self._image_size()
         if size is None:
             return None
-        w, h = size
-        return (
-            max(0, int(w * 0.40)),
-            max(0, int(h * 0.22)),
-            max(1, int(w * 0.97)),
-            max(1, int(h * 0.92)),
-        )
+        from linkedin.jd_detector import right_panel_jd_region
+
+        return right_panel_jd_region(size[0], size[1])
 
     def _process_current_page(self) -> bool:
         """

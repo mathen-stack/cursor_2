@@ -92,7 +92,8 @@ def test_extract_jd_drag_select_and_exact_clipboard():
     assert result.selection_method == "drag_region"
 
 
-def test_extract_jd_uses_click_ctrl_a_without_region():
+def test_extract_jd_focus_point_drags_through_right_panel():
+    """Match human stage: focus About the job, drag down, then Ctrl+C."""
     locate = VisionAction(
         action="copy",
         target="about_the_job",
@@ -120,11 +121,26 @@ def test_extract_jd_uses_click_ctrl_a_without_region():
         keyboard=keyboard,
         clipboard=clipboard,
         max_extract_attempts=1,
+        select_drag_duration_s=0.0,
     )
-    result = detector.extract_jd(lambda: b"png")
+    result = detector.extract_jd(
+        lambda: b"png",
+        select_fallback_region=(400, 300, 1100, 900),
+    )
     assert result.text == raw_jd
-    assert result.selection_method == "click_ctrl_a"
-    assert ("move", 510, 420) in mouse.calls
+    assert result.selection_method == "focus_drag"
+    assert ("select_text", 510, 420, 1100, 900) in mouse.calls
+    assert any(c == ("hotkey", ("ctrl", "c")) for c in keyboard.calls)
+
+
+def test_right_panel_jd_region_stays_in_detail_pane():
+    from linkedin.jd_detector import right_panel_jd_region
+
+    x1, y1, x2, y2 = right_panel_jd_region(1920, 1080)
+    assert x1 > 1920 * 0.3
+    assert y1 > 1080 * 0.35  # below Apply / match widgets
+    assert x2 > x1
+    assert y2 > y1
 
 
 def test_extract_jd_fails_when_clipboard_empty():
