@@ -1,0 +1,30 @@
+# Secrets / local env
+.env
+linkedin_jd_collector/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-build/
+venv/
+dist/
+**/dist/
+*.egg-info/
+
+# PyInstaller work dirs (do not ignore source package linkedin_jd_collector/build/)
+/build/
+linkedin_jd_collector/build/pyinstaller_work/
+# Ignore generated specs in package root, but keep curated build/*.spec tracked
+/linkedin_jd_collector/*.spec
+
+# Output / runs
+output/
+**/runs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
