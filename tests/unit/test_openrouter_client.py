@@ -140,7 +140,17 @@ def test_format_openrouter_user_error_credits():
     )
     assert "no credits" in msg.lower()
     assert "openrouter.ai/settings/credits" in msg
-    assert "qwen" in msg.lower() or "free" in msg.lower()
+    assert "nemotron" in msg.lower() or "free" in msg.lower()
+
+
+def test_format_openrouter_user_error_retired_free_model():
+    msg = format_openrouter_user_error(
+        'OpenRouter HTTP 404: {"error":{"message":"This model is unavailable for free. '
+        'The paid version is available now - use this slug instead: '
+        'qwen/qwen2.5-vl-72b-instruct","code":404}}'
+    )
+    assert "unavailable" in msg.lower()
+    assert "nemotron-nano-12b-v2-vl:free" in msg
 
 
 def test_missing_api_key_raises(monkeypatch):

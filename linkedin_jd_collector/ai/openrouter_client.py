@@ -21,9 +21,17 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Free multimodal default so the agent can run without a paid OpenRouter balance.
-# Paid alternative: openai/gpt-4o
-DEFAULT_MODEL = "qwen/qwen2.5-vl-72b-instruct:free"
+# Free vision-language default (no paid OpenRouter balance required).
+# Paid alternatives: openai/gpt-4o, qwen/qwen2.5-vl-72b-instruct
+DEFAULT_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
+# Older free slugs that OpenRouter has retired — auto-migrate on load.
+RETIRED_FREE_MODELS = frozenset(
+    {
+        "qwen/qwen2.5-vl-72b-instruct:free",
+        "qwen/qwen2.5-vl-32b-instruct:free",
+        "meta-llama/llama-3.2-11b-vision-instruct:free",
+    }
+)
 CREDITS_URL = "https://openrouter.ai/settings/credits"
 DEFAULT_TIMEOUT_S = 60.0
 DEFAULT_MAX_RETRIES = 3
@@ -72,6 +80,22 @@ def format_openrouter_user_error(exc: BaseException | str) -> str:
             f"1) Add credits: {CREDITS_URL}\n"
             "2) In Settings, switch Vision Model to a free model, e.g.\n"
             f"   {DEFAULT_MODEL}\n\n"
+            "Then click Start Agent again."
+        )
+    if (
+        "404" in text
+        or "unavailable for free" in low
+        or "no endpoints found" in low
+        or "model is unavailable" in low
+        or "not a valid model" in low
+    ):
+        # OpenRouter often suggests a paid slug in the JSON; surface our free default.
+        return (
+            "That OpenRouter vision model is unavailable (often the free "
+            "variant was retired).\n\n"
+            "In Settings → Vision Model Name, use:\n"
+            f"  {DEFAULT_MODEL}\n\n"
+            "Or a paid model you have credits for (e.g. openai/gpt-4o).\n"
             "Then click Start Agent again."
         )
     if "401" in text or "403" in text or "auth" in low:

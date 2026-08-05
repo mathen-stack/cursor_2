@@ -41,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.5")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.6")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.5")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.6")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -284,10 +284,16 @@ class MainWindow(QMainWindow):
         self._set_buttons_idle()
         self.btn_pause.setText("Pause")
         friendly = format_openrouter_user_error(message)
-        # If this is a credits issue, also nudge the model field toward free.
-        if "no credits" in friendly.lower() or "402" in message:
-            if "gpt-4o" in self.model_input.text() or not self.model_input.text().strip():
-                self.model_input.setText(DEFAULT_MODEL)
+        low = (friendly + "\n" + message).lower()
+        # Nudge Settings toward a working free VL model on credits / retired-model errors.
+        if (
+            "no credits" in low
+            or "402" in message
+            or "404" in message
+            or "unavailable" in low
+            or "retired" in low
+        ):
+            self.model_input.setText(DEFAULT_MODEL)
         QMessageBox.critical(self, "Agent Error", friendly)
 
     def _set_buttons_idle(self) -> None:

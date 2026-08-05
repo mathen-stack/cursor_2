@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from ai.openrouter_client import DEFAULT_MODEL
+from ai.openrouter_client import DEFAULT_MODEL, RETIRED_FREE_MODELS
 from storage.file_manager import default_output_dir
 from ui.paths import env_path, is_frozen, settings_path
 
@@ -91,6 +91,14 @@ def load_settings(path: Path | None = None) -> AppSettings:
     if settings.openrouter_api_key.startswith("your_openrouter_api_key"):
         settings.openrouter_api_key = ""
     if settings.vision_model.startswith("your_multimodal_vision_model"):
+        settings.vision_model = DEFAULT_MODEL
+    # Migrate retired free slugs (e.g. qwen …:free → current free VL default)
+    if settings.vision_model.strip() in RETIRED_FREE_MODELS:
+        logger.info(
+            "Migrating retired OpenRouter model %s → %s",
+            settings.vision_model,
+            DEFAULT_MODEL,
+        )
         settings.vision_model = DEFAULT_MODEL
 
     return settings
