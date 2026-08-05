@@ -2,6 +2,7 @@
 
 from .openrouter_client import (
     DEFAULT_MODEL,
+    LEGACY_PAID_DEFAULTS,
     OpenRouterAuthError,
     OpenRouterClient,
     OpenRouterCreditsError,
@@ -20,6 +21,7 @@ from .vision_agent import (
 
 __all__ = [
     "DEFAULT_MODEL",
+    "LEGACY_PAID_DEFAULTS",
     "OpenRouterAuthError",
     "OpenRouterClient",
     "OpenRouterCreditsError",

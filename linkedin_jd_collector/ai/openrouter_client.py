@@ -32,6 +32,14 @@ RETIRED_FREE_MODELS = frozenset(
         "meta-llama/llama-3.2-11b-vision-instruct:free",
     }
 )
+# Former shipped default that requires paid credits — migrate to free VL.
+LEGACY_PAID_DEFAULTS = frozenset(
+    {
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4-turbo",
+    }
+)
 CREDITS_URL = "https://openrouter.ai/settings/credits"
 DEFAULT_TIMEOUT_S = 60.0
 DEFAULT_MAX_RETRIES = 3
@@ -269,6 +277,7 @@ class OpenRouterClient:
             payload.update(extra_body)
 
         last_error: Exception | None = None
+        credits_fallback_used = False
         for attempt in range(1, self.max_retries + 1):
             try:
                 logger.info(
@@ -287,6 +296,22 @@ class OpenRouterClient:
                         f"OpenRouter auth failed ({response.status_code}): {response.text[:500]}"
                     )
                 if response.status_code == 402:
+                    current = str(payload.get("model") or "")
+                    # Paid model + empty balance → switch to free VL and retry once.
+                    if (
+                        not credits_fallback_used
+                        and current != DEFAULT_MODEL
+                        and not current.endswith(":free")
+                    ):
+                        logger.warning(
+                            "OpenRouter 402 on %s — falling back to free model %s",
+                            current,
+                            DEFAULT_MODEL,
+                        )
+                        self.model = DEFAULT_MODEL
+                        payload["model"] = DEFAULT_MODEL
+                        credits_fallback_used = True
+                        continue
                     raise OpenRouterCreditsError(
                         format_openrouter_user_error(
                             f"OpenRouter HTTP 402: {response.text[:500]}"

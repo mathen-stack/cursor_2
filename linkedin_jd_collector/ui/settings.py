@@ -12,7 +12,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from ai.openrouter_client import DEFAULT_MODEL, RETIRED_FREE_MODELS
+from ai.openrouter_client import (
+    DEFAULT_MODEL,
+    LEGACY_PAID_DEFAULTS,
+    RETIRED_FREE_MODELS,
+)
 from storage.file_manager import default_output_dir
 from ui.paths import env_path, is_frozen, settings_path
 
@@ -96,6 +100,14 @@ def load_settings(path: Path | None = None) -> AppSettings:
     if settings.vision_model.strip() in RETIRED_FREE_MODELS:
         logger.info(
             "Migrating retired OpenRouter model %s → %s",
+            settings.vision_model,
+            DEFAULT_MODEL,
+        )
+        settings.vision_model = DEFAULT_MODEL
+    # Former shipped default requires paid credits; users without balance hit 402.
+    if settings.vision_model.strip() in LEGACY_PAID_DEFAULTS:
+        logger.info(
+            "Migrating legacy paid OpenRouter model %s → %s",
             settings.vision_model,
             DEFAULT_MODEL,
         )

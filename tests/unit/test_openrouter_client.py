@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from ai.openrouter_client import (
+    DEFAULT_MODEL,
     OpenRouterAuthError,
     OpenRouterClient,
     OpenRouterCreditsError,
@@ -110,7 +111,39 @@ def test_auth_error_no_retry():
     or_client.close()
 
 
-def test_credits_error_402_no_retry():
+def test_credits_402_falls_back_to_free_model():
+    seen_models: list[str] = []
+
+    def paid_then_free(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode("utf-8"))
+        seen_models.append(payload["model"])
+        if payload["model"] == "openai/gpt-4o":
+            return httpx.Response(
+                402,
+                text='{"error":{"message":"Insufficient credits","code":402}}',
+            )
+        return _json_response(
+            200,
+            {"choices": [{"message": {"content": '{"action":"wait"}'}}]},
+        )
+
+    transport = _FakeTransport([paid_then_free, paid_then_free])
+    client = httpx.Client(transport=transport)
+    or_client = OpenRouterClient(
+        api_key="test-key",
+        model="openai/gpt-4o",
+        client=client,
+        max_retries=3,
+        backoff_s=0.01,
+    )
+    text = or_client.complete([{"role": "user", "content": "hi"}])
+    assert '"wait"' in text
+    assert seen_models == ["openai/gpt-4o", DEFAULT_MODEL]
+    assert or_client.model == DEFAULT_MODEL
+    or_client.close()
+
+
+def test_credits_402_on_free_model_raises():
     transport = _FakeTransport(
         [
             lambda req: httpx.Response(
@@ -122,7 +155,7 @@ def test_credits_error_402_no_retry():
     client = httpx.Client(transport=transport)
     or_client = OpenRouterClient(
         api_key="test-key",
-        model="openai/gpt-4o",
+        model=DEFAULT_MODEL,
         client=client,
         max_retries=3,
         backoff_s=0.01,

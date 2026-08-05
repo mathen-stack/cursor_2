@@ -41,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.9")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.10")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.9")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.10")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -300,7 +300,7 @@ class MainWindow(QMainWindow):
         self.btn_pause.setText("Pause")
         friendly = format_openrouter_user_error(message)
         low = (friendly + "\n" + message).lower()
-        # Nudge Settings toward a working free VL model on credits / retired-model errors.
+        # Persist free VL model on credits / retired-model errors so Start works next.
         if (
             "no credits" in low
             or "402" in message
@@ -309,6 +309,21 @@ class MainWindow(QMainWindow):
             or "retired" in low
         ):
             self.model_input.setText(DEFAULT_MODEL)
+            try:
+                fixed = self._read_settings_from_form()
+                save_settings(fixed)
+                self.settings = fixed
+                self.settings.apply_to_environ()
+                self.log_panel.info(
+                    f"Switched Vision Model to free default: {DEFAULT_MODEL}"
+                )
+                friendly = (
+                    f"{friendly}\n\n"
+                    f"Vision Model was switched to:\n{DEFAULT_MODEL}\n"
+                    "Click Start Agent again."
+                )
+            except OSError:
+                logger.debug("Could not persist free model after credits error")
         QMessageBox.critical(self, "Agent Error", friendly)
 
     def _focus_linkedin_for_run(self) -> None:
