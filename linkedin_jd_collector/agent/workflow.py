@@ -213,6 +213,17 @@ class LinkedInWorkflow:
             card, action = self.jobs.choose_next_job_action(
                 screenshot, extra_context=self.state.context_for_ai()
             )
+            self._emit(
+                "ai_decision",
+                ai_decision=(
+                    f"action={action.action} target={action.target} "
+                    f"obs={action.observation or ''}"
+                ),
+                action=action.action,
+                target=action.target,
+                observation=action.observation,
+                **self.state.snapshot(),
+            )
 
             if card is None:
                 if action.action in {"next_page", "finish"}:

@@ -11,3 +11,5 @@ __all__ = [
     "WorkflowState",
     "run_workflow",
 ]
+
+# AgentController imports PyQt6; import lazily from agent.controller when UI starts.
