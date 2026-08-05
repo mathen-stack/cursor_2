@@ -1,0 +1,23 @@
+# Secrets / local env
+.env
+linkedin_jd_collector/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+*.spec
+
+# Output / runs
+output/
+**/runs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

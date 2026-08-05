@@ -365,87 +365,47 @@ AI asked: detect next_button / prev_button + enabled state
 
 ## 7. Repository Folder Structure
 
+Canonical implementation tree (see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)):
+
 ```
-linkedin-jd-collector-agent/
-├── README.md
-├── docs/
-│   ├── ARCHITECTURE.md              # this document
-│   ├── DATA_FLOW.md                 # sequence-oriented companion
-│   └── COMMAND_SCHEMA.md            # JSON command contract
-├── app/
-│   ├── __init__.py
-│   ├── main.py                      # EXE entrypoint
-│   ├── desktop_app/                 # (1) Desktop Application
-│   │   ├── __init__.py
-│   │   ├── app_window.py
-│   │   ├── control_panel.py
-│   │   ├── progress_view.py
-│   │   ├── log_console.py
-│   │   ├── settings_manager.py
-│   │   └── event_bus.py
-│   ├── ai_agent/                    # (2) AI Vision Agent
-│   │   ├── __init__.py
-│   │   ├── openrouter_client.py
-│   │   ├── prompt_builder.py
-│   │   ├── response_validator.py
-│   │   ├── command_schema.py
-│   │   └── vision_agent.py
-│   ├── automation/                  # (3) Computer Automation Layer
-│   │   ├── __init__.py
-│   │   ├── window_manager.py
-│   │   ├── screenshot_service.py
-│   │   ├── mouse_controller.py
-│   │   ├── keyboard_controller.py
-│   │   ├── scroll_controller.py
-│   │   ├── action_executor.py
-│   │   └── input_guard.py
-│   ├── navigation/                  # (4) LinkedIn Navigation Engine
-│   │   ├── __init__.py
-│   │   ├── fsm.py
-│   │   ├── navigation_engine.py
-│   │   ├── page_processor.py
-│   │   ├── job_card_tracker.py
-│   │   ├── pagination_controller.py
-│   │   └── completion_detector.py
-│   ├── extraction/                  # (5) JD Extraction Layer
-│   │   ├── __init__.py
-│   │   ├── jd_extractor.py
-│   │   ├── text_selector.py
-│   │   ├── clipboard_reader.py
-│   │   └── clipboard_validator.py
-│   ├── storage/                     # (6) Storage Layer
-│   │   ├── __init__.py
-│   │   ├── folder_manager.py
-│   │   ├── jd_file_writer.py
-│   │   ├── job_tracker.py
-│   │   └── index_store.py
-│   ├── core/                        # shared domain types & config
-│   │   ├── __init__.py
-│   │   ├── config.py
-│   │   ├── models.py
-│   │   ├── errors.py
-│   │   └── constants.py
-│   └── worker/
-│       ├── __init__.py
-│       └── agent_worker.py
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── fixtures/
-│       └── screenshots/
-├── resources/
-│   ├── app.ico
-│   └── default_config.json
-├── scripts/
-│   ├── build_exe.ps1
-│   └── run_dev.ps1
+linkedin_jd_collector/
+├── main.py
 ├── requirements.txt
-├── pyproject.toml
-└── .env.example
+├── .env / .env.example
+├── ui/                 # Desktop Application (PyQt6)
+│   ├── main_window.py
+│   ├── settings.py
+│   └── logger.py
+├── ai/                 # AI Vision Agent (OpenRouter)
+│   ├── openrouter_client.py
+│   ├── vision_agent.py
+│   └── prompt_templates.py
+├── screen/             # Screenshot capture
+│   ├── screenshot.py
+│   └── monitor.py
+├── automation/         # Computer Automation Layer
+│   ├── mouse_controller.py
+│   ├── keyboard_controller.py
+│   └── clipboard.py
+├── linkedin/           # LinkedIn-specific navigation helpers
+│   ├── linkedin_detector.py
+│   ├── job_detector.py
+│   ├── page_navigator.py
+│   └── jd_detector.py
+├── agent/              # Orchestration / Navigation Engine
+│   ├── controller.py
+│   ├── workflow.py
+│   └── state_manager.py
+├── storage/            # Storage Layer
+│   ├── file_manager.py
+│   └── history.py
+└── build/
+    └── build_exe.py
 ```
+
+Supporting docs live under `docs/`. Module files are currently explanation stubs only.
 
 ---
-
 ## 8. Interface Contracts Between Layers
 
 ```

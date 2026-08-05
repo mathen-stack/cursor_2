@@ -4,12 +4,13 @@ Windows desktop EXE that uses an OpenRouter vision AI computer-use agent to coll
 
 ## Status
 
-Architecture phase complete. Application logic not implemented yet.
+Project structure and architecture are defined. **Application logic is not implemented yet.**
 
 ## Documentation
 
 - [Production Architecture](docs/ARCHITECTURE.md)
 - [Technology Stack](docs/TECH_STACK.md)
+- [Project Structure](docs/PROJECT_STRUCTURE.md) — file-by-file explanation
 - [Data Flow](docs/DATA_FLOW.md)
 - [AI Command Schema](docs/COMMAND_SCHEMA.md)
 
@@ -25,17 +26,21 @@ Architecture phase complete. Application logic not implemented yet.
 | Clipboard | Pyperclip |
 | Packaging | PyInstaller → Windows EXE |
 
-See [TECH_STACK.md](docs/TECH_STACK.md) for rationale, limitations, and alternatives.
+## Project layout
 
-## System Layers
+```
+linkedin_jd_collector/
+├── main.py
+├── requirements.txt
+├── .env
+├── ui/            # PyQt6 desktop app
+├── ai/            # OpenRouter vision agent
+├── screen/        # MSS + Pillow capture
+├── automation/    # mouse / keyboard / clipboard
+├── linkedin/      # LinkedIn window/job/page/JD helpers
+├── agent/         # controller, workflow FSM, state
+├── storage/       # TXT files + completed-job history
+└── build/         # PyInstaller EXE build
+```
 
-1. **Desktop Application** — Start/Stop, progress, logs, settings
-2. **AI Vision Agent** — OpenRouter vision → structured JSON commands
-3. **Computer Automation Layer** — mouse, keyboard, scroll, screenshots
-4. **LinkedIn Navigation Engine** — page/job loops, pagination, completion
-5. **JD Extraction Layer** — select, Ctrl+C, clipboard read
-6. **Storage Layer** — folders, TXT files, completed-job tracking
-
-## Intended Folder Layout
-
-See [Repository Folder Structure](docs/ARCHITECTURE.md#7-repository-folder-structure). Module directories are scaffolded under `app/` and awaiting implementation.
+See [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for what each file is responsible for.

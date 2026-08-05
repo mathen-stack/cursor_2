@@ -1,0 +1,24 @@
+# LinkedIn JD Collector Agent — Python dependencies
+# Structure only; versions may be pinned during implementation.
+
+# Desktop UI
+PyQt6
+
+# Automation
+pyautogui
+pywinauto
+
+# Screenshot / imaging
+mss
+Pillow
+
+# Clipboard
+pyperclip
+
+# AI / HTTP
+httpx
+python-dotenv
+pydantic
+
+# Packaging (dev/build)
+pyinstaller
