@@ -27,14 +27,22 @@ class JobCard:
 
     @property
     def signature(self) -> str:
+        """
+        Stable identity for dedupe/skip.
+
+        Prefer URL, then title|company (not shifting list index), then coarse
+        coordinates so retries on the same card do not create a new identity.
+        """
         if self.url:
             normalized = self.url.strip().split("?")[0].rstrip("/").lower()
             if normalized:
                 return f"url:{normalized}"
-        base = f"{self.title.strip().lower()}|{self.company.strip().lower()}"
-        if self.index is not None:
-            return f"{base}|idx:{self.index}"
-        return f"{base}|@{self.x},{self.y}"
+        title = self.title.strip().lower()
+        company = self.company.strip().lower()
+        if title and title != "job" and company and company != "company":
+            return f"job:{title}|{company}"
+        # Bucket coordinates to reduce jitter from tiny AI coordinate drift
+        return f"xy:{self.x // 8 * 8},{self.y // 8 * 8}"
 
 
 @dataclass
@@ -56,6 +64,11 @@ class JobDetector:
     def mark_completed(self, signature: str) -> None:
         self.completed_signatures.add(signature)
         self._page_processed.add(signature)
+
+    def mark_skipped(self, signature: str) -> None:
+        """Skip a card for this page (failed extraction) without saving."""
+        self._page_processed.add(signature)
+        logger.info("Marked skipped for page sig=%s", signature)
 
     def parse_job_cards(self, action: VisionAction) -> list[JobCard]:
         """Extract job card list from a vision action payload when present."""
@@ -168,16 +181,29 @@ class JobDetector:
 
         if action.action == "click" and action.target == "job_card" and action.coordinates:
             title, company = self._parse_title_company(action.observation or "")
+            url = None
+            raw = action.raw or {}
+            if isinstance(raw.get("url"), str):
+                url = raw["url"]
+            elif isinstance(raw.get("metadata"), dict) and raw["metadata"].get("url"):
+                url = str(raw["metadata"]["url"])
             card = JobCard(
                 x=action.coordinates.x,
                 y=action.coordinates.y,
                 title=title,
                 company=company,
-                index=len(self._page_processed),
+                index=None,
+                url=url,
             )
-            if card.signature in self.completed_signatures:
-                logger.info("AI suggested already-completed job; treating as none")
+            if (
+                card.signature in self.completed_signatures
+                or card.signature in self._page_processed
+            ):
+                logger.info("AI suggested already-handled job; treating as none")
                 return None, action
+            # Cache so subsequent next_unprocessed can reuse it
+            if not any(c.signature == card.signature for c in self.page_cards):
+                self.page_cards.append(card)
             return card, action
 
         return None, action

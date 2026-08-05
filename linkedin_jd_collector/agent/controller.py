@@ -194,6 +194,17 @@ class AgentController(QObject):
             self.log_message.emit(
                 f"Stopped. reason={payload.get('reason', 'user/stop')}", "INFO"
             )
+        elif name == "need_user":
+            self.log_message.emit(
+                f"Need user: {payload.get('error') or payload.get('observation')}",
+                "ERROR",
+            )
+            self.status_changed.emit("Error")
+        elif name == "linkedin_detected":
+            self.log_message.emit(
+                f"LinkedIn detected: {payload.get('observation') or 'ok'}",
+                "AI",
+            )
         elif name == "error":
             self.log_message.emit(f"Error: {payload.get('error')}", "ERROR")
         else:

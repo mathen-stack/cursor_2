@@ -39,6 +39,7 @@ Allowed actions:
 - copy
 - next_page
 - finish
+- need_user   (login wall, CAPTCHA, blocked UI — pause for human)
 
 Allowed targets:
 - linkedin_page
@@ -59,7 +60,7 @@ USER_INSTRUCTION = (
 JSON_SCHEMA_HINT = """
 Return JSON in exactly this shape:
 {
-  "action": "click|scroll|wait|copy|next_page|finish",
+  "action": "click|scroll|wait|copy|next_page|finish|need_user",
   "target": "linkedin_page|job_list|job_card|selected_job|about_the_job|next_button|previous_button|show_more|other",
   "coordinates": {"x": 0, "y": 0},
   "scroll": {"dx": 0, "dy": 0},
@@ -85,6 +86,8 @@ Field rules:
 - copy means the JD/About the job region is ready; the app will select/copy.
 - next_page means click/go to the next results page.
 - finish means no more jobs/pages to process.
+- need_user means CAPTCHA/login/unexpected blocker; include observation.
+- Prefer confidence >= 0.6 for click/next_page/copy.
 """.strip()
 
 

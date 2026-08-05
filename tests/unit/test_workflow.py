@@ -32,6 +32,7 @@ class FakeMouse:
 
     def move(self, x, y, duration=None):
         self.calls.append(("move", x, y))
+        return x, y
 
     def click(self, x=None, y=None, button="left"):
         self.calls.append(("click", x, y))
@@ -44,7 +45,7 @@ class FakeMouse:
 
 
 class FakeKeyboard:
-    def __init__(self, clip=None, text="About the job\nBuild things"):
+    def __init__(self, clip=None, text="About the job\nBuild things\nExact text retained"):
         self.clip = clip
         self.text = text
         self.calls = []
@@ -74,10 +75,21 @@ class FakeClip:
 
 
 class FakeScreenshots:
-    def capture(self, region=None, max_width=None):
+    def __init__(self):
         from screen.screenshot import ScreenshotResult
 
-        return ScreenshotResult(image_bytes=b"\x89PNG\r\n\x1a\nfake", width=100, height=100)
+        self.last = ScreenshotResult(
+            image_bytes=b"\x89PNG\r\n\x1a\nfake", width=100, height=100
+        )
+
+    def capture(self, region=None, max_width=None):
+        return self.last
+
+    def to_screen(self, x, y):
+        return self.last.to_screen(x, y)
+
+    def to_screen_region(self, x1, y1, x2, y2):
+        return self.last.to_screen_region(x1, y1, x2, y2)
 
     def close(self):
         return None
@@ -98,28 +110,35 @@ def _click_job(x=100, y=200, title="Eng", company="Acme"):
             "next_button": True,
             "previous_button": False,
         },
+        confidence=0.9,
         raw={"job_cards": [{"x": x, "y": y, "title": title, "company": company}]},
     )
 
 
 def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
-    original_jd = "About the job\nBuild things\nExact text"
+    original_jd = (
+        "About the job\nBuild things\nExact text retained for storage validation.\n"
+        "Additional requirements and responsibilities for length checks.\n"
+    )
     script = [
-        _click_job(),  # identify_visible_jobs
-        VisionAction(  # wait_for_details_panel
+        # linkedin detect skipped via config
+        _click_job(),
+        VisionAction(
             action="wait",
             wait_ms=1,
             detections={"about_the_job": True, "selected_job": True},
+            confidence=0.9,
         ),
-        VisionAction(  # identify_jd_location (extract_jd)
+        VisionAction(
             action="click",
             target="about_the_job",
             coordinates=Coordinates(500, 500),
             detections={"about_the_job": True},
+            confidence=0.9,
             raw={"select": {"x1": 480, "y1": 400, "x2": 900, "y2": 800}},
         ),
-        VisionAction(action="finish", observation="no more jobs"),  # choose_next after save
-        VisionAction(action="finish", observation="no next"),  # paginate
+        VisionAction(action="finish", observation="no more jobs"),
+        VisionAction(action="finish", observation="no next"),
     ]
     vision = ScriptedVision(script)
     guard = AutomationGuard(safety_delay_s=0.0)
@@ -136,6 +155,7 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
             detail_wait_s=0.0,
             between_jobs_s=0.0,
             max_job_attempts=1,
+            require_linkedin_detection=False,
         ),
         vision=vision,
         mouse=FakeMouse(),
@@ -165,12 +185,15 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
 
 
 def test_workflow_stops_on_user_stop(tmp_path: Path):
-    vision = ScriptedVision([
-        _click_job(),
-    ])
+    vision = ScriptedVision([_click_job()])
     guard = AutomationGuard(safety_delay_s=0.0)
     wf = LinkedInWorkflow(
-        config=WorkflowConfig(output_dir=str(tmp_path), between_jobs_s=0.0, detail_wait_s=0.0),
+        config=WorkflowConfig(
+            output_dir=str(tmp_path),
+            between_jobs_s=0.0,
+            detail_wait_s=0.0,
+            require_linkedin_detection=False,
+        ),
         vision=vision,
         mouse=FakeMouse(),
         keyboard=FakeKeyboard(),

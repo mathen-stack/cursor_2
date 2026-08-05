@@ -51,7 +51,10 @@ class FakeClip:
 
 
 def test_extract_jd_drag_select_and_exact_clipboard():
-    original = "About the job\nBuild APIs\n\nRequirements:\n- Python\n"
+    original = (
+        "About the job\nBuild APIs\n\nRequirements:\n- Python\n"
+        "More description to exceed minimum clipboard length checks.\n"
+    )
     locate = VisionAction(
         action="click",
         target="about_the_job",
@@ -103,11 +106,12 @@ def test_extract_jd_uses_click_ctrl_a_without_region():
     clipboard = ClipboardService(
         backend=clip_backend, settle_s=0.0, read_retries=1, retry_delay_s=0.0
     )
+    raw_jd = "About the job\n" + ("Raw JD line with enough characters.\n" * 4)
 
     def hotkey_side_effect(*keys, interval=0.05):
         keyboard.calls.append(("hotkey", keys))
         if keys == ("ctrl", "c"):
-            clip_backend.text = "RAW JD"
+            clip_backend.text = raw_jd
 
     keyboard.hotkey = hotkey_side_effect
     detector = JdDetector(
@@ -118,7 +122,7 @@ def test_extract_jd_uses_click_ctrl_a_without_region():
         max_extract_attempts=1,
     )
     result = detector.extract_jd(lambda: b"png")
-    assert result.text == "RAW JD"
+    assert result.text == raw_jd
     assert result.selection_method == "click_ctrl_a"
     assert ("move", 510, 420) in mouse.calls
 

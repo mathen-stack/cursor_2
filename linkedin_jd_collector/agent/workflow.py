@@ -2,6 +2,7 @@
 LinkedIn collection workflow (navigation engine).
 
 START
+ 0. Detect LinkedIn jobs page
  1. Capture screenshot
  2. Send screenshot to AI
  3. AI identifies visible job cards
@@ -22,16 +23,17 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Callable
 
 from agent.state_manager import StateManager, WorkflowState
 from ai.vision_agent import VisionAgent
 from automation.keyboard_controller import KeyboardController
+from automation.mapped_mouse import MappedMouse
 from automation.mouse_controller import MouseController
 from automation.safety import AutomationGuard, EmergencyStopError, default_guard
 from linkedin.jd_detector import JdDetector
 from linkedin.job_detector import JobCard, JobDetector
+from linkedin.linkedin_detector import LinkedInDetector, LinkedInNotFoundError
 from linkedin.page_navigator import PageNavigator
 from screen.screenshot import ScreenshotService
 from storage.file_manager import FileManager, default_output_dir
@@ -44,14 +46,20 @@ class WorkflowError(RuntimeError):
     """Fatal workflow failure."""
 
 
+class NeedUserError(WorkflowError):
+    """Blocked by login/CAPTCHA/other UI requiring a human."""
+
+
 @dataclass
 class WorkflowConfig:
     output_dir: str = ""
     max_jobs: int | None = None
     max_pages: int | None = None
     max_job_attempts: int = 3
-    detail_wait_s: float = 1.2
-    between_jobs_s: float = 0.4
+    detail_wait_s: float = 1.0
+    between_jobs_s: float = 0.35
+    idle_rounds_before_page_done: int = 3
+    require_linkedin_detection: bool = True
 
     def __post_init__(self) -> None:
         if not self.output_dir:
@@ -83,17 +91,20 @@ class LinkedInWorkflow:
         self.state = state or StateManager()
         self.guard = guard or default_guard
         self.vision = vision or VisionAgent()
-        self.mouse = mouse or MouseController(guard=self.guard)
+        self.screenshots = screenshots or ScreenshotService()
+        raw_mouse = mouse or MouseController(guard=self.guard)
+        # Map AI screenshot coordinates → absolute screen coordinates
+        self.mouse = MappedMouse(raw_mouse, self.screenshots)
         self.keyboard = keyboard or KeyboardController(
             guard=self.guard, enable_emergency_hotkey=True
         )
-        self.screenshots = screenshots or ScreenshotService()
         self.files = file_manager or FileManager(self.config.output_dir)
         self.history = history or HistoryStore.create(self.files.output_root)
         self.on_event = on_event
 
         self.jobs = JobDetector(self.vision, completed_signatures=set(self.history.completed))
         self.pages = PageNavigator(self.vision, self.mouse)
+        self.linkedin = LinkedInDetector(self.vision)
         self.jd = JdDetector(
             self.vision,
             self.mouse,
@@ -123,32 +134,68 @@ class LinkedInWorkflow:
 
     def run(self) -> StateManager:
         """Execute the full collection workflow until completion, stop, or error."""
-        # Callers/UI should clear stop/emergency flags before starting a fresh run.
         self.state.set_state(WorkflowState.START)
-        self._emit("started", run_dir=str(self.files.run_dir))
+        self._emit("started", run_dir=str(self.files.output_root))
 
         try:
+            if self.config.require_linkedin_detection:
+                self.state.set_state(WorkflowState.ANALYZE)
+                self._emit("ai_decision", ai_decision="Detecting LinkedIn jobs page…")
+                detection = self.linkedin.detect(
+                    self._capture, should_stop=self._stopped
+                )
+                self._emit(
+                    "linkedin_detected",
+                    observation=detection.observation,
+                    **self.state.snapshot(),
+                )
+
             while not self._stopped():
                 self.state.wait_if_paused()
                 if self._stopped():
                     break
 
-                if self.config.max_pages and self.state.stats.page_index > self.config.max_pages:
+                if (
+                    self.config.max_pages
+                    and self.state.stats.page_index > self.config.max_pages
+                ):
                     logger.info("Reached max_pages=%s", self.config.max_pages)
+                    self.state.set_state(WorkflowState.COMPLETE)
+                    self._emit("complete", reason="max_pages", **self.state.snapshot())
+                    break
+
+                if (
+                    self.config.max_jobs
+                    and self.state.stats.jobs_saved >= self.config.max_jobs
+                ):
+                    logger.info("Reached max_jobs=%s", self.config.max_jobs)
+                    self.state.set_state(WorkflowState.COMPLETE)
+                    self._emit("complete", reason="max_jobs", **self.state.snapshot())
                     break
 
                 page_done = self._process_current_page()
                 if self._stopped():
                     break
 
-                if not page_done:
-                    # Fatal error path already set ERROR
-                    if self.state.state == WorkflowState.ERROR:
-                        break
+                if self.state.state == WorkflowState.ERROR:
+                    break
 
-                # Paginate
+                if (
+                    self.config.max_jobs
+                    and self.state.stats.jobs_saved >= self.config.max_jobs
+                ):
+                    self.state.set_state(WorkflowState.COMPLETE)
+                    self._emit("complete", reason="max_jobs", **self.state.snapshot())
+                    break
+
+                if not page_done:
+                    # Unexpected early exit without stop/error — treat as complete
+                    self.state.set_state(WorkflowState.COMPLETE)
+                    self._emit("complete", **self.state.snapshot())
+                    break
+
+                # Paginate only after a fully processed page
                 self.state.set_state(WorkflowState.PAGINATE)
-                self.state.stats.pages_completed += 1
                 self.jobs.reset_page()
 
                 moved = self.pages.go_to_next_page(
@@ -158,9 +205,10 @@ class LinkedInWorkflow:
                 )
                 if not moved:
                     self.state.set_state(WorkflowState.COMPLETE)
-                    self._emit("complete", **self.state.snapshot())
+                    self._emit("complete", reason="no_next", **self.state.snapshot())
                     break
 
+                self.state.stats.pages_completed += 1
                 self.state.stats.page_index += 1
                 self._emit("page_changed", page=self.state.stats.page_index)
 
@@ -171,6 +219,17 @@ class LinkedInWorkflow:
                 self.state.set_state(WorkflowState.STOPPED)
                 self._emit("stopped", **self.state.snapshot())
 
+        except LinkedInNotFoundError as exc:
+            logger.error("LinkedIn not detected: %s", exc)
+            self.state.stats.last_error = str(exc)
+            self.state.set_state(WorkflowState.ERROR)
+            self._emit("need_user", error=str(exc), **self.state.snapshot())
+            self._emit("error", error=str(exc), **self.state.snapshot())
+        except NeedUserError as exc:
+            logger.error("Need user intervention: %s", exc)
+            self.state.stats.last_error = str(exc)
+            self.state.set_state(WorkflowState.ERROR)
+            self._emit("need_user", error=str(exc), **self.state.snapshot())
         except EmergencyStopError as exc:
             logger.error("Workflow emergency stop: %s", exc)
             self.state.stats.last_error = str(exc)
@@ -192,11 +251,15 @@ class LinkedInWorkflow:
         Process all visible jobs on the current page.
         Returns True when the page is exhausted normally.
         """
-        # 1-3: capture + AI identify job cards
         screenshot = self._capture()
         self.state.set_state(WorkflowState.ANALYZE)
-        self.jobs.identify_visible_jobs(
+        cards = self.jobs.identify_visible_jobs(
             screenshot, extra_context=self.state.context_for_ai()
+        )
+        self._emit(
+            "ai_decision",
+            ai_decision=f"Identified {len(cards)} visible job card(s)",
+            **self.state.snapshot(),
         )
 
         idle_rounds = 0
@@ -205,7 +268,10 @@ class LinkedInWorkflow:
             if self._stopped():
                 return False
 
-            if self.config.max_jobs and self.state.stats.jobs_saved >= self.config.max_jobs:
+            if (
+                self.config.max_jobs
+                and self.state.stats.jobs_saved >= self.config.max_jobs
+            ):
                 logger.info("Reached max_jobs=%s", self.config.max_jobs)
                 return True
 
@@ -217,7 +283,7 @@ class LinkedInWorkflow:
                 "ai_decision",
                 ai_decision=(
                     f"action={action.action} target={action.target} "
-                    f"obs={action.observation or ''}"
+                    f"conf={action.confidence} obs={action.observation or ''}"
                 ),
                 action=action.action,
                 target=action.target,
@@ -225,13 +291,32 @@ class LinkedInWorkflow:
                 **self.state.snapshot(),
             )
 
+            if action.action == "need_user":
+                raise NeedUserError(
+                    action.observation or "AI requested user intervention"
+                )
+
             if card is None:
                 if action.action in {"next_page", "finish"}:
                     logger.info("No more jobs on page (AI action=%s)", action.action)
                     return True
-                if action.action == "scroll" and action.coordinates:
+                if action.action == "scroll":
                     dy = action.scroll.dy if action.scroll else -400
-                    self.mouse.scroll(dy=dy, x=action.coordinates.x, y=action.coordinates.y)
+                    if action.coordinates:
+                        self.mouse.scroll(
+                            dy=dy, x=action.coordinates.x, y=action.coordinates.y
+                        )
+                    else:
+                        # Scroll job list area heuristically (left third, mid height)
+                        last = self.screenshots.last
+                        if last is not None:
+                            self.mouse.scroll(
+                                dy=dy,
+                                x=max(40, last.width // 4),
+                                y=max(80, last.height // 2),
+                            )
+                        else:
+                            self.mouse.scroll(dy=dy)
                     idle_rounds = 0
                     continue
                 if action.action == "wait":
@@ -239,7 +324,7 @@ class LinkedInWorkflow:
                     idle_rounds += 1
                 else:
                     idle_rounds += 1
-                if idle_rounds >= 3:
+                if idle_rounds >= self.config.idle_rounds_before_page_done:
                     logger.info("No actionable jobs after idle rounds; page done")
                     return True
                 continue
@@ -262,6 +347,7 @@ class LinkedInWorkflow:
             company=card.company,
             signature=card.signature,
             page=self.state.stats.page_index,
+            url=card.url,
         )
 
         for attempt in range(1, self.config.max_job_attempts + 1):
@@ -271,7 +357,7 @@ class LinkedInWorkflow:
                 # 4. Click job
                 self.state.set_state(WorkflowState.OPEN_JOB)
                 logger.info(
-                    "Clicking job '%s' at (%s,%s) attempt=%s",
+                    "Clicking job '%s' at img(%s,%s) attempt=%s",
                     card.title,
                     card.x,
                     card.y,
@@ -287,8 +373,12 @@ class LinkedInWorkflow:
                 )
                 if detail is None and self._stopped():
                     return False
+                if detail and detail.action == "need_user":
+                    raise NeedUserError(
+                        detail.observation or "Blocked while waiting for job details"
+                    )
 
-                # 6-8. Identify JD location → select → Ctrl+C → clipboard (exact text)
+                # 6-8. Identify JD → select → Ctrl+C → clipboard (exact text)
                 self.state.set_state(WorkflowState.FIND_JD)
                 self.state.set_state(WorkflowState.SELECT_JD)
                 self.state.set_state(WorkflowState.COPY_JD)
@@ -297,7 +387,7 @@ class LinkedInWorkflow:
                 )
                 text = extraction.text  # exact clipboard contents; do not modify
 
-                # 9. Save TXT exactly as copied (Documents/LinkedIn_JD/)
+                # 9. Save TXT exactly as copied
                 self.state.set_state(WorkflowState.SAVE_JD)
                 saved = self.files.save_jd(
                     text,
@@ -340,9 +430,12 @@ class LinkedInWorkflow:
                     signature=saved.signature,
                     saved=self.state.stats.jobs_saved,
                     url=card.url,
+                    chars=len(text),
                 )
                 return True
 
+            except NeedUserError:
+                raise
             except EmergencyStopError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -356,12 +449,14 @@ class LinkedInWorkflow:
                 self.state.stats.last_error = str(exc)
                 if attempt >= self.config.max_job_attempts:
                     self.state.stats.jobs_failed += 1
+                    # Prevent infinite retry loops on the same broken card
+                    self.jobs.mark_skipped(card.signature)
                     self._emit(
                         "job_failed",
                         signature=card.signature,
                         error=str(exc),
                     )
-                    # Continue with other jobs rather than hard-failing the run
+                    self.state.set_state(WorkflowState.NEXT_JOB)
                     return True
                 time.sleep(0.8)
         return True

@@ -42,10 +42,10 @@ def test_save_jd_writes_url_timestamp_and_raw_text(tmp_path: Path):
     assert "\n\n" + raw == body[body.index("\n\n") :]
 
 
-def test_duplicate_skipped_by_url_and_content(tmp_path: Path):
+def test_duplicate_skipped_by_url(tmp_path: Path):
     fm = FileManager(tmp_path)
     history = HistoryStore.create(tmp_path)
-    raw = "Same JD body"
+    raw = "Same JD body with enough characters for a realistic description."
     first = fm.save_jd(
         raw,
         company="Google",
@@ -74,6 +74,40 @@ def test_duplicate_skipped_by_url_and_content(tmp_path: Path):
     )
     assert second.skipped_duplicate is True
     assert len(list(tmp_path.glob("*.txt"))) == 1
+
+
+def test_same_text_different_urls_both_saved(tmp_path: Path):
+    fm = FileManager(tmp_path)
+    history = HistoryStore.create(tmp_path)
+    raw = "Identical posting text across two distinct LinkedIn job URLs."
+    a = fm.save_jd(
+        raw,
+        company="Google",
+        title="FE",
+        url="https://www.linkedin.com/jobs/view/1",
+        history=history,
+    )
+    history.mark_completed(
+        JobRecord(
+            signature=a.signature,
+            title="FE",
+            company="Google",
+            page_index=1,
+            path=str(a.path),
+            saved_at=a.timestamp,
+            url="https://www.linkedin.com/jobs/view/1",
+            content_hash=a.content_hash,
+        )
+    )
+    b = fm.save_jd(
+        raw,
+        company="Google",
+        title="FE",
+        url="https://www.linkedin.com/jobs/view/2",
+        history=history,
+    )
+    assert b.skipped_duplicate is False
+    assert len(list(tmp_path.glob("*.txt"))) == 2
 
 
 def test_job_signature_prefers_url():

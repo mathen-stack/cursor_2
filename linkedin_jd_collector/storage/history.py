@@ -80,7 +80,13 @@ class HistoryStore:
     ) -> bool:
         if signature in self.completed:
             return True
-        if content_hash and content_hash in self.content_hashes:
+        # Content-hash dedupe only when we lack a stable URL identity.
+        # Different LinkedIn job URLs with identical JD text must still save.
+        if (
+            content_hash
+            and not str(signature).startswith("url:")
+            and content_hash in self.content_hashes
+        ):
             return True
         return False
 

@@ -51,6 +51,40 @@ class JdExtractionError(RuntimeError):
     """Raised when JD location/selection/copy fails."""
 
 
+MIN_JD_CHARS = 80
+_REJECT_CLIPBOARD_SNIPPETS = (
+    "sign in",
+    "join now",
+    "are you a robot",
+    "security check",
+    "verify you are",
+)
+
+
+def validate_raw_jd_text(text: str) -> str:
+    """
+    Light safety checks only — does not summarize/parse/modify JD content.
+
+    Rejects empty/tiny clipboard payloads and obvious non-JD blockers.
+    Returns the original text unchanged when accepted.
+    """
+    if text is None:
+        raise JdExtractionError("Clipboard text is None")
+    raw = text  # keep exact content
+    stripped = raw.strip()
+    if len(stripped) < MIN_JD_CHARS:
+        raise JdExtractionError(
+            f"Clipboard text too short for a JD ({len(stripped)} chars; min {MIN_JD_CHARS})"
+        )
+    low = stripped.lower()
+    for snippet in _REJECT_CLIPBOARD_SNIPPETS:
+        if snippet in low and len(stripped) < 400:
+            raise JdExtractionError(
+                f"Clipboard looks like a blocker/UI prompt ({snippet!r}), not a JD"
+            )
+    return raw
+
+
 @dataclass
 class JdExtractionResult:
     """Raw JD payload taken from the clipboard — unmodified."""
@@ -254,8 +288,7 @@ class JdDetector:
 
                 # 3-4. Ctrl+C + clipboard read (exact)
                 text = self.copy_jd_from_selection()
-                if text == "":
-                    raise JdExtractionError("Copied JD text is empty")
+                text = validate_raw_jd_text(text)
 
                 logger.info(
                     "JD extracted exactly from clipboard chars=%s method=%s attempt=%s",

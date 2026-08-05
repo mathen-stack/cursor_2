@@ -19,8 +19,9 @@ from .prompt_templates import SYSTEM_PROMPT, USER_INSTRUCTION, build_user_prompt
 logger = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = frozenset(
-    {"click", "scroll", "wait", "copy", "next_page", "finish"}
+    {"click", "scroll", "wait", "copy", "next_page", "finish", "need_user"}
 )
+DEFAULT_MIN_CONFIDENCE = 0.45
 ALLOWED_TARGETS = frozenset(
     {
         "linkedin_page",
@@ -191,6 +192,9 @@ def validate_action_payload(data: dict[str, Any]) -> VisionAction:
             target = "next_button"
     elif action == "finish":
         pass
+    elif action == "need_user":
+        if not observation:
+            observation = "Human intervention required"
 
     return VisionAction(
         action=action,
@@ -279,11 +283,17 @@ class VisionAgent:
         client: OpenRouterClient | None = None,
         *,
         parse_retries: int = 2,
+        min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     ) -> None:
         self._client = client or OpenRouterClient()
         self._owns_client = client is None
         self.parse_retries = max(1, parse_retries)
-        logger.info("VisionAgent initialized parse_retries=%s", self.parse_retries)
+        self.min_confidence = min_confidence
+        logger.info(
+            "VisionAgent initialized parse_retries=%s min_confidence=%.2f",
+            self.parse_retries,
+            self.min_confidence,
+        )
 
     def close(self) -> None:
         if self._owns_client:
@@ -334,11 +344,21 @@ class VisionAgent:
                 logger.debug("Vision raw model text: %s", raw_text[:1000])
                 payload = extract_json_object(raw_text)
                 action = validate_action_payload(payload)
+                if (
+                    action.confidence is not None
+                    and action.confidence < self.min_confidence
+                    and action.action in {"click", "next_page", "copy"}
+                ):
+                    raise VisionJSONError(
+                        f"Low confidence {action.confidence:.2f} < {self.min_confidence:.2f} "
+                        f"for action={action.action}"
+                    )
                 logger.info(
-                    "Vision action=%s target=%s coords=%s observation=%r",
+                    "Vision action=%s target=%s coords=%s confidence=%s observation=%r",
                     action.action,
                     action.target,
                     action.coordinates.to_dict() if action.coordinates else None,
+                    action.confidence,
                     action.observation,
                 )
                 return action

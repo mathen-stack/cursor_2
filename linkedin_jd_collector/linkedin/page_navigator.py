@@ -48,7 +48,7 @@ class PageNavigator:
         return action
 
     def has_next(self, action: VisionAction) -> bool:
-        if action.action == "finish":
+        if action.action in {"finish", "need_user"}:
             return False
         if action.action == "next_page":
             return True
