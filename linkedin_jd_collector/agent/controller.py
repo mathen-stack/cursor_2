@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 class AgentWorker(QObject):
     """Runs LinkedInWorkflow on a background thread."""
 
-    event = pyqtSignal(str, dict)
+    # IMPORTANT: do not name a signal `event` — it shadows QObject.event() and
+    # causes: TypeError: native Qt signal is not callable
+    workflow_event = pyqtSignal(str, dict)
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
@@ -64,7 +66,7 @@ class AgentWorker(QObject):
                 file_manager=files,
                 history=history,
                 guard=default_guard,
-                on_event=self._on_event,
+                on_event=self._on_workflow_event,
             )
             result = self.workflow.run()
             self.finished.emit(result)
@@ -82,8 +84,8 @@ class AgentWorker(QObject):
                 except Exception:  # noqa: BLE001
                     logger.debug("Worker CoUninitialize failed", exc_info=True)
 
-    def _on_event(self, name: str, payload: dict[str, Any]) -> None:
-        self.event.emit(name, payload)
+    def _on_workflow_event(self, name: str, payload: dict[str, Any]) -> None:
+        self.workflow_event.emit(name, payload)
 
 
 class AgentController(QObject):
@@ -135,7 +137,7 @@ class AgentController(QObject):
         self._worker = AgentWorker(self.settings, self.state)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
-        self._worker.event.connect(self._handle_event)
+        self._worker.workflow_event.connect(self._handle_event)
         self._worker.finished.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
         self._worker.finished.connect(self._thread.quit)
