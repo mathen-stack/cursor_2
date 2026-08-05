@@ -9,7 +9,8 @@ Architecture and project structure are in place.
 - OpenRouter AI vision module (`ai/`)
 - Mouse/keyboard automation (`automation/`)
 - LinkedIn workflow (`agent/workflow.py`, `linkedin/job_detector.py`, `linkedin/page_navigator.py`)
-- Supporting: screenshot capture, JD detector, file/history storage, state manager
+- JD extraction (`linkedin/jd_detector.py`, `automation/clipboard.py`) — locate → select → Ctrl+C → exact text
+- Supporting: screenshot capture, file/history storage, state manager
 
 Still stubs: desktop UI (`ui/`), controller wiring, EXE build.
 
