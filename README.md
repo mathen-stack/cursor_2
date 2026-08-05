@@ -9,8 +9,23 @@ Architecture phase complete. Application logic not implemented yet.
 ## Documentation
 
 - [Production Architecture](docs/ARCHITECTURE.md)
+- [Technology Stack](docs/TECH_STACK.md)
 - [Data Flow](docs/DATA_FLOW.md)
 - [AI Command Schema](docs/COMMAND_SCHEMA.md)
+
+## Technology Stack
+
+| Concern | Choice |
+|---|---|
+| Language | Python |
+| Desktop UI | PyQt6 |
+| Automation | PyAutoGUI + PyWinAuto |
+| Screenshot | MSS + Pillow |
+| AI | OpenRouter API (multimodal vision model) |
+| Clipboard | Pyperclip |
+| Packaging | PyInstaller → Windows EXE |
+
+See [TECH_STACK.md](docs/TECH_STACK.md) for rationale, limitations, and alternatives.
 
 ## System Layers
 
