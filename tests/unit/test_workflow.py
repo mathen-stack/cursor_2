@@ -7,6 +7,7 @@ from pathlib import Path
 from agent.state_manager import WorkflowState
 from agent.workflow import LinkedInWorkflow, WorkflowConfig
 from ai.vision_agent import Coordinates, VisionAction
+from automation.clipboard import ClipboardService
 from automation.safety import AutomationGuard
 
 
@@ -43,12 +44,15 @@ class FakeMouse:
 
 
 class FakeKeyboard:
-    def __init__(self, text="About the job\nBuild things"):
+    def __init__(self, clip=None, text="About the job\nBuild things"):
+        self.clip = clip
         self.text = text
         self.calls = []
 
     def hotkey(self, *keys, interval=0.05):
         self.calls.append(("hotkey", keys))
+        if keys == ("ctrl", "c") and self.clip is not None:
+            self.clip.text = self.text
 
     def copy(self, read_clipboard=True, settle_s=None):
         self.calls.append(("copy",))
@@ -56,6 +60,17 @@ class FakeKeyboard:
 
     def close(self):
         return None
+
+
+class FakeClip:
+    def __init__(self, text=""):
+        self.text = text
+
+    def paste(self):
+        return self.text
+
+    def copy(self, text):
+        self.text = text
 
 
 class FakeScreenshots:
@@ -88,13 +103,7 @@ def _click_job(x=100, y=200, title="Eng", company="Acme"):
 
 
 def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
-    # identify jobs
-    # choose next (cached after identify, but choose may still call if needed)
-    # wait detail
-    # find jd
-    # select/copy analyze
-    # page done choose -> finish/next
-    # paginate detect -> finish
+    original_jd = "About the job\nBuild things\nExact text"
     script = [
         _click_job(),  # identify_visible_jobs
         VisionAction(  # wait_for_details_panel
@@ -102,16 +111,12 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
             wait_ms=1,
             detections={"about_the_job": True, "selected_job": True},
         ),
-        VisionAction(  # find_jd_section
+        VisionAction(  # identify_jd_location (extract_jd)
             action="click",
             target="about_the_job",
             coordinates=Coordinates(500, 500),
             detections={"about_the_job": True},
-        ),
-        VisionAction(  # select_and_copy_jd analyze
-            action="copy",
-            target="about_the_job",
-            coordinates=Coordinates(500, 520),
+            raw={"select": {"x1": 480, "y1": 400, "x2": 900, "y2": 800}},
         ),
         VisionAction(action="finish", observation="no more jobs"),  # choose_next after save
         VisionAction(action="finish", observation="no next"),  # paginate
@@ -119,6 +124,11 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
     vision = ScriptedVision(script)
     guard = AutomationGuard(safety_delay_s=0.0)
     events = []
+    clip_backend = FakeClip()
+    clipboard = ClipboardService(
+        backend=clip_backend, settle_s=0.0, read_retries=2, retry_delay_s=0.0
+    )
+    keyboard = FakeKeyboard(clip=clip_backend, text=original_jd)
 
     wf = LinkedInWorkflow(
         config=WorkflowConfig(
@@ -129,16 +139,16 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
         ),
         vision=vision,
         mouse=FakeMouse(),
-        keyboard=FakeKeyboard(),
+        keyboard=keyboard,
         screenshots=FakeScreenshots(),
         guard=guard,
         on_event=lambda name, payload: events.append(name),
     )
-    # Avoid emergency listener / real pyautogui delay interactions
-    wf.keyboard = FakeKeyboard()
-    wf.jd.keyboard = wf.keyboard
+    wf.jd.clipboard = clipboard
+    wf.jd.keyboard = keyboard
     wf.jd.detail_wait_s = 0.0
     wf.jd.max_detail_attempts = 1
+    wf.jd.max_extract_attempts = 1
     wf.pages.page_load_wait_s = 0.0
 
     state = wf.run()
@@ -146,7 +156,7 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
     assert state.stats.jobs_saved == 1
     saved_files = list((tmp_path / "runs").glob("*/jds/*.txt"))
     assert len(saved_files) == 1
-    assert "About the job" in saved_files[0].read_text(encoding="utf-8")
+    assert saved_files[0].read_text(encoding="utf-8") == original_jd
     assert "job_saved" in events
     assert "complete" in events
 
@@ -164,8 +174,6 @@ def test_workflow_stops_on_user_stop(tmp_path: Path):
         screenshots=FakeScreenshots(),
         guard=guard,
     )
-    wf.keyboard = FakeKeyboard()
-    wf.jd.keyboard = wf.keyboard
     wf.state.request_stop()
     state = wf.run()
     assert state.state == WorkflowState.STOPPED

@@ -273,18 +273,16 @@ class LinkedInWorkflow:
                 if detail is None and self._stopped():
                     return False
 
-                # 6. Find JD section
+                # 6-8. Identify JD location → select → Ctrl+C → clipboard (exact text)
                 self.state.set_state(WorkflowState.FIND_JD)
-                shot = self._capture()
-                self.jd.find_jd_section(shot)
-
-                # 7-8. Select + copy JD
                 self.state.set_state(WorkflowState.SELECT_JD)
-                shot = self._capture()
                 self.state.set_state(WorkflowState.COPY_JD)
-                text = self.jd.select_and_copy_jd(shot)
+                extraction = self.jd.extract_jd(
+                    self._capture, should_stop=self._stopped
+                )
+                text = extraction.text  # exact clipboard contents; do not modify
 
-                # 9. Save TXT
+                # 9. Save TXT exactly as copied
                 self.state.set_state(WorkflowState.SAVE_JD)
                 saved = self.files.save_jd(
                     text,

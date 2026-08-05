@@ -1,5 +1,6 @@
 """Computer automation package: mouse, keyboard, clipboard actuation."""
 
+from .clipboard import ClipboardError, ClipboardService, read, read_after_copy
 from .keyboard_controller import KeyboardController, copy, hotkey
 from .mouse_controller import (
     MouseController,
@@ -19,6 +20,8 @@ from .safety import (
 __all__ = [
     "AutomationError",
     "AutomationGuard",
+    "ClipboardError",
+    "ClipboardService",
     "EmergencyStopError",
     "KeyboardController",
     "MouseController",
@@ -28,6 +31,8 @@ __all__ = [
     "double_click",
     "hotkey",
     "move",
+    "read",
+    "read_after_copy",
     "scroll",
     "select_text",
 ]
