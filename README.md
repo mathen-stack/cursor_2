@@ -37,12 +37,22 @@ Outputs:
 
 See [PACKAGING.md](docs/PACKAGING.md).
 
+### Testing
+
+```bash
+cd /workspace
+PYTHONPATH=linkedin_jd_collector python -m pytest tests/unit tests/integration -q
+```
+
+Findings and reliability fixes: [TEST_REPORT.md](docs/TEST_REPORT.md).
+
 ## Documentation
 
 - [Production Architecture](docs/ARCHITECTURE.md)
 - [Technology Stack](docs/TECH_STACK.md)
 - [Project Structure](docs/PROJECT_STRUCTURE.md) — file-by-file explanation
 - [Packaging / Windows EXE](docs/PACKAGING.md)
+- [Test Report](docs/TEST_REPORT.md)
 - [Data Flow](docs/DATA_FLOW.md)
 - [AI Command Schema](docs/COMMAND_SCHEMA.md)
 
