@@ -125,7 +125,9 @@ linkedin_jd_collector/
 
 | File | Role |
 |---|---|
-| `build_exe.py` | PyInstaller build script targeting `main.py` for Windows EXE output. |
+| `build_exe.py` | PyInstaller build script → `LinkedIn_JD_Collector.exe` |
+| `LinkedIn_JD_Collector.spec` | Curated onedir PyInstaller spec (icon, PyQt6 collect-all) |
+| `installer.iss` | Inno Setup script → `LinkedIn_JD_Collector_Setup.exe` |
 
 ---
 

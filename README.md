@@ -14,8 +14,6 @@ Architecture and project structure are in place.
 - PyQt6 UI (`ui/`, `main.py`, `agent/controller.py`) — Start/Pause/Stop/Open Folder, settings, log panel
 - Supporting: screenshot capture, state manager
 
-Still stubs: EXE build packaging script.
-
 ### Run UI
 
 ```bash
@@ -24,11 +22,27 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Package Windows EXE
+
+Build on Windows (or via GitHub Actions `Windows EXE Build`):
+
+```powershell
+cd linkedin_jd_collector
+powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Installer
+```
+
+Outputs:
+- `dist/LinkedIn_JD_Collector/LinkedIn_JD_Collector.exe`
+- `dist/installer/LinkedIn_JD_Collector_Setup.exe` (with Inno Setup)
+
+See [PACKAGING.md](docs/PACKAGING.md).
+
 ## Documentation
 
 - [Production Architecture](docs/ARCHITECTURE.md)
 - [Technology Stack](docs/TECH_STACK.md)
 - [Project Structure](docs/PROJECT_STRUCTURE.md) — file-by-file explanation
+- [Packaging / Windows EXE](docs/PACKAGING.md)
 - [Data Flow](docs/DATA_FLOW.md)
 - [AI Command Schema](docs/COMMAND_SCHEMA.md)
 
