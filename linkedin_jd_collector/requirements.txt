@@ -7,6 +7,8 @@ PyQt6
 # Automation
 pyautogui
 pywinauto
+# Optional on Windows for emergency-stop hotkey listener (graceful fallback if missing)
+pynput; platform_system=="Windows"
 
 # Screenshot / imaging
 mss
