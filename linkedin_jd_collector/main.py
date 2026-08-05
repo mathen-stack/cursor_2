@@ -93,6 +93,24 @@ def main() -> int:
 
     sys.excepthook = _excepthook
 
+    # Background-thread Python exceptions (worker) — keep UI alive + log.
+    import threading
+
+    def _thread_excepthook(args) -> None:
+        try:
+            text = "".join(
+                traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)
+            )
+        except Exception:  # noqa: BLE001
+            text = f"{getattr(args, 'exc_type', None)}: {getattr(args, 'exc_value', None)}"
+        logging.getLogger(__name__).error(
+            "Uncaught thread exception in %s:\n%s",
+            getattr(args, "thread", None),
+            text,
+        )
+
+    threading.excepthook = _thread_excepthook
+
     try:
         settings = load_settings()
         window = MainWindow(settings=settings)

@@ -92,12 +92,22 @@ class LinkedInWorkflow:
         self.guard = guard or default_guard
         self.vision = vision or VisionAgent()
         self.screenshots = screenshots or ScreenshotService()
-        raw_mouse = mouse or MouseController(guard=self.guard)
-        # Map AI screenshot coordinates → absolute screen coordinates
-        self.mouse = MappedMouse(raw_mouse, self.screenshots)
-        self.keyboard = keyboard or KeyboardController(
-            guard=self.guard, enable_emergency_hotkey=True
-        )
+        try:
+            raw_mouse = mouse or MouseController(guard=self.guard)
+            # Map AI screenshot coordinates → absolute screen coordinates
+            self.mouse = MappedMouse(raw_mouse, self.screenshots)
+            # Start hotkey after controllers exist; never let it abort construction.
+            self.keyboard = keyboard or KeyboardController(
+                guard=self.guard, enable_emergency_hotkey=False
+            )
+            try:
+                self.guard.start_emergency_hotkey_listener()
+            except Exception:  # noqa: BLE001
+                logger.exception("Emergency hotkey listener skipped")
+        except Exception as exc:  # noqa: BLE001
+            raise WorkflowError(
+                f"Could not initialize mouse/keyboard automation: {exc}"
+            ) from exc
         self.files = file_manager or FileManager(self.config.output_dir)
         self.history = history or HistoryStore.create(self.files.output_root)
         self.on_event = on_event

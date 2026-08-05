@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import QPlainTextEdit, QVBoxLayout, QWidget
 
@@ -58,17 +59,31 @@ class LogPanel(QWidget):
         self.append(message, level="ERROR")
 
 
-class QtLogHandler(logging.Handler):
-    """Bridge stdlib logging into the LogPanel (thread-safe via signal callback)."""
+class _LogSignalBridge(QObject):
+    """Owns the Qt signal so log records can be marshalled onto the UI thread."""
 
-    def __init__(self, emit_callable) -> None:
+    message = pyqtSignal(str, str)  # text, level
+
+
+class QtLogHandler(logging.Handler):
+    """
+    Bridge stdlib logging into the LogPanel.
+
+    MUST use a Qt signal — calling UI widgets directly from the agent worker
+    thread hard-crashes PyQt6 on Windows (process exits with no dialog).
+    """
+
+    def __init__(self, emit_callable, parent: QObject | None = None) -> None:
         super().__init__()
-        self._emit_callable = emit_callable
+        self._bridge = _LogSignalBridge(parent)
+        # Auto/QueuedConnection: when emit() runs on a worker thread, the slot
+        # (MainWindow._on_log) executes on the UI thread.
+        self._bridge.message.connect(emit_callable)
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
             level = record.levelname
-            self._emit_callable(msg, level)
+            self._bridge.message.emit(msg, level)
         except Exception:  # noqa: BLE001
             self.handleError(record)

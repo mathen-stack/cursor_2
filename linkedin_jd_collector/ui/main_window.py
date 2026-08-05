@@ -39,7 +39,8 @@ class MainWindow(QMainWindow):
 
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("LinkedIn JD Collector Agent")
+        # Version bump helps confirm the user installed the latest EXE.
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.2")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
@@ -60,7 +61,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.2")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -142,11 +143,13 @@ class MainWindow(QMainWindow):
         self.controller.agent_failed.connect(self._on_failed)
 
     def _install_log_bridge(self) -> None:
-        handler = QtLogHandler(self._on_log)
+        # Parent the bridge to this window so signal affinity stays on the UI thread.
+        handler = QtLogHandler(self._on_log, parent=self)
         handler.setLevel(logging.INFO)
         handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
         logging.getLogger().addHandler(handler)
         logging.getLogger().setLevel(logging.INFO)
+        self._log_handler = handler
 
     def _load_settings_into_form(self) -> None:
         self.api_key_input.setText(self.settings.openrouter_api_key)

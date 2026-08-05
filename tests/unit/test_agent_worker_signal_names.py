@@ -36,6 +36,8 @@ def test_worker_keeps_qobject_event_callable(qapp, tmp_path):
         StateManager(),
     )
     assert hasattr(worker, "workflow_event")
+    assert hasattr(worker, "run_finished")
+    assert hasattr(worker, "run_failed")
     # Must not shadow QObject.event with a pyqtSignal
     assert "event" not in AgentWorker.__dict__
     assert callable(worker.event)

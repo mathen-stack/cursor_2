@@ -35,7 +35,7 @@ def test_main_window_builds_and_shows_status(qapp, tmp_path, monkeypatch):
         output_dir=str(tmp_path),
     )
     window = MainWindow(settings=settings)
-    assert window.windowTitle() == "LinkedIn JD Collector Agent"
+    assert "LinkedIn JD Collector Agent" in window.windowTitle()
     assert window.status_label.text() == "Waiting"
     assert window.btn_start.text() == "Start Agent"
     assert window.btn_pause.text() == "Pause"

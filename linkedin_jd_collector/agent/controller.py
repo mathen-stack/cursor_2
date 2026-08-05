@@ -9,7 +9,7 @@ import sys
 import traceback
 from typing import Any
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
 
 from agent.state_manager import StateManager, WorkflowState
 from agent.workflow import LinkedInWorkflow, WorkflowConfig, WorkflowError
@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 class AgentWorker(QObject):
     """Runs LinkedInWorkflow on a background thread."""
 
-    # IMPORTANT: do not name a signal `event` — it shadows QObject.event() and
-    # causes: TypeError: native Qt signal is not callable
+    # IMPORTANT: do not name signals after QObject methods (e.g. `event`) —
+    # that shadows Qt internals and causes: TypeError: native Qt signal is not callable
     workflow_event = pyqtSignal(str, dict)
-    finished = pyqtSignal(object)
-    failed = pyqtSignal(str)
+    run_finished = pyqtSignal(object)
+    run_failed = pyqtSignal(str)
 
     def __init__(self, settings: AppSettings, state: StateManager) -> None:
         super().__init__()
@@ -40,6 +40,7 @@ class AgentWorker(QObject):
     def run(self) -> None:
         com_ready = False
         try:
+            logger.info("Agent worker thread starting")
             # pywinauto / UIAutomation require COM on this background thread.
             if sys.platform.startswith("win"):
                 try:
@@ -60,21 +61,31 @@ class AgentWorker(QObject):
             history = HistoryStore.create(files.output_root)
             config = WorkflowConfig(output_dir=output_dir)
 
-            self.workflow = LinkedInWorkflow(
-                config=config,
-                state=self.state,
-                file_manager=files,
-                history=history,
-                guard=default_guard,
-                on_event=self._on_workflow_event,
-            )
+            try:
+                self.workflow = LinkedInWorkflow(
+                    config=config,
+                    state=self.state,
+                    file_manager=files,
+                    history=history,
+                    guard=default_guard,
+                    on_event=self._on_workflow_event,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Surface init failures (pyautogui/mss/etc.) instead of dying quietly.
+                logger.exception("Workflow init failed")
+                self.run_failed.emit(
+                    f"Failed to initialize automation backends:\n{exc}\n\n"
+                    f"{traceback.format_exc()}"
+                )
+                return
+
             result = self.workflow.run()
-            self.finished.emit(result)
+            self.run_finished.emit(result)
         except WorkflowError as exc:
-            self.failed.emit(str(exc))
+            self.run_failed.emit(str(exc))
         except Exception as exc:  # noqa: BLE001
             logger.exception("Agent worker crashed")
-            self.failed.emit(f"{exc}\n{traceback.format_exc()}")
+            self.run_failed.emit(f"{exc}\n{traceback.format_exc()}")
         finally:
             if com_ready:
                 try:
@@ -83,9 +94,15 @@ class AgentWorker(QObject):
                     pythoncom.CoUninitialize()
                 except Exception:  # noqa: BLE001
                     logger.debug("Worker CoUninitialize failed", exc_info=True)
+            logger.info("Agent worker thread exiting")
 
     def _on_workflow_event(self, name: str, payload: dict[str, Any]) -> None:
-        self.workflow_event.emit(name, payload)
+        try:
+            # Ensure payload is a plain dict of simple values for queued signals.
+            safe = dict(payload or {})
+            self.workflow_event.emit(str(name), safe)
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to emit workflow_event %s", name)
 
 
 class AgentController(QObject):
@@ -133,16 +150,18 @@ class AgentController(QObject):
         self.status_changed.emit("Waiting")
         self.log_message.emit("Starting LinkedIn JD Collector Agent…", "INFO")
 
-        self._thread = QThread()
+        self._thread = QThread(self)
         self._worker = AgentWorker(self.settings, self.state)
         self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.workflow_event.connect(self._handle_event)
-        self._worker.finished.connect(self._on_finished)
-        self._worker.failed.connect(self._on_failed)
-        self._worker.finished.connect(self._thread.quit)
-        self._worker.failed.connect(self._thread.quit)
-        self._thread.finished.connect(self._cleanup_thread)
+
+        queued = Qt.ConnectionType.QueuedConnection
+        self._thread.started.connect(self._worker.run, queued)
+        self._worker.workflow_event.connect(self._handle_event, queued)
+        self._worker.run_finished.connect(self._on_finished, queued)
+        self._worker.run_failed.connect(self._on_failed, queued)
+        self._worker.run_finished.connect(self._thread.quit, queued)
+        self._worker.run_failed.connect(self._thread.quit, queued)
+        self._thread.finished.connect(self._cleanup_thread, queued)
         self._thread.start()
 
     def pause(self) -> None:
@@ -173,87 +192,90 @@ class AgentController(QObject):
     def _handle_event(self, name: str, payload: dict) -> None:
         from ui.status import ui_status_for_state
 
-        state = payload.get("state")
-        if state:
-            status = ui_status_for_state(state, paused=self._paused)
-            self.status_changed.emit(status.value)
+        try:
+            state = payload.get("state")
+            if state:
+                status = ui_status_for_state(state, paused=self._paused)
+                self.status_changed.emit(status.value)
 
-        page = payload.get("page") or payload.get("page_index")
-        if page is not None:
-            self.log_message.emit(f"Page number: {page}", "PAGE")
+            page = payload.get("page") or payload.get("page_index")
+            if page is not None:
+                self.log_message.emit(f"Page number: {page}", "PAGE")
 
-        if name == "started":
-            self.log_message.emit(
-                f"Run started. Saving to: {payload.get('run_dir', '')}", "INFO"
-            )
-        elif name == "job_started":
-            title = payload.get("title", "job")
-            company = payload.get("company", "company")
-            self.log_message.emit(
-                f"Current job: {title} @ {company} (page {payload.get('page', '?')})",
-                "JOB",
-            )
-        elif name == "job_saved":
-            self.log_message.emit(
-                f"Saved JD → {payload.get('path')} (total saved={payload.get('saved')})",
-                "JOB",
-            )
-        elif name == "job_duplicate_skipped":
-            self.log_message.emit(
-                f"Duplicate skipped: {payload.get('title')} @ {payload.get('company')}",
-                "JOB",
-            )
-        elif name == "job_failed":
-            self.log_message.emit(
-                f"Job error: {payload.get('error')}",
-                "ERROR",
-            )
-        elif name == "page_changed":
-            self.log_message.emit(f"Moved to page {payload.get('page')}", "PAGE")
-        elif name == "complete":
-            self.log_message.emit("Collection completed", "INFO")
-        elif name == "stopped":
-            self.log_message.emit(
-                f"Stopped. reason={payload.get('reason', 'user/stop')}", "INFO"
-            )
-        elif name == "need_user":
-            self.log_message.emit(
-                f"Need user: {payload.get('error') or payload.get('observation')}",
-                "ERROR",
-            )
-            self.status_changed.emit("Error")
-        elif name == "linkedin_detected":
-            self.log_message.emit(
-                f"LinkedIn detected: {payload.get('observation') or 'ok'}",
-                "AI",
-            )
-        elif name == "error":
-            self.log_message.emit(f"Error: {payload.get('error')}", "ERROR")
-        else:
-            # Generic / AI-oriented breadcrumbs
-            obs = payload.get("observation") or payload.get("action")
-            if obs:
-                self.log_message.emit(str(obs), "AI")
+            if name == "started":
+                self.log_message.emit(
+                    f"Run started. Saving to: {payload.get('run_dir', '')}", "INFO"
+                )
+            elif name == "job_started":
+                title = payload.get("title", "job")
+                company = payload.get("company", "company")
+                self.log_message.emit(
+                    f"Current job: {title} @ {company} (page {payload.get('page', '?')})",
+                    "JOB",
+                )
+            elif name == "job_saved":
+                self.log_message.emit(
+                    f"Saved JD → {payload.get('path')} (total saved={payload.get('saved')})",
+                    "JOB",
+                )
+            elif name == "job_duplicate_skipped":
+                self.log_message.emit(
+                    f"Duplicate skipped: {payload.get('title')} @ {payload.get('company')}",
+                    "JOB",
+                )
+            elif name == "job_failed":
+                self.log_message.emit(
+                    f"Job error: {payload.get('error')}",
+                    "ERROR",
+                )
+            elif name == "page_changed":
+                self.log_message.emit(f"Moved to page {payload.get('page')}", "PAGE")
+            elif name == "complete":
+                self.log_message.emit("Collection completed", "INFO")
+            elif name == "stopped":
+                self.log_message.emit(
+                    f"Stopped. reason={payload.get('reason', 'user/stop')}", "INFO"
+                )
+            elif name == "need_user":
+                self.log_message.emit(
+                    f"Need user: {payload.get('error') or payload.get('observation')}",
+                    "ERROR",
+                )
+                self.status_changed.emit("Error")
+            elif name == "linkedin_detected":
+                self.log_message.emit(
+                    f"LinkedIn detected: {payload.get('observation') or 'ok'}",
+                    "AI",
+                )
+            elif name == "error":
+                self.log_message.emit(f"Error: {payload.get('error')}", "ERROR")
+            else:
+                # Generic / AI-oriented breadcrumbs
+                obs = payload.get("observation") or payload.get("action")
+                if obs:
+                    self.log_message.emit(str(obs), "AI")
 
-        # Surface AI-ish fields when present on any event
-        if payload.get("ai_decision"):
-            self.log_message.emit(str(payload["ai_decision"]), "AI")
+            # Surface AI-ish fields when present on any event
+            if payload.get("ai_decision"):
+                self.log_message.emit(str(payload["ai_decision"]), "AI")
 
-        stats = {
-            k: payload.get(k)
-            for k in (
-                "page_index",
-                "jobs_saved",
-                "jobs_seen",
-                "jobs_failed",
-                "last_job_signature",
-                "last_error",
-                "state",
-            )
-            if k in payload
-        }
-        if stats:
-            self.stats_changed.emit(stats)
+            stats = {
+                k: payload.get(k)
+                for k in (
+                    "page_index",
+                    "jobs_saved",
+                    "jobs_seen",
+                    "jobs_failed",
+                    "last_job_signature",
+                    "last_error",
+                    "state",
+                )
+                if k in payload
+            }
+            if stats:
+                self.stats_changed.emit(stats)
+        except Exception:  # noqa: BLE001
+            logger.exception("UI event handler failed for %s", name)
 
     def _on_finished(self, state: StateManager) -> None:
         from ui.status import ui_status_for_state
