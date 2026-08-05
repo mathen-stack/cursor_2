@@ -56,14 +56,24 @@ class WorkflowConfig:
     max_jobs: int | None = None
     max_pages: int | None = None
     max_job_attempts: int = 3
-    detail_wait_s: float = 1.0
-    between_jobs_s: float = 0.35
+    detail_wait_s: float | None = None
+    between_jobs_s: float | None = None
     idle_rounds_before_page_done: int = 3
     require_linkedin_detection: bool = True
 
     def __post_init__(self) -> None:
         if not self.output_dir:
             self.output_dir = str(default_output_dir())
+        try:
+            from automation.pace import resolve_pace
+
+            pace = resolve_pace()
+        except Exception:  # noqa: BLE001
+            pace = None
+        if self.detail_wait_s is None:
+            self.detail_wait_s = pace.detail_wait_s if pace else 1.8
+        if self.between_jobs_s is None:
+            self.between_jobs_s = pace.between_jobs_s if pace else 1.25
 
 
 class LinkedInWorkflow:
@@ -157,6 +167,28 @@ class LinkedInWorkflow:
         """Execute the full collection workflow until completion, stop, or error."""
         self.state.set_state(WorkflowState.START)
         self._emit("started", run_dir=str(self.files.output_root))
+        try:
+            from automation.pace import resolve_pace
+
+            pace = resolve_pace()
+            logger.info(
+                "Automation pace=%s (mouse=%.2fs drag=%.2fs pause=%.2fs) — "
+                "human-visible speed so you can follow each step",
+                pace.name,
+                pace.move_duration_s,
+                pace.select_drag_s,
+                pace.safety_delay_s,
+            )
+            self._emit(
+                "log",
+                message=(
+                    f"Running at {pace.name} speed — mouse moves and JD drag-select "
+                    "are slowed so you can watch each step."
+                ),
+                level="INFO",
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("Could not resolve automation pace", exc_info=True)
         # Optional hotkey — off by default because Win32 hooks have crashed
         # some frozen EXE sessions during startup.
         if os.getenv("ENABLE_EMERGENCY_HOTKEY", "").strip() in {"1", "true", "yes"}:
@@ -434,6 +466,13 @@ class LinkedInWorkflow:
                 )
                 self.mouse.move(card.x, card.y)
                 self.mouse.click()
+                # Pause so the click/selection is visible before the next step.
+                try:
+                    from automation.pace import resolve_pace
+
+                    time.sleep(resolve_pace().after_click_s)
+                except Exception:  # noqa: BLE001
+                    time.sleep(0.55)
 
                 # 5. Wait for details panel
                 self.state.set_state(WorkflowState.WAIT_DETAIL)

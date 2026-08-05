@@ -61,7 +61,7 @@ class KeyboardController:
         backend: KeyboardBackend | None = None,
         clipboard: ClipboardBackend | None = None,
         *,
-        copy_settle_s: float = 0.15,
+        copy_settle_s: float | None = None,
         enable_emergency_hotkey: bool = False,
         lazy_backend: bool = True,
     ) -> None:
@@ -69,7 +69,14 @@ class KeyboardController:
         self._backend = backend
         self._lazy_backend = lazy_backend and backend is None
         self._clipboard = clipboard
-        self.copy_settle_s = max(0.0, copy_settle_s)
+        if copy_settle_s is None:
+            try:
+                from automation.pace import resolve_pace
+
+                copy_settle_s = resolve_pace().copy_settle_s
+            except Exception:  # noqa: BLE001
+                copy_settle_s = 0.35
+        self.copy_settle_s = max(0.0, float(copy_settle_s))
 
         if not self._lazy_backend and self._backend is None:
             self._backend = _load_pyautogui()

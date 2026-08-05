@@ -131,11 +131,26 @@ class JdDetector:
     mouse: MouseController
     keyboard: KeyboardController
     clipboard: ClipboardService = field(default_factory=ClipboardService)
-    detail_wait_s: float = 1.2
+    detail_wait_s: float | None = None
     max_detail_attempts: int = 5
     max_extract_attempts: int = 3
     # Longer drag so the highlight can travel the full JD like a human.
-    select_drag_duration_s: float = 0.55
+    select_drag_duration_s: float | None = None
+    after_select_s: float | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            from automation.pace import resolve_pace
+
+            pace = resolve_pace()
+        except Exception:  # noqa: BLE001
+            pace = None
+        if self.detail_wait_s is None:
+            self.detail_wait_s = pace.detail_wait_s if pace else 1.8
+        if self.select_drag_duration_s is None:
+            self.select_drag_duration_s = pace.select_drag_s if pace else 1.35
+        if self.after_select_s is None:
+            self.after_select_s = pace.after_select_s if pace else 0.45
 
     # --- panel readiness -------------------------------------------------
 
@@ -356,8 +371,8 @@ class JdDetector:
                     location, select_fallback_region=select_fallback_region
                 )
 
-                # Brief settle so the browser finishes the highlight.
-                time.sleep(0.15)
+                # Let the highlight settle so a human can see the selection.
+                time.sleep(float(self.after_select_s or 0.0))
 
                 # 3-4. Ctrl+C + clipboard read (exact)
                 text = self.copy_jd_from_selection()

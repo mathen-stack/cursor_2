@@ -13,8 +13,18 @@ from typing import Callable
 
 logger = logging.getLogger(__name__)
 
-# Default pause between actions (seconds). Override with AUTOMATION_SAFETY_DELAY.
-DEFAULT_SAFETY_DELAY_S = 0.35
+# Default pause between actions (seconds). Overridden by AUTOMATION_PACE /
+# AUTOMATION_SAFETY_DELAY via automation.pace.resolve_pace().
+def _default_safety_delay() -> float:
+    try:
+        from automation.pace import resolve_pace
+
+        return resolve_pace().safety_delay_s
+    except Exception:  # noqa: BLE001
+        return 0.75
+
+
+DEFAULT_SAFETY_DELAY_S = 0.75
 DEFAULT_EMERGENCY_HOTKEY = os.getenv("EMERGENCY_STOP_HOTKEY", "ctrl+shift+f12")
 
 
@@ -41,9 +51,8 @@ class AutomationGuard:
         safety_delay_s: float | None = None,
         emergency_hotkey: str = DEFAULT_EMERGENCY_HOTKEY,
     ) -> None:
-        env_delay = os.getenv("AUTOMATION_SAFETY_DELAY")
         if safety_delay_s is None:
-            safety_delay_s = float(env_delay) if env_delay else DEFAULT_SAFETY_DELAY_S
+            safety_delay_s = _default_safety_delay()
 
         self.safety_delay_s = max(0.0, float(safety_delay_s))
         self.emergency_hotkey = emergency_hotkey.lower().strip()

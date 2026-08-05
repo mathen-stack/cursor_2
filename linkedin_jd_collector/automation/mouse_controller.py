@@ -85,7 +85,7 @@ class MouseController:
         guard: AutomationGuard | None = None,
         backend: MouseBackend | None = None,
         *,
-        move_duration_s: float = 0.15,
+        move_duration_s: float | None = None,
         lazy_backend: bool = True,
     ) -> None:
         self.guard = guard or default_guard
@@ -93,7 +93,14 @@ class MouseController:
         # has hard-crashed some Windows EXE sessions before any UI event fires.
         self._backend = backend
         self._lazy_backend = lazy_backend and backend is None
-        self.move_duration_s = max(0.0, move_duration_s)
+        if move_duration_s is None:
+            try:
+                from automation.pace import resolve_pace
+
+                move_duration_s = resolve_pace().move_duration_s
+            except Exception:  # noqa: BLE001
+                move_duration_s = 0.45
+        self.move_duration_s = max(0.0, float(move_duration_s))
         if not self._lazy_backend and self._backend is None:
             self._backend = _load_pyautogui()
         logger.info(
@@ -263,8 +270,16 @@ class MouseController:
         dur = max(0.0, duration)
 
         def _do() -> None:
-            logger.info("select_text from %s to %s duration=%.3fs", a, b, dur)
-            self.backend.moveTo(a[0], a[1], duration=min(dur, self.move_duration_s))
+            approach = self.move_duration_s if dur > 0 else 0.0
+            logger.info(
+                "select_text from %s to %s approach=%.3fs drag=%.3fs",
+                a,
+                b,
+                approach,
+                dur,
+            )
+            # Move to start at normal cursor speed, then drag at human pace.
+            self.backend.moveTo(a[0], a[1], duration=approach)
             self.backend.mouseDown(button="left")
             try:
                 self.backend.dragTo(b[0], b[1], duration=dur, button="left")

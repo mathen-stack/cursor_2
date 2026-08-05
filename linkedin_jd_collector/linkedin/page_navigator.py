@@ -21,8 +21,17 @@ class PageNavigator:
 
     vision: VisionAgent
     mouse: MouseController
-    page_load_wait_s: float = 2.0
+    page_load_wait_s: float | None = None
     max_page_wait_attempts: int = 4
+
+    def __post_init__(self) -> None:
+        if self.page_load_wait_s is None:
+            try:
+                from automation.pace import resolve_pace
+
+                self.page_load_wait_s = resolve_pace().page_load_wait_s
+            except Exception:  # noqa: BLE001
+                self.page_load_wait_s = 2.5
 
     def detect_pagination(
         self,
