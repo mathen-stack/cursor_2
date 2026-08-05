@@ -9,8 +9,11 @@ __pycache__/
 .venv/
 venv/
 dist/
-build/
+**/build/dist/
 *.spec
+
+# PyInstaller work dirs (do not ignore source package linkedin_jd_collector/build/)
+/build/
 
 # Output / runs
 output/
