@@ -9,6 +9,7 @@ window via PyWinAuto on Windows.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from dataclasses import dataclass
 from typing import Callable
@@ -30,6 +31,15 @@ class LinkedInDetector:
     def focus_browser_window(self) -> bool:
         """Best-effort focus of a LinkedIn browser window (Windows/pywinauto)."""
         if not sys.platform.startswith("win"):
+            return False
+        # Off by default — pywinauto/UIA has hard-crashed frozen EXEs for some users.
+        enabled = os.getenv("ENABLE_PYWINAUTO", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if not enabled:
+            logger.info("Skipping pywinauto focus (set ENABLE_PYWINAUTO=1 to enable)")
             return False
         try:
             from pywinauto import Desktop

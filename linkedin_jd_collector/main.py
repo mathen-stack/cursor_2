@@ -3,6 +3,10 @@ Application entrypoint for LinkedIn JD Collector Agent.
 
 Boots PyQt6, opens the main window, and starts the event loop.
 This file is the PyInstaller EXE entrypoint target.
+
+Also supports:
+  LinkedIn_JD_Collector.exe --agent-worker ...
+which runs the isolated collection process (no Qt UI).
 """
 
 from __future__ import annotations
@@ -62,6 +66,13 @@ def _install_crash_logging() -> Path | None:
 
 def main() -> int:
     _ensure_import_path()
+
+    # Isolated agent process mode — no Qt window.
+    if len(sys.argv) > 1 and sys.argv[1] == "--agent-worker":
+        from agent.worker_main import run_worker
+
+        return run_worker(sys.argv[2:])
+
     crash_path = _install_crash_logging()
 
     from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -93,7 +104,6 @@ def main() -> int:
 
     sys.excepthook = _excepthook
 
-    # Background-thread Python exceptions (worker) — keep UI alive + log.
     import threading
 
     def _thread_excepthook(args) -> None:

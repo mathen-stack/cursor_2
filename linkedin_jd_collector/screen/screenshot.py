@@ -66,8 +66,80 @@ class ScreenshotService:
         if self._grabber is None:
             import mss
 
+            logger.info("Initializing mss screenshot grabber…")
             self._grabber = mss.mss()
         return self._grabber
+
+    def _capture_with_pil(
+        self, region: dict[str, int] | None, limit: int | None
+    ) -> ScreenshotResult:
+        """Fallback grabber when mss fails/crashes are avoided via alternate path."""
+        from PIL import Image, ImageGrab
+
+        logger.warning("Falling back to PIL ImageGrab for screenshot")
+        if region is None:
+            img = ImageGrab.grab()
+            offset_left = 0
+            offset_top = 0
+        else:
+            left = int(region.get("left", 0))
+            top = int(region.get("top", 0))
+            width = int(region.get("width", 0))
+            height = int(region.get("height", 0))
+            img = ImageGrab.grab(bbox=(left, top, left + width, top + height))
+            offset_left = left
+            offset_top = top
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        return self._finalize_image(img, offset_left, offset_top, limit)
+
+    def _finalize_image(
+        self,
+        img,
+        offset_left: int,
+        offset_top: int,
+        limit: int | None,
+    ) -> ScreenshotResult:
+        from PIL import Image
+
+        source_w, source_h = img.width, img.height
+        scale_x = 1.0
+        scale_y = 1.0
+
+        if limit and img.width > limit:
+            ratio = limit / float(img.width)
+            new_w = limit
+            new_h = max(1, int(img.height * ratio))
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            scale_x = source_w / float(new_w)
+            scale_y = source_h / float(new_h)
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        data = buf.getvalue()
+        result = ScreenshotResult(
+            image_bytes=data,
+            width=img.width,
+            height=img.height,
+            scale_x=scale_x,
+            scale_y=scale_y,
+            offset_left=offset_left,
+            offset_top=offset_top,
+            source_width=source_w,
+            source_height=source_h,
+        )
+        self.last = result
+        logger.info(
+            "Screenshot captured img=%sx%s source=%sx%s scale=%.3fx%.3f bytes=%s",
+            img.width,
+            img.height,
+            source_w,
+            source_h,
+            scale_x,
+            scale_y,
+            len(data),
+        )
+        return result
 
     def capture(
         self,
@@ -83,8 +155,8 @@ class ScreenshotService:
         from PIL import Image
 
         limit = self.max_width if max_width is None else max_width
-        grabber = self._get_grabber()
         try:
+            grabber = self._get_grabber()
             offset_left = 0
             offset_top = 0
             if region is None:
@@ -101,48 +173,16 @@ class ScreenshotService:
                 shot = grabber.grab(region)
 
             img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
-            source_w, source_h = img.width, img.height
-            scale_x = 1.0
-            scale_y = 1.0
-
-            if limit and img.width > limit:
-                ratio = limit / float(img.width)
-                new_w = limit
-                new_h = max(1, int(img.height * ratio))
-                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                # image -> screen scale
-                scale_x = source_w / float(new_w)
-                scale_y = source_h / float(new_h)
-
-            buf = io.BytesIO()
-            img.save(buf, format="PNG", optimize=True)
-            data = buf.getvalue()
-            result = ScreenshotResult(
-                image_bytes=data,
-                width=img.width,
-                height=img.height,
-                scale_x=scale_x,
-                scale_y=scale_y,
-                offset_left=offset_left,
-                offset_top=offset_top,
-                source_width=source_w,
-                source_height=source_h,
-            )
-            self.last = result
-            logger.info(
-                "Screenshot captured img=%sx%s source=%sx%s scale=%.3fx%.3f bytes=%s",
-                img.width,
-                img.height,
-                source_w,
-                source_h,
-                scale_x,
-                scale_y,
-                len(data),
-            )
-            return result
+            return self._finalize_image(img, offset_left, offset_top, limit)
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Screenshot capture failed")
-            raise RuntimeError(f"Screenshot capture failed: {exc}") from exc
+            logger.exception("mss screenshot failed; trying PIL fallback (%s)", exc)
+            try:
+                return self._capture_with_pil(region, limit)
+            except Exception as exc2:  # noqa: BLE001
+                logger.exception("PIL screenshot fallback failed")
+                raise RuntimeError(
+                    f"Screenshot capture failed: {exc}; fallback: {exc2}"
+                ) from exc2
 
     def to_screen(self, x: int, y: int) -> tuple[int, int]:
         if self.last is None:

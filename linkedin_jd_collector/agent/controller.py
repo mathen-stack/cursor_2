@@ -1,110 +1,64 @@
 """
 Top-level agent controller (bridge between PyQt6 UI and workflow).
+
+The collection loop runs in a **separate process** so native crashes in
+mss/pyautogui/pywinauto cannot auto-close the Qt window.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
-import traceback
+from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QProcess, QTimer, pyqtSignal
 
-from agent.state_manager import StateManager, WorkflowState
-from agent.workflow import LinkedInWorkflow, WorkflowConfig, WorkflowError
-from automation.safety import default_guard
-from storage.file_manager import FileManager, default_output_dir
-from storage.history import HistoryStore
+from agent.state_manager import StateManager
+from storage.file_manager import default_output_dir
+from ui.paths import log_dir, user_data_dir
 from ui.settings import AppSettings
 
 logger = logging.getLogger(__name__)
 
 
-class AgentWorker(QObject):
-    """Runs LinkedInWorkflow on a background thread."""
+def _agent_paths() -> dict[str, Path]:
+    root = log_dir()
+    return {
+        "events": root / "agent_events.jsonl",
+        "control": root / "agent_control.json",
+        "heartbeat": root / "agent_heartbeat.txt",
+        "worker_log": root / "agent_worker.log",
+    }
 
-    # IMPORTANT: do not name signals after QObject methods (e.g. `event`) —
-    # that shadows Qt internals and causes: TypeError: native Qt signal is not callable
-    workflow_event = pyqtSignal(str, dict)
-    run_finished = pyqtSignal(object)
-    run_failed = pyqtSignal(str)
 
-    def __init__(self, settings: AppSettings, state: StateManager) -> None:
-        super().__init__()
-        self.settings = settings
-        self.state = state
-        self.workflow: LinkedInWorkflow | None = None
+def _worker_command(settings: AppSettings, paths: dict[str, Path]) -> list[str]:
+    """Build argv to spawn the agent worker process."""
+    common = [
+        "--agent-worker",
+        "--api-key",
+        settings.openrouter_api_key.strip(),
+        "--model",
+        settings.vision_model.strip(),
+        "--output-dir",
+        settings.output_dir or str(default_output_dir()),
+        "--events-file",
+        str(paths["events"]),
+        "--control-file",
+        str(paths["control"]),
+        "--heartbeat-file",
+        str(paths["heartbeat"]),
+        "--log-file",
+        str(paths["worker_log"]),
+    ]
+    if getattr(sys, "frozen", False):
+        # Same EXE, alternate entry mode.
+        return [sys.executable, *common]
 
-    @pyqtSlot()
-    def run(self) -> None:
-        com_ready = False
-        try:
-            logger.info("Agent worker thread starting")
-            # pywinauto / UIAutomation require COM on this background thread.
-            if sys.platform.startswith("win"):
-                try:
-                    import pythoncom
-
-                    pythoncom.CoInitialize()
-                    com_ready = True
-                except Exception:  # noqa: BLE001
-                    logger.debug("Worker CoInitialize skipped", exc_info=True)
-
-            self.settings.apply_to_environ()
-            default_guard.clear_emergency_stop()
-            self.state.clear_stop()
-            self.state.resume()
-
-            output_dir = self.settings.output_dir or str(default_output_dir())
-            files = FileManager(output_dir)
-            history = HistoryStore.create(files.output_root)
-            config = WorkflowConfig(output_dir=output_dir)
-
-            try:
-                logger.info("Constructing LinkedInWorkflow…")
-                self.workflow = LinkedInWorkflow(
-                    config=config,
-                    state=self.state,
-                    file_manager=files,
-                    history=history,
-                    guard=default_guard,
-                    on_event=self._on_workflow_event,
-                )
-                logger.info("LinkedInWorkflow constructed; entering run()")
-            except Exception as exc:  # noqa: BLE001
-                # Surface init failures (pyautogui/mss/etc.) instead of dying quietly.
-                logger.exception("Workflow init failed")
-                self.run_failed.emit(
-                    f"Failed to initialize automation backends:\n{exc}\n\n"
-                    f"{traceback.format_exc()}"
-                )
-                return
-
-            result = self.workflow.run()
-            self.run_finished.emit(result)
-        except WorkflowError as exc:
-            self.run_failed.emit(str(exc))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Agent worker crashed")
-            self.run_failed.emit(f"{exc}\n{traceback.format_exc()}")
-        finally:
-            if com_ready:
-                try:
-                    import pythoncom
-
-                    pythoncom.CoUninitialize()
-                except Exception:  # noqa: BLE001
-                    logger.debug("Worker CoUninitialize failed", exc_info=True)
-            logger.info("Agent worker thread exiting")
-
-    def _on_workflow_event(self, name: str, payload: dict[str, Any]) -> None:
-        try:
-            # Ensure payload is a plain dict of simple values for queued signals.
-            safe = dict(payload or {})
-            self.workflow_event.emit(str(name), safe)
-        except Exception:  # noqa: BLE001
-            logger.exception("Failed to emit workflow_event %s", name)
+    # Source run: python main.py --agent-worker ...
+    main_py = Path(__file__).resolve().parents[1] / "main.py"
+    return [sys.executable, str(main_py), *common]
 
 
 class AgentController(QObject):
@@ -120,12 +74,17 @@ class AgentController(QObject):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._thread: QThread | None = None
-        self._worker: AgentWorker | None = None
         self.state = StateManager()
         self.settings = AppSettings()
         self._paused = False
         self._running = False
+        self._process: QProcess | None = None
+        self._paths = _agent_paths()
+        self._events_offset = 0
+        self._poll = QTimer(self)
+        self._poll.setInterval(150)
+        self._poll.timeout.connect(self._poll_worker)
+        self._last_snapshot: dict[str, Any] = {}
 
     @property
     def is_running(self) -> bool:
@@ -146,38 +105,62 @@ class AgentController(QObject):
             self.agent_failed.emit("OpenRouter API Key is required in Settings.")
             return
 
+        # Ensure user data/log dirs exist
+        user_data_dir()
+        self._paths = _agent_paths()
+        for key in ("events", "control", "heartbeat"):
+            p = self._paths[key]
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+
         self.state = StateManager()
         self._paused = False
         self._running = True
+        self._events_offset = 0
+        self._last_snapshot = {}
         self.status_changed.emit("Waiting")
         self.log_message.emit("Starting LinkedIn JD Collector Agent…", "INFO")
+        self.log_message.emit(
+            "Agent runs in an isolated process so crashes won't close this window.",
+            "INFO",
+        )
 
-        self._thread = QThread(self)
-        self._worker = AgentWorker(self.settings, self.state)
-        self._worker.moveToThread(self._thread)
+        cmd = _worker_command(self.settings, self._paths)
+        logger.info("Spawning agent worker: %s", " ".join(cmd[:2] + ["..."]))
 
-        queued = Qt.ConnectionType.QueuedConnection
-        self._thread.started.connect(self._worker.run, queued)
-        self._worker.workflow_event.connect(self._handle_event, queued)
-        self._worker.run_finished.connect(self._on_finished, queued)
-        self._worker.run_failed.connect(self._on_failed, queued)
-        self._worker.run_finished.connect(self._thread.quit, queued)
-        self._worker.run_failed.connect(self._thread.quit, queued)
-        self._thread.finished.connect(self._cleanup_thread, queued)
-        self._thread.start()
+        self._process = QProcess(self)
+        self._process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self._process.finished.connect(self._on_process_finished)
+        self._process.errorOccurred.connect(self._on_process_error)
+        # Don't pass the API key via the system shell; argv is fine for local use.
+        program = cmd[0]
+        args = cmd[1:]
+        self._process.start(program, args)
+        if not self._process.waitForStarted(8000):
+            self._running = False
+            err = self._process.errorString() if self._process else "unknown"
+            self.agent_failed.emit(f"Could not start agent worker process:\n{err}")
+            self._process = None
+            return
+
+        self.log_message.emit(
+            f"Worker PID {self._process.processId()} started", "INFO"
+        )
+        self._poll.start()
 
     def pause(self) -> None:
         if not self._running:
             return
         if self._paused:
-            self.state.resume()
-            default_guard.resume()
+            self._write_control({"pause": False, "resume": True, "stop": False})
             self._paused = False
             self.log_message.emit("Resumed", "INFO")
             self.status_changed.emit("Processing Jobs")
         else:
-            self.state.request_pause()
-            default_guard.pause()
+            self._write_control({"pause": True, "resume": False, "stop": False})
             self._paused = True
             self.log_message.emit("Paused", "INFO")
             self.status_changed.emit("Paused")
@@ -186,10 +169,70 @@ class AgentController(QObject):
         if not self._running:
             return
         self.log_message.emit("Stop requested", "INFO")
-        self.state.request_stop()
-        default_guard.trigger_emergency_stop("user stop")
-        if self._worker and self._worker.workflow:
-            self._worker.workflow.request_stop()
+        self._write_control({"pause": False, "resume": False, "stop": True})
+        if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
+            # Give the worker a moment to stop cooperatively, then kill.
+            QTimer.singleShot(4000, self._force_kill_worker)
+
+    def _force_kill_worker(self) -> None:
+        if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
+            self.log_message.emit("Force-stopping worker process…", "WARN")
+            self._process.kill()
+
+    def _write_control(self, payload: dict) -> None:
+        try:
+            self._paths["control"].write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+        except OSError as exc:
+            logger.warning("Could not write control file: %s", exc)
+
+    def _poll_worker(self) -> None:
+        path = self._paths["events"]
+        if not path.exists():
+            return
+        try:
+            data = path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        if len(data) < self._events_offset:
+            self._events_offset = 0
+        chunk = data[self._events_offset :]
+        if not chunk:
+            return
+        self._events_offset = len(data)
+        for line in chunk.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            name = str(item.get("name") or "")
+            payload = item.get("payload") or {}
+            if not isinstance(payload, dict):
+                payload = {"value": payload}
+            self._dispatch_event(name, payload)
+
+    def _dispatch_event(self, name: str, payload: dict) -> None:
+        if name == "log":
+            self.log_message.emit(
+                str(payload.get("message", "")),
+                str(payload.get("level", "INFO")),
+            )
+            return
+        if name == "worker_finished":
+            self._last_snapshot = dict(payload)
+            self._handle_event("complete", payload)
+            return
+        if name == "worker_failed":
+            err = str(payload.get("error") or "Worker failed")
+            tb = str(payload.get("traceback") or "")
+            msg = err if not tb else f"{err}\n\n{tb}"
+            self._finish_failed(msg)
+            return
+        self._handle_event(name, payload)
 
     def _handle_event(self, name: str, payload: dict) -> None:
         from ui.status import ui_status_for_state
@@ -252,12 +295,10 @@ class AgentController(QObject):
             elif name == "error":
                 self.log_message.emit(f"Error: {payload.get('error')}", "ERROR")
             else:
-                # Generic / AI-oriented breadcrumbs
                 obs = payload.get("observation") or payload.get("action")
                 if obs:
                     self.log_message.emit(str(obs), "AI")
 
-            # Surface AI-ish fields when present on any event
             if payload.get("ai_decision"):
                 self.log_message.emit(str(payload["ai_decision"]), "AI")
 
@@ -275,17 +316,62 @@ class AgentController(QObject):
                 if k in payload
             }
             if stats:
+                self._last_snapshot.update(stats)
                 self.stats_changed.emit(stats)
         except Exception:  # noqa: BLE001
             logger.exception("UI event handler failed for %s", name)
 
-    def _on_finished(self, state: StateManager) -> None:
+    def _on_process_finished(self, exit_code: int, exit_status) -> None:
+        self._poll.stop()
+        # Drain any remaining events first
+        self._poll_worker()
+
+        if not self._running:
+            return
+
+        # Normal completion signaled via worker_finished / worker_failed events.
+        if self._last_snapshot and exit_code == 0:
+            self._finish_ok(self._last_snapshot)
+            return
+
+        # Unexpected death (native crash, kill, etc.) — UI stays alive.
+        hb = ""
+        try:
+            if self._paths["heartbeat"].exists():
+                hb = self._paths["heartbeat"].read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+        worker_log = str(self._paths["worker_log"])
+        msg = (
+            "Agent worker process exited unexpectedly "
+            f"(code={exit_code}, status={int(exit_status)}).\n\n"
+            f"Last heartbeat: {hb or '(none)'}\n"
+            f"Worker log: {worker_log}\n\n"
+            "The main window stayed open on purpose. "
+            "Share the worker log if this keeps happening."
+        )
+        # If worker already reported failure, don't double-dialog.
+        if exit_code != 0 and "worker_failed" not in (hb or ""):
+            self._finish_failed(msg)
+        elif exit_code == 0:
+            self._finish_ok(self._last_snapshot or {"jobs_saved": 0, "state": "COMPLETE"})
+        else:
+            self._running = False
+            self._paused = False
+            self.status_changed.emit("Error")
+            self.log_message.emit(msg, "ERROR")
+
+    def _on_process_error(self, error) -> None:
+        self.log_message.emit(f"Worker process error: {error}", "ERROR")
+
+    def _finish_ok(self, snap: dict) -> None:
         from ui.status import ui_status_for_state
 
         self._running = False
         self._paused = False
-        snap = state.snapshot()
-        status = ui_status_for_state(state.state)
+        self._poll.stop()
+        state = snap.get("state", "COMPLETE")
+        status = ui_status_for_state(state)
         self.status_changed.emit(status.value)
         self.stats_changed.emit(snap)
         self.agent_finished.emit(snap)
@@ -293,18 +379,18 @@ class AgentController(QObject):
             f"Agent finished with status={status.value}, saved={snap.get('jobs_saved', 0)}",
             "INFO",
         )
+        self._cleanup_process()
 
-    def _on_failed(self, message: str) -> None:
+    def _finish_failed(self, message: str) -> None:
         self._running = False
         self._paused = False
+        self._poll.stop()
         self.status_changed.emit("Error")
         self.log_message.emit(message, "ERROR")
         self.agent_failed.emit(message)
+        self._cleanup_process()
 
-    def _cleanup_thread(self) -> None:
-        if self._worker is not None:
-            self._worker.deleteLater()
-            self._worker = None
-        if self._thread is not None:
-            self._thread.deleteLater()
-            self._thread = None
+    def _cleanup_process(self) -> None:
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
