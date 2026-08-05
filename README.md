@@ -7,9 +7,11 @@ Windows desktop EXE that uses an OpenRouter vision AI computer-use agent to coll
 Architecture and project structure are in place.  
 **Implemented:**
 - OpenRouter AI vision module (`ai/`)
-- Mouse/keyboard automation (`automation/mouse_controller.py`, `keyboard_controller.py`)
+- Mouse/keyboard automation (`automation/`)
+- LinkedIn workflow (`agent/workflow.py`, `linkedin/job_detector.py`, `linkedin/page_navigator.py`)
+- Supporting: screenshot capture, JD detector, file/history storage, state manager
 
-Other modules remain stubs.
+Still stubs: desktop UI (`ui/`), controller wiring, EXE build.
 
 ## Documentation
 
