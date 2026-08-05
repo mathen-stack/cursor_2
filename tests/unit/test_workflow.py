@@ -154,9 +154,12 @@ def test_workflow_processes_one_job_then_finishes(tmp_path: Path):
     state = wf.run()
     assert state.state in {WorkflowState.COMPLETE, WorkflowState.STOPPED}
     assert state.stats.jobs_saved == 1
-    saved_files = list((tmp_path / "runs").glob("*/jds/*.txt"))
+    saved_files = list(tmp_path.glob("*.txt"))
     assert len(saved_files) == 1
-    assert saved_files[0].read_text(encoding="utf-8") == original_jd
+    body = saved_files[0].read_text(encoding="utf-8")
+    assert "Timestamp: " in body
+    assert body.endswith(original_jd)
+    assert saved_files[0].name.startswith("Acme_Eng_")
     assert "job_saved" in events
     assert "complete" in events
 

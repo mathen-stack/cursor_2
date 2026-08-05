@@ -34,7 +34,7 @@ from linkedin.jd_detector import JdDetector
 from linkedin.job_detector import JobCard, JobDetector
 from linkedin.page_navigator import PageNavigator
 from screen.screenshot import ScreenshotService
-from storage.file_manager import FileManager
+from storage.file_manager import FileManager, default_output_dir
 from storage.history import HistoryStore, JobRecord
 
 logger = logging.getLogger(__name__)
@@ -46,12 +46,16 @@ class WorkflowError(RuntimeError):
 
 @dataclass
 class WorkflowConfig:
-    output_dir: str = "./output"
+    output_dir: str = ""
     max_jobs: int | None = None
     max_pages: int | None = None
     max_job_attempts: int = 3
     detail_wait_s: float = 1.2
     between_jobs_s: float = 0.4
+
+    def __post_init__(self) -> None:
+        if not self.output_dir:
+            self.output_dir = str(default_output_dir())
 
 
 class LinkedInWorkflow:
@@ -74,7 +78,7 @@ class LinkedInWorkflow:
         on_event: Callable[[str, dict], None] | None = None,
     ) -> None:
         self.config = config or WorkflowConfig(
-            output_dir=os.getenv("OUTPUT_DIR", "./output")
+            output_dir=os.getenv("OUTPUT_DIR") or str(default_output_dir())
         )
         self.state = state or StateManager()
         self.guard = guard or default_guard
@@ -85,7 +89,7 @@ class LinkedInWorkflow:
         )
         self.screenshots = screenshots or ScreenshotService()
         self.files = file_manager or FileManager(self.config.output_dir)
-        self.history = history or HistoryStore.create(self.files.run_dir)
+        self.history = history or HistoryStore.create(self.files.output_root)
         self.on_event = on_event
 
         self.jobs = JobDetector(self.vision, completed_signatures=set(self.history.completed))
@@ -282,34 +286,49 @@ class LinkedInWorkflow:
                 )
                 text = extraction.text  # exact clipboard contents; do not modify
 
-                # 9. Save TXT exactly as copied
+                # 9. Save TXT exactly as copied (Documents/LinkedIn_JD/)
                 self.state.set_state(WorkflowState.SAVE_JD)
                 saved = self.files.save_jd(
                     text,
                     title=card.title,
                     company=card.company,
+                    url=card.url,
                     signature=card.signature,
+                    history=self.history,
                 )
 
-                # 10. Mark completed
+                # 10. Mark completed / skip duplicates
                 self.state.set_state(WorkflowState.MARK_DONE)
+                self.jobs.mark_completed(card.signature)
+                if saved.skipped_duplicate:
+                    self._emit(
+                        "job_duplicate_skipped",
+                        signature=saved.signature,
+                        title=card.title,
+                        company=card.company,
+                    )
+                    self.state.set_state(WorkflowState.NEXT_JOB)
+                    return True
+
                 record = JobRecord(
-                    signature=card.signature,
+                    signature=saved.signature,
                     title=card.title,
                     company=card.company,
                     page_index=self.state.stats.page_index,
                     path=str(saved.path),
-                    saved_at=datetime.now(timezone.utc).isoformat(),
+                    saved_at=saved.timestamp,
+                    url=card.url,
+                    content_hash=saved.content_hash,
                 )
                 self.history.mark_completed(record)
-                self.jobs.mark_completed(card.signature)
                 self.state.stats.jobs_saved += 1
                 self.state.set_state(WorkflowState.NEXT_JOB)
                 self._emit(
                     "job_saved",
                     path=str(saved.path),
-                    signature=card.signature,
+                    signature=saved.signature,
                     saved=self.state.stats.jobs_saved,
+                    url=card.url,
                 )
                 return True
 

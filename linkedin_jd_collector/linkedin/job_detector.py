@@ -23,9 +23,14 @@ class JobCard:
     title: str = "job"
     company: str = "company"
     index: int | None = None
+    url: str | None = None
 
     @property
     def signature(self) -> str:
+        if self.url:
+            normalized = self.url.strip().split("?")[0].rstrip("/").lower()
+            if normalized:
+                return f"url:{normalized}"
         base = f"{self.title.strip().lower()}|{self.company.strip().lower()}"
         if self.index is not None:
             return f"{base}|idx:{self.index}"
@@ -68,6 +73,7 @@ class JobDetector:
                     y = int(round(float(coords.get("y"))))
                 except (TypeError, ValueError, AttributeError):
                     continue
+                url = item.get("url")
                 cards.append(
                     JobCard(
                         x=x,
@@ -75,6 +81,7 @@ class JobDetector:
                         title=str(item.get("title") or f"job_{i+1}"),
                         company=str(item.get("company") or "company"),
                         index=i,
+                        url=str(url).strip() if url else None,
                     )
                 )
 

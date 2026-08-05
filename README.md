@@ -10,7 +10,8 @@ Architecture and project structure are in place.
 - Mouse/keyboard automation (`automation/`)
 - LinkedIn workflow (`agent/workflow.py`, `linkedin/job_detector.py`, `linkedin/page_navigator.py`)
 - JD extraction (`linkedin/jd_detector.py`, `automation/clipboard.py`) — locate → select → Ctrl+C → exact text
-- Supporting: screenshot capture, file/history storage, state manager
+- File storage (`storage/`) → `Documents/LinkedIn_JD/Company_Title_Date_Time.txt` with URL/timestamp/raw JD; duplicate-safe
+- Supporting: screenshot capture, state manager
 
 Still stubs: desktop UI (`ui/`), controller wiring, EXE build.
 
