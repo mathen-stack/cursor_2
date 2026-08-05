@@ -10,8 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
@@ -41,11 +41,12 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.8")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.9")
         self.resize(920, 680)
 
         self.settings = settings or load_settings()
         self.controller = AgentController(self)
+        self._hidden_for_run = False
 
         self._build_ui()
         self._bind_controller()
@@ -62,7 +63,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.8")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.9")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -195,10 +196,19 @@ class MainWindow(QMainWindow):
             self.settings.apply_to_environ()
             self.log_panel.clear()
             self.log_panel.info("Starting agent…")
+            self.log_panel.info(
+                "Focusing LinkedIn, then minimizing this window so clicks "
+                "cannot hit Close on the Collector."
+            )
             self._set_buttons_running()
+            # Focus LinkedIn while we still hold foreground rights (user click).
+            self._focus_linkedin_for_run()
             self.controller.start(settings)
+            # After the worker is spawned, get our UI out of the click path.
+            QTimer.singleShot(250, self._minimize_for_run)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Start Agent failed")
+            self._restore_after_run()
             self._set_buttons_idle()
             QMessageBox.critical(
                 self,
@@ -276,11 +286,16 @@ class MainWindow(QMainWindow):
             self.job_label.setText(f"Current job: {stats['last_job_signature']}")
 
     def _on_finished(self, snap: dict) -> None:
+        self._restore_after_run()
         self._set_buttons_idle()
         self.btn_pause.setText("Pause")
         self.saved_label.setText(f"Saved: {snap.get('jobs_saved', 0)}")
+        self.log_panel.info(
+            "Agent finished. Window restored — use Stop next time from the taskbar."
+        )
 
     def _on_failed(self, message: str) -> None:
+        self._restore_after_run()
         self._set_buttons_idle()
         self.btn_pause.setText("Pause")
         friendly = format_openrouter_user_error(message)
@@ -295,6 +310,62 @@ class MainWindow(QMainWindow):
         ):
             self.model_input.setText(DEFAULT_MODEL)
         QMessageBox.critical(self, "Agent Error", friendly)
+
+    def _focus_linkedin_for_run(self) -> None:
+        try:
+            from automation.window_focus import focus_linkedin_browser
+
+            ok = focus_linkedin_browser(force=True)
+            if ok:
+                self.log_panel.info("LinkedIn browser focused")
+            else:
+                self.log_panel.append(
+                    "Could not auto-focus LinkedIn — keep the Jobs tab in front.",
+                    level="WARN",
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("UI LinkedIn focus failed", exc_info=True)
+
+    def _minimize_for_run(self) -> None:
+        if not self.controller.is_running:
+            return
+        self._hidden_for_run = True
+        self.showMinimized()
+        self.log_panel.info(
+            "Collector minimized while agent runs (restore from taskbar to Stop)."
+        )
+
+    def _restore_after_run(self) -> None:
+        if not self._hidden_for_run and not self.isMinimized():
+            return
+        self._hidden_for_run = False
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """Block accidental Close while the agent is running (common false 'crash')."""
+        if self.controller.is_running:
+            reply = QMessageBox.question(
+                self,
+                "Agent still running",
+                "The agent is still running.\n\n"
+                "Closing this window will stop collection.\n"
+                "Stop the agent and quit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                # Stay out of the click path if we were minimized for a run.
+                if self._hidden_for_run:
+                    self.showMinimized()
+                return
+            try:
+                self.controller.stop()
+            except Exception:  # noqa: BLE001
+                logger.debug("stop on close failed", exc_info=True)
+        event.accept()
 
     def _set_buttons_idle(self) -> None:
         self.btn_start.setEnabled(True)

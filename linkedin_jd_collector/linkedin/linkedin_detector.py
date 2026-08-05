@@ -2,8 +2,8 @@
 LinkedIn page/window detector.
 
 Verifies the current screen shows LinkedIn job results before the agent
-starts clicking jobs. Uses vision first; optionally focuses a browser
-window via PyWinAuto on Windows.
+starts clicking jobs. Uses vision first; focuses a browser window via
+safe Win32 ctypes (never pywinauto by default).
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ai.vision_agent import VisionAction, VisionAgent
+from automation.window_focus import focus_linkedin_browser
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +30,24 @@ class LinkedInDetector:
     max_attempts: int = 3
 
     def focus_browser_window(self) -> bool:
-        """Best-effort focus of a LinkedIn browser window (Windows/pywinauto)."""
+        """Best-effort focus of a LinkedIn browser window (Windows)."""
         if not sys.platform.startswith("win"):
             return False
-        # Off by default — pywinauto/UIA has hard-crashed frozen EXEs for some users.
+
+        # Safe default: ctypes EnumWindows (no COM / UIA).
+        try:
+            if focus_linkedin_browser(force=True):
+                return True
+        except Exception:  # noqa: BLE001
+            logger.debug("ctypes LinkedIn focus failed", exc_info=True)
+
+        # Optional legacy path — pywinauto/UIA has hard-crashed frozen EXEs.
         enabled = os.getenv("ENABLE_PYWINAUTO", "").strip().lower() in {
             "1",
             "true",
             "yes",
         }
         if not enabled:
-            logger.info("Skipping pywinauto focus (set ENABLE_PYWINAUTO=1 to enable)")
             return False
         try:
             from pywinauto import Desktop
@@ -57,6 +65,8 @@ class LinkedInDetector:
                 except Exception:  # noqa: BLE001
                     continue
                 low = title.lower()
+                if "jd collector" in low:
+                    continue
                 if "linkedin" in low and (
                     "chrome" in low
                     or "edge" in low
@@ -67,13 +77,12 @@ class LinkedInDetector:
                 ):
                     candidates.append(w)
             if not candidates:
-                # Broader match: any window with LinkedIn in title
                 for w in desktop.windows():
                     try:
                         title = (w.window_text() or "").lower()
                     except Exception:  # noqa: BLE001
                         continue
-                    if "linkedin" in title:
+                    if "linkedin" in title and "jd collector" not in title:
                         candidates.append(w)
             if not candidates:
                 logger.warning("No LinkedIn browser window title matched")

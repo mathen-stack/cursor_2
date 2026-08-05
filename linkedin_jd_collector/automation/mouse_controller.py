@@ -130,8 +130,19 @@ class MouseController:
             )
         return cx, cy
 
-    def _run(self, action_name: str, fn) -> Any:
+    def _ensure_linkedin_focus(self) -> None:
+        """Keep clicks on the browser, not on this app's Close button."""
+        try:
+            from automation.window_focus import focus_linkedin_browser
+
+            focus_linkedin_browser()
+        except Exception:  # noqa: BLE001
+            logger.debug("LinkedIn focus before mouse action failed", exc_info=True)
+
+    def _run(self, action_name: str, fn, *, focus_browser: bool = False) -> Any:
         self.guard.check()
+        if focus_browser:
+            self._ensure_linkedin_focus()
         logger.info("ACTION start: %s", action_name)
         try:
             result = fn()
@@ -183,7 +194,7 @@ class MouseController:
                 self.backend.click(clicks=clicks, button=button)
 
         label = f"click({x},{y})" if x is not None else "click()"
-        self._run(label, _do)
+        self._run(label, _do, focus_browser=True)
 
     def double_click(
         self,
@@ -204,7 +215,7 @@ class MouseController:
                 self.backend.doubleClick(button=button)
 
         label = f"double_click({x},{y})" if x is not None else "double_click()"
-        self._run(label, _do)
+        self._run(label, _do, focus_browser=True)
 
     def scroll(
         self,
@@ -260,7 +271,7 @@ class MouseController:
             finally:
                 self.backend.mouseUp(button="left")
 
-        self._run(f"select_text({a}->{b})", _do)
+        self._run(f"select_text({a}->{b})", _do, focus_browser=True)
 
 
 # Module-level convenience functions using a shared controller instance.

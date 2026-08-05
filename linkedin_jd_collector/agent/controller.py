@@ -142,19 +142,26 @@ class AgentController(QObject):
         if getattr(sys, "frozen", False):
             self._process.setWorkingDirectory(str(Path(sys.executable).resolve().parent))
         if sys.platform.startswith("win"):
-            # Hide worker console; keep it out of the user's face if it faults.
+            # Isolate the worker so a native AV / Job Object kill cannot take
+            # down the UI process. Also hide any console window.
             create_no_window = 0x08000000
+            create_new_process_group = 0x00000200
+            create_breakaway_from_job = 0x01000000
 
             def _win_modifier(proc_args) -> None:
                 try:
-                    proc_args.flags |= create_no_window
+                    proc_args.flags |= (
+                        create_no_window
+                        | create_new_process_group
+                        | create_breakaway_from_job
+                    )
                 except Exception:  # noqa: BLE001
                     pass
 
             try:
                 self._process.setCreateProcessArgumentsModifier(_win_modifier)
             except Exception:  # noqa: BLE001
-                logger.debug("Could not set CREATE_NO_WINDOW", exc_info=True)
+                logger.debug("Could not set Windows process flags", exc_info=True)
         self._process.start(program, args)
         if not self._process.waitForStarted(8000):
             self._running = False
