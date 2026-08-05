@@ -66,9 +66,13 @@ def test_retired_free_model_migrates_on_load(tmp_path: Path, monkeypatch):
     from ai.openrouter_client import DEFAULT_MODEL
 
     settings_file = tmp_path / "ui_settings.json"
+    payload = {
+        "openrouter_api_key": "sk-x",
+        "vision_model": "qwen/qwen2.5-vl-72b-instruct:free",
+        "output_dir": str(tmp_path),
+    }
     settings_file.write_text(
-        '{"openrouter_api_key":"sk-x","vision_model":"qwen/qwen2.5-vl-72b-instruct:free",'
-        f'"output_dir":"{tmp_path.as_posix()}"}',
+        __import__("json").dumps(payload),
         encoding="utf-8",
     )
     monkeypatch.setattr(paths_mod, "user_data_dir", lambda: tmp_path)
