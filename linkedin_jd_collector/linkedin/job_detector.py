@@ -114,6 +114,16 @@ class JobDetector:
         self._page_processed.add(signature)
         logger.info("Marked skipped for page sig=%s", signature)
 
+    def _sort_top_to_bottom(self) -> None:
+        """Keep left-list cards ordered top → bottom like a human scan."""
+        self.page_cards.sort(
+            key=lambda c: (
+                c.y,
+                c.index if c.index is not None else 10_000,
+                c.x,
+            )
+        )
+
     def seed_heuristic_cards(self, width: int, height: int) -> list[JobCard]:
         """Add left-list click slots if we still have no usable cards."""
         if self.next_unprocessed() is not None:
@@ -126,6 +136,7 @@ class JobDetector:
             if not any(c.signature == card.signature for c in self.page_cards):
                 self.page_cards.append(card)
         self._heuristic_seeded = True
+        self._sort_top_to_bottom()
         return list(self.page_cards)
 
     def parse_job_cards(self, action: VisionAction) -> list[JobCard]:
@@ -186,14 +197,16 @@ class JobDetector:
                 )
 
         if cards:
-            # Merge into page cache
+            # Merge into page cache, always top → bottom.
             for card in cards:
                 if not any(c.signature == card.signature for c in self.page_cards):
                     self.page_cards.append(card)
+            self._sort_top_to_bottom()
             logger.info("Detected %s job card(s) (page cache=%s)", len(cards), len(self.page_cards))
         return cards
 
     def next_unprocessed(self) -> JobCard | None:
+        self._sort_top_to_bottom()
         for card in self.page_cards:
             if card.signature in self.completed_signatures:
                 continue
@@ -214,11 +227,15 @@ class JobDetector:
         Falls back to heuristic left-rail slots when vision returns nothing.
         """
         context = (
-            "CRITICAL: Identify clickable job cards in the LEFT job results list. "
-            "Return action=click target=job_card with coordinates on the FIRST "
-            "unprocessed card center. Also include job_cards array when possible: "
-            '[{"x":120,"y":240,"title":"Role","company":"Acme"}, ...]. '
-            "Do NOT return finish/wait if any job cards are visible. "
+            "HUMAN WORKFLOW — LEFT LIST ONLY:\n"
+            "LinkedIn Jobs is a split view. Job cards are ONLY in the LEFT column.\n"
+            "List every visible left-list job card TOP TO BOTTOM (highest y first in "
+            "the array = top of screen). "
+            "Return action=click target=job_card on the TOPMOST unprocessed card, "
+            "and include job_cards:\n"
+            '[{"x":..,"y":..,"title":"..","company":".."}, ...] ordered top→bottom.\n'
+            "Do NOT click the right detail panel. "
+            "Do NOT return finish/wait if any left-list cards are visible. "
             f"Already completed: {sorted(self.completed_signatures)[-30:]}. "
             f"{extra_context}"
         )
@@ -232,6 +249,7 @@ class JobDetector:
         if not cards and image_size is not None:
             self.seed_heuristic_cards(image_size[0], image_size[1])
             cards = [c for c in self.page_cards if c.signature not in self._page_processed]
+        self._sort_top_to_bottom()
         return cards
 
     def choose_next_job_action(
@@ -242,7 +260,7 @@ class JobDetector:
         image_size: tuple[int, int] | None = None,
     ) -> tuple[JobCard | None, VisionAction]:
         """
-        Determine the next job to open.
+        Determine the next job to open (top → bottom in the left list).
 
         Returns (job_card_or_none, vision_action).
         """
@@ -252,18 +270,22 @@ class JobDetector:
                 action="click",
                 target="job_card",
                 coordinates=Coordinates(pending.x, pending.y),
-                observation=f"Using cached card {pending.title}",
+                observation=(
+                    f"Next left-list job top→bottom: {pending.title} @ {pending.company}"
+                ),
                 detections={"job_cards": True},
                 raw={"job_cards": [pending.__dict__]},
             )
             return pending, synthetic
 
         context = (
-            "Click the next unprocessed job card in the LEFT list "
-            "(action=click target=job_card with coordinates). "
-            "If the list has more cards below, action=scroll with dy=-500 over the list. "
-            "Only use next_page after every visible card on this page was opened. "
-            "Only use finish when there is truly no Next and no cards left. "
+            "HUMAN WORKFLOW — pick ONE next job from the LEFT list, TOP TO BOTTOM.\n"
+            "Click the next unprocessed job card in the LEFT column only "
+            "(action=click target=job_card with coordinates on the card center).\n"
+            "If more cards exist below the fold in the LEFT list, "
+            "action=scroll dy=-500 over the left list (not the right panel).\n"
+            "Only use next_page after every job on this page was opened/copied.\n"
+            "Only use finish when there is truly no Next and no cards left.\n"
             f"Completed signatures: {sorted(self.completed_signatures)[-30:]}. "
             f"{extra_context}"
         )

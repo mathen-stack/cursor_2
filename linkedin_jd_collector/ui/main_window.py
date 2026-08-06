@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.13")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.14")
         self.resize(920, 720)
 
         self.settings = settings or load_settings()
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.13")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.14")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -72,8 +72,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "After you open LinkedIn job results in your browser, start the agent. "
-            "Default Human pace slows every stage so you can watch the full workflow."
+            "Open LinkedIn Jobs, then Start. The agent clicks left-list jobs "
+            "top→bottom, copies each right-panel JD, saves to Documents, then Next page."
         )
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)

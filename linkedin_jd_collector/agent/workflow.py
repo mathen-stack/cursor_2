@@ -296,10 +296,10 @@ class LinkedInWorkflow:
                     self._emit("complete", **self.state.snapshot())
                     break
 
-                # Paginate only after a fully processed page
+                # Bottom of page done → click Next and repeat the same process
                 self._announce_step(
                     "paginate",
-                    "Looking for Next page and clicking it…",
+                    "Left list finished — clicking Next page, then repeat…",
                     WorkflowState.PAGINATE,
                 )
                 self.jobs.reset_page()
@@ -375,7 +375,7 @@ class LinkedInWorkflow:
         screenshot = self._capture()
         self._announce_step(
             "analyze",
-            "Analyzing visible job cards on this page…",
+            "Left list: reading job cards top → bottom…",
             WorkflowState.ANALYZE,
         )
         cards = self.jobs.identify_visible_jobs(
@@ -385,7 +385,10 @@ class LinkedInWorkflow:
         )
         self._emit(
             "ai_decision",
-            ai_decision=f"Identified {len(cards)} visible job card(s)",
+            ai_decision=(
+                f"Left list: {len(cards)} job card(s) ready "
+                "(process one-by-one top→bottom, then Next page)"
+            ),
             **self.state.snapshot(),
         )
 
@@ -504,10 +507,10 @@ class LinkedInWorkflow:
             if self._stopped():
                 return False
             try:
-                # 4. Click job
+                # 1. Click ONE job in the left list (top → bottom order)
                 self._announce_step(
                     "open_job",
-                    f"Moving cursor to job and clicking: {card.title}",
+                    f"Left list: clicking job → {card.title}",
                     WorkflowState.OPEN_JOB,
                 )
                 logger.info(
@@ -527,14 +530,16 @@ class LinkedInWorkflow:
                 except Exception:  # noqa: BLE001
                     time.sleep(1.0)
 
-                # 5. Wait for details panel
+                # 2. Right detail panel opens — wait / scroll until JD area is ready
                 self._announce_step(
                     "wait_detail",
-                    "Waiting for the right-side job details panel…",
+                    "Right panel: waiting for job details (scroll if needed)…",
                     WorkflowState.WAIT_DETAIL,
                 )
                 detail = self.jd.wait_for_details_panel(
-                    self._capture, should_stop=self._stopped
+                    self._capture,
+                    should_stop=self._stopped,
+                    image_size=self._image_size(),
                 )
                 if detail is None and self._stopped():
                     return False
@@ -543,21 +548,20 @@ class LinkedInWorkflow:
                         detail.observation or "Blocked while waiting for job details"
                     )
 
-                # 6. Identify JD section
+                # 3. Find JD in right panel → select → copy once
                 self._announce_step(
                     "find_jd",
-                    "Finding the 'About the job' section…",
+                    "Right panel: finding JD section ('About the job')…",
                     WorkflowState.FIND_JD,
                 )
-                # 7-8. Select → Ctrl+C → clipboard (exact text)
                 self._announce_step(
                     "select_jd",
-                    "Drag-selecting the job description like a human…",
+                    "Right panel: selecting the JD text…",
                     WorkflowState.SELECT_JD,
                 )
                 self._announce_step(
                     "copy_jd",
-                    "Copying selected JD with Ctrl+C…",
+                    "Copying JD (Ctrl+C)…",
                     WorkflowState.COPY_JD,
                     pause=False,
                 )
@@ -565,13 +569,14 @@ class LinkedInWorkflow:
                     self._capture,
                     should_stop=self._stopped,
                     select_fallback_region=self._jd_fallback_region(),
+                    image_size=self._image_size(),
                 )
                 text = extraction.text  # exact clipboard contents; do not modify
 
-                # 9. Save TXT exactly as copied
+                # 4. Paste/save this JD into Documents
                 self._announce_step(
                     "save_jd",
-                    "Saving original JD text to a TXT file…",
+                    "Pasting JD into Documents/LinkedIn_JD…",
                     WorkflowState.SAVE_JD,
                 )
                 saved = self.files.save_jd(
@@ -619,7 +624,7 @@ class LinkedInWorkflow:
                 self.state.stats.jobs_saved += 1
                 self._announce_step(
                     "next_job",
-                    "JD saved — pausing, then moving to the next job…",
+                    "JD saved to Documents — next left-list job…",
                     WorkflowState.NEXT_JOB,
                 )
                 self._emit(

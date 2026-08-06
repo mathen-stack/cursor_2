@@ -118,3 +118,33 @@ def test_accept_click_with_other_target():
     assert card is not None
     assert card.x == 220
     assert "frontend" in card.title.lower()
+
+
+def test_left_list_processed_top_to_bottom():
+    """Cards must be clicked from the top of the left list downward."""
+    vision = FakeVision([])
+    detector = JobDetector(vision=vision)
+    action = VisionAction(
+        action="click",
+        target="job_card",
+        coordinates=Coordinates(100, 200),
+        raw={
+            "job_cards": [
+                {"x": 120, "y": 420, "title": "Bottom", "company": "C"},
+                {"x": 120, "y": 220, "title": "Top", "company": "A"},
+                {"x": 120, "y": 320, "title": "Middle", "company": "B"},
+            ]
+        },
+    )
+    detector.parse_job_cards(action)
+    first = detector.next_unprocessed()
+    assert first is not None
+    assert first.title == "Top"
+    detector.mark_completed(first.signature)
+    second = detector.next_unprocessed()
+    assert second is not None
+    assert second.title == "Middle"
+    detector.mark_completed(second.signature)
+    third = detector.next_unprocessed()
+    assert third is not None
+    assert third.title == "Bottom"

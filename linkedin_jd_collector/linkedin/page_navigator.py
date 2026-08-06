@@ -40,8 +40,9 @@ class PageNavigator:
         extra_context: str = "",
     ) -> VisionAction:
         context = (
-            "The current page's job cards are done. "
-            "Detect the Next and Previous pagination buttons. "
+            "HUMAN WORKFLOW: every job on this page was opened and its JD copied. "
+            "Now find the pagination Next button (usually bottom of the LEFT list "
+            "or under the results). "
             "If Next is visible/enabled, return action=next_page with coordinates "
             "on the Next button. If Next is missing/disabled, return action=finish. "
             f"{extra_context}"

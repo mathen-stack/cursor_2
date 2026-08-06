@@ -27,6 +27,9 @@ class FakeMouse:
     def click(self, x=None, y=None, button="left"):
         self.calls.append(("click", x, y))
 
+    def scroll(self, amount=-3, x=None, y=None, *, dy=None):
+        self.calls.append(("scroll", dy if dy is not None else amount, x, y))
+
     def select_text(self, x1, y1, x2, y2, duration=0.25):
         self.calls.append(("select_text", x1, y1, x2, y2))
 
@@ -134,13 +137,59 @@ def test_extract_jd_focus_point_drags_through_right_panel():
 
 
 def test_right_panel_jd_region_stays_in_detail_pane():
-    from linkedin.jd_detector import right_panel_jd_region
+    from linkedin.jd_detector import right_panel_center, right_panel_jd_region
 
     x1, y1, x2, y2 = right_panel_jd_region(1920, 1080)
     assert x1 > 1920 * 0.3
     assert y1 > 1080 * 0.35  # below Apply / match widgets
     assert x2 > x1
     assert y2 > y1
+    cx, cy = right_panel_center(1920, 1080)
+    assert cx > 1920 * 0.5
+    assert cy > 1080 * 0.4
+
+
+def test_identify_jd_location_scrolls_right_panel_then_copies():
+    """If About the job is below the fold, scroll the right panel first."""
+    from ai.vision_agent import ScrollDelta
+
+    scroll = VisionAction(
+        action="scroll",
+        target="about_the_job",
+        coordinates=Coordinates(1200, 600),
+        scroll=ScrollDelta(dx=0, dy=-400),
+        observation="About the job below fold",
+    )
+    locate = VisionAction(
+        action="copy",
+        target="about_the_job",
+        coordinates=Coordinates(500, 400),
+        detections={"about_the_job": True},
+        raw={"select": {"x1": 480, "y1": 380, "x2": 900, "y2": 800}},
+    )
+    vision = FakeVision([scroll, locate])
+    mouse = FakeMouse()
+    keyboard = FakeKeyboard()
+    detector = JdDetector(
+        vision=vision,
+        mouse=mouse,
+        keyboard=keyboard,
+        clipboard=ClipboardService(
+            backend=FakeClip(), settle_s=0.0, read_retries=1, retry_delay_s=0.0
+        ),
+    )
+    shots = [b"one", b"two"]
+
+    def capture():
+        return shots.pop(0) if shots else b"done"
+
+    action = detector.identify_jd_location(
+        b"start",
+        image_size=(1600, 900),
+        capture=capture,
+    )
+    assert action.action == "copy"
+    assert any(c[0] == "scroll" for c in mouse.calls)
 
 
 def test_extract_jd_fails_when_clipboard_empty():

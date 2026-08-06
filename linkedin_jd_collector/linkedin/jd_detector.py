@@ -25,23 +25,27 @@ from automation.mouse_controller import MouseController
 logger = logging.getLogger(__name__)
 
 JD_LOCATE_PROMPT = (
-    "STAGE: locate LinkedIn job description for drag-select copy.\n"
-    "The right detail panel should show the heading 'About the job' and the "
-    "JD body below it (Role, requirements, offer, etc.).\n"
+    "HUMAN WORKFLOW — RIGHT DETAIL PANEL ONLY:\n"
+    "A left-list job was already clicked. The RIGHT panel shows that job.\n"
+    "Find the JD section under the heading 'About the job' in the RIGHT panel.\n"
+    "If 'About the job' is not visible yet, return action=scroll with dy=-400 "
+    "and coordinates in the RIGHT panel (not the left list) so we can scroll "
+    "the detail scrollbar.\n"
     "If a 'Show more' control truncates the JD, return action=click "
     "target=show_more with coordinates on that control.\n"
-    "Otherwise return action=copy target=about_the_job and include a drag "
-    "region covering the JD like the human workflow:\n"
+    "When About the job + JD body are visible, return action=copy "
+    "target=about_the_job with a drag region:\n"
     '  "select": {"x1":..,"y1":..,"x2":..,"y2":..}\n'
-    "where (x1,y1) is on/near the 'About the job' heading and (x2,y2) is "
-    "near the bottom of the JD text in the RIGHT panel only "
-    "(do not include the left job list, Apply/Save buttons, or browser chrome).\n"
+    "where (x1,y1) is on/near 'About the job' and (x2,y2) is near the bottom "
+    "of the JD text in the RIGHT panel only "
+    "(never include the left job list, Apply/Save, or browser chrome).\n"
     "Also set coordinates to the About the job focus point.\n"
     "Do NOT invent, summarize, or rewrite any job description text."
 )
 
 JD_SELECT_PROMPT = (
-    "STAGE: prepare drag-select of the original 'About the job' body.\n"
+    "STAGE: prepare drag-select of the original 'About the job' body "
+    "in the RIGHT detail panel.\n"
     "Return action=copy target=about_the_job with "
     '"select":{"x1":..,"y1":..,"x2":..,"y2":..} from the About the job '
     "heading down through the full visible JD in the right panel.\n"
@@ -89,6 +93,13 @@ def validate_raw_jd_text(text: str) -> str:
     return raw
 
 
+def right_panel_center(width: int, height: int) -> tuple[int, int]:
+    """Point inside the LinkedIn Jobs right detail panel (for scrolling)."""
+    w = max(1, int(width))
+    h = max(1, int(height))
+    return max(1, int(w * 0.68)), max(1, int(h * 0.55))
+
+
 def right_panel_jd_region(
     width: int, height: int
 ) -> tuple[int, int, int, int]:
@@ -101,10 +112,10 @@ def right_panel_jd_region(
     w = max(1, int(width))
     h = max(1, int(height))
     return (
-        max(0, int(w * 0.38)),
-        max(0, int(h * 0.42)),
-        max(1, int(w * 0.96)),
-        max(1, int(h * 0.90)),
+        max(0, int(w * 0.40)),
+        max(0, int(h * 0.40)),
+        max(1, int(w * 0.97)),
+        max(1, int(h * 0.92)),
     )
 
 
@@ -154,13 +165,38 @@ class JdDetector:
 
     # --- panel readiness -------------------------------------------------
 
+    def _scroll_right_panel(
+        self,
+        *,
+        image_size: tuple[int, int] | None,
+        dy: int = -450,
+        x: int | None = None,
+        y: int | None = None,
+    ) -> None:
+        """Scroll the RIGHT detail panel scrollbar (not the left job list)."""
+        if x is None or y is None:
+            if image_size is None:
+                # Best-effort: move toward typical right-panel center.
+                x, y = 900, 500
+            else:
+                x, y = right_panel_center(image_size[0], image_size[1])
+        logger.info("Scrolling right detail panel at (%s,%s) dy=%s", x, y, dy)
+        self.mouse.move(int(x), int(y))
+        time.sleep(0.15)
+        self.mouse.scroll(dy=dy, x=int(x), y=int(y))
+        time.sleep(0.55)
+
     def wait_for_details_panel(
         self,
         capture: Callable[[], bytes],
         *,
         should_stop: Callable[[], bool] | None = None,
+        image_size: tuple[int, int] | None = None,
     ) -> VisionAction | None:
-        """Wait until the right-side detail / About the job area is visible."""
+        """
+        Wait until the right detail panel is ready, scrolling it if needed
+        until 'About the job' / selected job content is visible.
+        """
         time.sleep(self.detail_wait_s)
         last: VisionAction | None = None
         for attempt in range(1, self.max_detail_attempts + 1):
@@ -170,13 +206,14 @@ class JdDetector:
             last = self.vision.analyze_screenshot(
                 shot,
                 extra_context=(
-                    "STAGE: job card was just clicked. Confirm the right detail "
-                    "panel loaded with 'About the job' visible. "
-                    "If About the job is visible, return action=wait with "
+                    "STAGE: a left-list job was just clicked. "
+                    "Confirm the RIGHT detail panel loaded for that job. "
+                    "If 'About the job' is visible, return action=wait with "
                     "detections.about_the_job=true and detections.selected_job=true. "
+                    "If the right panel loaded but About the job is below the fold, "
+                    "return action=scroll dy=-400 with coordinates in the RIGHT panel. "
                     "If Show more is needed, click show_more. "
-                    "If still loading, action=wait. "
-                    "Do not invent JD text."
+                    "If still loading, action=wait. Do not invent JD text."
                 ),
             )
             logger.info(
@@ -186,6 +223,14 @@ class JdDetector:
                 last.detections.get("selected_job"),
                 last.action,
             )
+            if last.action == "scroll":
+                dy = last.scroll.dy if last.scroll else -400
+                cx = last.coordinates.x if last.coordinates else None
+                cy = last.coordinates.y if last.coordinates else None
+                self._scroll_right_panel(
+                    image_size=image_size, dy=dy, x=cx, y=cy
+                )
+                continue
             if last.action == "click" and last.coordinates and last.target in {
                 "show_more",
                 "about_the_job",
@@ -206,8 +251,12 @@ class JdDetector:
             }:
                 return last
             if last.action == "wait":
+                # Nudge the right panel downward so About the job can appear.
+                if attempt >= 2:
+                    self._scroll_right_panel(image_size=image_size, dy=-350)
                 time.sleep((last.wait_ms or 800) / 1000.0)
             else:
+                self._scroll_right_panel(image_size=image_size, dy=-350)
                 time.sleep(0.6)
         # Proceed optimistically — extract_jd has its own right-panel fallback.
         logger.warning(
@@ -218,18 +267,47 @@ class JdDetector:
 
     # --- step 1: AI identifies JD location -------------------------------
 
-    def identify_jd_location(self, screenshot: bytes) -> VisionAction:
-        """Step 1 — AI identifies where the original JD text is on screen."""
+    def identify_jd_location(
+        self,
+        screenshot: bytes,
+        *,
+        image_size: tuple[int, int] | None = None,
+        capture: Callable[[], bytes] | None = None,
+        should_stop: Callable[[], bool] | None = None,
+        max_scrolls: int = 4,
+    ) -> VisionAction:
+        """
+        Step 1 — Find the JD in the right panel (scroll that panel if needed).
+        """
         action = self.vision.analyze_screenshot(
             screenshot,
             extra_context=JD_LOCATE_PROMPT,
         )
+        scrolls = 0
+        while (
+            action.action == "scroll"
+            and scrolls < max_scrolls
+            and (should_stop is None or not should_stop())
+        ):
+            dy = action.scroll.dy if action.scroll else -400
+            cx = action.coordinates.x if action.coordinates else None
+            cy = action.coordinates.y if action.coordinates else None
+            self._scroll_right_panel(image_size=image_size, dy=dy, x=cx, y=cy)
+            scrolls += 1
+            if capture is None:
+                break
+            action = self.vision.analyze_screenshot(
+                capture(),
+                extra_context=JD_LOCATE_PROMPT,
+            )
+
         logger.info(
-            "JD location action=%s target=%s coords=%s about=%s",
+            "JD location action=%s target=%s coords=%s about=%s scrolls=%s",
             action.action,
             action.target,
             action.coordinates.to_dict() if action.coordinates else None,
             action.detections.get("about_the_job"),
+            scrolls,
         )
 
         # Click Show more / focus JD if AI requested it
@@ -346,9 +424,12 @@ class JdDetector:
         *,
         select_fallback_region: tuple[int, int, int, int] | None = None,
         should_stop: Callable[[], bool] | None = None,
+        image_size: tuple[int, int] | None = None,
     ) -> JdExtractionResult:
         """
-        Run the full JD extraction process and return raw clipboard text.
+        One-job JD extraction (human flow):
+
+        find JD in right panel (scroll if needed) → select → Ctrl+C → raw text.
         """
         last_error: Exception | None = None
         for attempt in range(1, self.max_extract_attempts + 1):
@@ -356,8 +437,13 @@ class JdDetector:
                 raise JdExtractionError("Stop requested during JD extraction")
             try:
                 screenshot = capture()
-                # 1. AI identifies JD location / select box
-                location = self.identify_jd_location(screenshot)
+                # 1. Find JD section in the right panel (scroll that panel if needed)
+                location = self.identify_jd_location(
+                    screenshot,
+                    image_size=image_size,
+                    capture=capture,
+                    should_stop=should_stop,
+                )
 
                 # If show_more was clicked, re-capture before select guidance
                 if location.target == "show_more":
@@ -366,9 +452,14 @@ class JdDetector:
                         screenshot, extra_context=JD_SELECT_PROMPT
                     )
 
+                # Prefer explicit right-panel fallback when AI select box is weak.
+                fallback = select_fallback_region
+                if fallback is None and image_size is not None:
+                    fallback = right_panel_jd_region(image_size[0], image_size[1])
+
                 # 2. Mouse drag-selects text (About the job → end of JD)
                 method = self.select_jd_text(
-                    location, select_fallback_region=select_fallback_region
+                    location, select_fallback_region=fallback
                 )
 
                 # Let the highlight settle so a human can see the selection.
@@ -397,6 +488,8 @@ class JdDetector:
                     self.max_extract_attempts,
                     exc,
                 )
+                # Scroll right panel and retry — JD may be below the fold.
+                self._scroll_right_panel(image_size=image_size, dy=-500)
             except Exception as exc:  # noqa: BLE001
                 last_error = JdExtractionError(str(exc))
                 logger.exception(
@@ -404,6 +497,7 @@ class JdDetector:
                     attempt,
                     self.max_extract_attempts,
                 )
+                self._scroll_right_panel(image_size=image_size, dy=-500)
             time.sleep(0.5)
 
         raise JdExtractionError(
