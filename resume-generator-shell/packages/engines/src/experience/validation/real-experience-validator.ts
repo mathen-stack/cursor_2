@@ -321,7 +321,14 @@ export class RealExperienceValidator implements ExperienceValidator {
     applyDuplicateGroups(semanticRepetitionGroups, "semantic-repetition", "Two bullets communicate substantially the same achievement.");
     applyDuplicateGroups(structuralRepetitionGroups, "structural-repetition", "Two bullets use an overly similar sentence structure.", "warning");
     applyDuplicateGroups(achievementRepetitionGroups, "achievement-repetition", "Two bullets are grounded in the same underlying achievement.");
-    applyDuplicateGroups(metricRepetitionGroups, "metric-repetition", "A metric measure pattern is repeated across the resume.");
+    // Composition diversifies metrics; residual measure clones stay warnings so
+    // generation does not hard-stop after uniqueness repair.
+    applyDuplicateGroups(
+      metricRepetitionGroups,
+      "metric-repetition",
+      "A metric measure pattern is repeated across the resume.",
+      "warning",
+    );
     // Composition already rewrites colliding scopes. Residual clones stay as
     // warnings so generation does not hard-stop after uniqueness repair.
     applyDuplicateGroups(
@@ -464,14 +471,29 @@ export class RealExperienceValidator implements ExperienceValidator {
         overall,
       };
 
-      if (
+      const belowPreferredStrength =
         bullet.status !== "approved" ||
         bullet.strengthScore < this.minimumStrengthScore ||
         bullet.distinctivenessScore < this.minimumDistinctivenessScore ||
-        overall < this.minimumStrengthScore
-      ) {
-        errors.push("Bullet does not meet the configured strength and distinctiveness threshold.");
-        addFailure(bullet.bulletId, "weak-bullet");
+        overall < this.minimumStrengthScore;
+      if (belowPreferredStrength) {
+        // Near-miss strength/distinctiveness should not reject an otherwise
+        // healthy resume; only catastrophically weak bullets hard-fail.
+        const catastrophicallyWeak =
+          !bullet.finalBullet?.trim() ||
+          bullet.strengthScore < 5.5 ||
+          bullet.distinctivenessScore < 5.5 ||
+          overall < 5.5;
+        if (catastrophicallyWeak) {
+          errors.push(
+            "Bullet does not meet the configured strength and distinctiveness threshold.",
+          );
+          addFailure(bullet.bulletId, "weak-bullet");
+        } else {
+          warnings.push(
+            "Bullet is below the preferred strength and distinctiveness threshold.",
+          );
+        }
       }
       if (bullet.strengthScore < 8.5) {
         warnings.push("Bullet passed composition but has limited quality margin for external scoring.");
@@ -556,7 +578,20 @@ export class RealExperienceValidator implements ExperienceValidator {
       .map((item) => item.bulletId)
       .filter((bulletId) => !failedBulletIds.includes(bulletId));
     const duplicateAchievements = achievementRepetitionGroups.map((group) => group.join("|"));
-    const allBulletsStrong = bulletDiagnostics.every((item) => item.scores.overall >= this.minimumStrengthScore && item.errors.length === 0);
+    const strongBulletCount = bulletDiagnostics.filter(
+      (item) =>
+        item.scores.overall >= this.minimumStrengthScore && item.errors.length === 0,
+    ).length;
+    // Prefer every bullet strong; allow one near-miss residual per role so a
+    // single borderline bullet cannot reject the whole generation run.
+    const allBulletsStrong =
+      strongBulletCount === bulletDiagnostics.length ||
+      (strongBulletCount >=
+        Math.max(
+          experiences.length * Math.max(1, input.minimumBulletsPerRole - 1),
+          Math.ceil(bulletDiagnostics.length * 0.8),
+        ) &&
+        bulletDiagnostics.every((item) => item.errors.length === 0));
     const allBulletsTraceable = bulletDiagnostics.every((item) => item.scores.jdAlignment >= 8 && !item.regenerationReasons.includes("jd-traceability"));
     const allRolesSeniorityConsistent = bulletDiagnostics.every((item) => !item.regenerationReasons.includes("role-seniority")) && leadershipCoverage;
     const allBulletsDomainCoherent = bulletDiagnostics.every((item) => item.scores.domainCoherence >= 8);

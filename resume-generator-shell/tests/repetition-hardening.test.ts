@@ -325,6 +325,11 @@ Lead technical strategy.`,
         .every((issue) => issue.severity === "warning"),
     ).toBe(true);
     expect(
+      result.validation.issues
+        .filter((issue) => issue.issueCode === "metric-repetition")
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(
       result.validation.diagnostics.filter((item) =>
         item.errors.some((error) => /filler|self-congratulatory/i.test(error)),
       ),
