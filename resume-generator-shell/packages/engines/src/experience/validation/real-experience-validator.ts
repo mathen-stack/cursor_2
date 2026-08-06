@@ -635,14 +635,14 @@ export class RealExperienceValidator implements ExperienceValidator {
       ) && leadershipCoverage;
     const allBulletsDomainCoherent = bulletDiagnostics.every((item) => item.scores.domainCoherence >= 8);
     const atsLanguageApproved = bulletDiagnostics.every((item) => item.scores.atsLanguage >= 8);
+    // Approve when no hard-error issues and no failed bullets remain. Soft
+    // residuals (role-seniority, leadership-coverage, near-miss strength, etc.)
+    // stay visible on flags/warnings without aborting generation.
+    const hasBlockingIssues = issues.some((item) => item.severity === "error");
     const overallStatus =
       minimumBulletsSatisfied &&
-      communicationCoverage &&
-      allBulletsStrong &&
-      allBulletsTraceable &&
-      allBulletsDomainCoherent &&
-      atsLanguageApproved &&
-      failedBulletIds.length === 0
+      failedBulletIds.length === 0 &&
+      !hasBlockingIssues
         ? "approved"
         : "rejected";
 

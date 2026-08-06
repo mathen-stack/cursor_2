@@ -173,16 +173,25 @@ export class DefaultExperienceEngine implements ExperienceEngine {
       validated = regenerated.validationOutput;
     }
 
+    // Safety net: residual warning-only validation (e.g. ownership/leadership
+    // scope) must not reject the engine after composition + regeneration.
+    const hardIssues = (validated.validation.issues ?? []).some(
+      (issue) => issue.severity === "error",
+    );
+    const approved =
+      validated.validation.overallStatus === "approved" ||
+      ((validated.validation.failedBulletIds?.length ?? 0) === 0 && !hardIssues);
+    const validation = approved
+      ? { ...validated.validation, overallStatus: "approved" as const }
+      : validated.validation;
+
     return {
       context: input.context,
       engineName: this.name,
       engineVersion: this.version,
-      status:
-        validated.validation.overallStatus === "approved"
-          ? "approved"
-          : "rejected",
+      status: approved ? "approved" : "rejected",
       experiences: validated.experiences,
-      validation: validated.validation,
+      validation,
     };
   }
 

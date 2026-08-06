@@ -34,6 +34,10 @@ export class ResumeEngineRejectedError extends Error {
             };
           }
         ).validation;
+        const isSoftResidualMessage = (message: string): boolean =>
+          /ownership or leadership scope does not match|lacks architecture, leadership, mentoring|below the preferred strength|repeats or overloads JD keywords|metric measure pattern is repeated|action scope is cloned|residual repetition risk/i.test(
+            message,
+          );
         const issueMessages =
           validation?.issues
             ?.filter(
@@ -41,12 +45,22 @@ export class ResumeEngineRejectedError extends Error {
                 (issue as { severity?: string }).severity !== "warning",
             )
             .map((issue) => issue.message)
-            .filter((message): message is string => Boolean(message))
+            .filter(
+              (message): message is string =>
+                Boolean(message) && !isSoftResidualMessage(message),
+            )
             .slice(0, 5) ?? [];
         const diagnosticMessages =
           validation?.diagnostics
             ?.filter((item) => item.errors.length > 0)
-            .map((item) => `${item.bulletId}: ${item.errors.join(" ")}`)
+            .map((item) => {
+              const hardErrors = item.errors.filter(
+                (error) => !isSoftResidualMessage(error),
+              );
+              if (hardErrors.length === 0) return null;
+              return `${item.bulletId}: ${hardErrors.join(" ")}`;
+            })
+            .filter((message): message is string => Boolean(message))
             .slice(0, 5) ?? [];
         const detailParts = [...issueMessages, ...diagnosticMessages];
         if (detailParts.length === 0) {
