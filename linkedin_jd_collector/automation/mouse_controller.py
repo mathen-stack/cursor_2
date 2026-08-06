@@ -99,7 +99,7 @@ class MouseController:
 
                 move_duration_s = resolve_pace().move_duration_s
             except Exception:  # noqa: BLE001
-                move_duration_s = 0.85
+                move_duration_s = 0.55
         self.move_duration_s = max(0.0, float(move_duration_s))
         if not self._lazy_backend and self._backend is None:
             self._backend = _load_pyautogui()
@@ -169,7 +169,7 @@ class MouseController:
             raise AutomationError(f"{action_name} failed: {exc}") from exc
 
     def move(self, x: int, y: int, *, duration: float | None = None) -> tuple[int, int]:
-        """Move mouse pointer to screen coordinates (x, y)."""
+        """Move mouse pointer to screen coordinates (x, y) over LinkedIn."""
         cx, cy = self._clamp(x, y)
         dur = self.move_duration_s if duration is None else max(0.0, duration)
 
@@ -178,7 +178,8 @@ class MouseController:
             self.backend.moveTo(cx, cy, duration=dur)
             return cx, cy
 
-        return self._run(f"move({cx},{cy})", _do)
+        # Focus LinkedIn first so the animated pointer path is visible on the page.
+        return self._run(f"move({cx},{cy})", _do, focus_browser=True)
 
     def click(
         self,

@@ -36,7 +36,7 @@ def test_main_window_builds_and_shows_status(qapp, tmp_path, monkeypatch):
     )
     window = MainWindow(settings=settings)
     assert "LinkedIn JD Collector Agent" in window.windowTitle()
-    assert "v1.0.16" in window.windowTitle()
+    assert "v1.0.17" in window.windowTitle()
     assert window.status_label.text() == "Waiting"
     assert window.btn_start.text() == "Start Agent"
     assert window.btn_pause.text() == "Pause"
@@ -56,4 +56,15 @@ def test_main_window_builds_and_shows_status(qapp, tmp_path, monkeypatch):
     assert "Current job:" in text
     assert "Page number: 2" in text or "Page: 2" in text
     assert "boom" in text
+
+    # Docking reserves a bottom strip and remembers the prior geometry.
+    before = window.geometry()
+    window._dock_down_for_run()
+    assert window._hidden_for_run is True
+    assert window._pre_run_geometry is not None
+    assert window._pre_run_geometry == before
+    assert window._bottom_strip_px >= 180
+    window._restore_after_run()
+    assert window._hidden_for_run is False
+    assert window._pre_run_geometry is None
     window.close()

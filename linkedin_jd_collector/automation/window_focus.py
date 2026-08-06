@@ -4,6 +4,9 @@ Lightweight Win32 window focus helper (ctypes only — no pywinauto).
 Used so automation clicks hit the LinkedIn browser instead of this app's UI.
 Critical: must NEVER focus the Collector window itself (its title contains
 "LinkedIn"), or clicks can land on our Close button and "turn the app off".
+
+Also positions LinkedIn above a bottom strip so the Collector can dock down
+and the user can watch mouse-pointer movement on the Jobs page.
 """
 
 from __future__ import annotations
@@ -31,6 +34,9 @@ _BROWSER_TOKENS = (
     "vivaldi",
     "chromium",
 )
+
+# Default height reserved at the bottom for the docked Collector UI.
+DEFAULT_BOTTOM_STRIP_PX = 260
 
 _last_focus_monotonic: float = 0.0
 
@@ -69,36 +75,27 @@ def _browser_rank(title: str) -> int:
     return score
 
 
-def focus_linkedin_browser(*, force: bool = False, min_interval_s: float = 1.25) -> bool:
-    """Bring a LinkedIn browser window to the foreground. Windows-only."""
-    global _last_focus_monotonic
-    if not sys.platform.startswith("win"):
-        return False
-
-    now = time.monotonic()
-    if not force and (now - _last_focus_monotonic) < min_interval_s:
-        return True
-
-    try:
-        import ctypes
-        from ctypes import wintypes
-    except Exception:  # noqa: BLE001
-        return False
+def _win32_user32():
+    import ctypes
+    from ctypes import wintypes
 
     user32 = ctypes.windll.user32
+    return ctypes, wintypes, user32
+
+
+def _find_linkedin_hwnd() -> tuple[int, str] | None:
+    """Return (hwnd, title) for the best LinkedIn browser window, or None."""
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        ctypes, wintypes, user32 = _win32_user32()
+    except Exception:  # noqa: BLE001
+        return None
+
     EnumWindows = user32.EnumWindows
     IsWindowVisible = user32.IsWindowVisible
     GetWindowTextW = user32.GetWindowTextW
     GetWindowTextLengthW = user32.GetWindowTextLengthW
-    SetForegroundWindow = user32.SetForegroundWindow
-    ShowWindow = user32.ShowWindow
-    BringWindowToTop = user32.BringWindowToTop
-    GetForegroundWindow = user32.GetForegroundWindow
-    GetWindowThreadProcessId = user32.GetWindowThreadProcessId
-    AttachThreadInput = user32.AttachThreadInput
-    AllowSetForegroundWindow = getattr(user32, "AllowSetForegroundWindow", None)
-
-    SW_RESTORE = 9
     EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
 
     matches: list[tuple[int, str, int]] = []
@@ -126,14 +123,28 @@ def focus_linkedin_browser(*, force: bool = False, min_interval_s: float = 1.25)
         EnumWindows(EnumWindowsProc(_enum), 0)
     except Exception:  # noqa: BLE001
         logger.exception("EnumWindows failed")
-        return False
+        return None
 
     if not matches:
-        logger.warning("No LinkedIn browser window found to focus")
-        return False
-
+        return None
     matches.sort(key=lambda item: item[2], reverse=True)
     hwnd, title, _rank = matches[0]
+    return hwnd, title
+
+
+def _set_foreground(hwnd: int) -> bool:
+    """Best-effort SetForegroundWindow with AttachThreadInput."""
+    try:
+        ctypes, wintypes, user32 = _win32_user32()
+    except Exception:  # noqa: BLE001
+        return False
+
+    SetForegroundWindow = user32.SetForegroundWindow
+    BringWindowToTop = user32.BringWindowToTop
+    GetForegroundWindow = user32.GetForegroundWindow
+    GetWindowThreadProcessId = user32.GetWindowThreadProcessId
+    AttachThreadInput = user32.AttachThreadInput
+    AllowSetForegroundWindow = getattr(user32, "AllowSetForegroundWindow", None)
 
     try:
         if AllowSetForegroundWindow is not None:
@@ -142,10 +153,7 @@ def focus_linkedin_browser(*, force: bool = False, min_interval_s: float = 1.25)
             except Exception:  # noqa: BLE001
                 pass
 
-        ShowWindow(hwnd, SW_RESTORE)
         BringWindowToTop(hwnd)
-
-        # AttachThreadInput helps when Windows blocks SetForegroundWindow.
         fg = GetForegroundWindow()
         pid = wintypes.DWORD()
         fg_tid = GetWindowThreadProcessId(fg, ctypes.byref(pid)) if fg else 0
@@ -158,12 +166,120 @@ def focus_linkedin_browser(*, force: bool = False, min_interval_s: float = 1.25)
         finally:
             if attached:
                 AttachThreadInput(fg_tid, target_tid, False)
+        return True
+    except Exception:  # noqa: BLE001
+        logger.exception("SetForegroundWindow failed")
+        return False
 
+
+def arrange_linkedin_above_bottom_strip(
+    bottom_strip_px: int = DEFAULT_BOTTOM_STRIP_PX,
+) -> bool:
+    """
+    Place the LinkedIn browser in the work area above a bottom strip.
+
+    Leaves the bottom of the screen free so the Collector UI can dock there
+    and the mouse pointer path over LinkedIn stays visible.
+    """
+    if not sys.platform.startswith("win"):
+        return False
+    found = _find_linkedin_hwnd()
+    if found is None:
+        logger.warning("No LinkedIn browser window found to arrange")
+        return False
+
+    hwnd, title = found
+    strip = max(160, int(bottom_strip_px))
+
+    try:
+        ctypes, wintypes, user32 = _win32_user32()
+        SW_RESTORE = 9
+        SW_SHOW = 5
+        HWND_TOP = 0
+        SWP_SHOWWINDOW = 0x0040
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        work = RECT()
+        # SPI_GETWORKAREA = 0x0030 — excludes taskbar
+        if not ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
+            # Fallback to primary monitor metrics
+            left = 0
+            top = 0
+            width = int(user32.GetSystemMetrics(0))
+            height = int(user32.GetSystemMetrics(1))
+        else:
+            left = int(work.left)
+            top = int(work.top)
+            width = max(400, int(work.right - work.left))
+            height = max(300, int(work.bottom - work.top))
+
+        linkedin_h = max(240, height - strip)
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.ShowWindow(hwnd, SW_SHOW)
+        ok = bool(
+            user32.SetWindowPos(
+                hwnd,
+                HWND_TOP,
+                left,
+                top,
+                width,
+                linkedin_h,
+                SWP_SHOWWINDOW,
+            )
+        )
+        if ok:
+            _set_foreground(hwnd)
+            logger.info(
+                "Arranged LinkedIn above bottom strip hwnd=%s title=%r "
+                "geom=%sx%s+%s+%s strip=%s",
+                hwnd,
+                title,
+                width,
+                linkedin_h,
+                left,
+                top,
+                strip,
+            )
+        return ok
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to arrange LinkedIn above bottom strip")
+        return False
+
+
+def focus_linkedin_browser(*, force: bool = False, min_interval_s: float = 1.25) -> bool:
+    """Bring a LinkedIn browser window to the foreground. Windows-only."""
+    global _last_focus_monotonic
+    if not sys.platform.startswith("win"):
+        return False
+
+    now = time.monotonic()
+    if not force and (now - _last_focus_monotonic) < min_interval_s:
+        return True
+
+    found = _find_linkedin_hwnd()
+    if found is None:
+        logger.warning("No LinkedIn browser window found to focus")
+        return False
+
+    hwnd, title = found
+    try:
+        ctypes, _wintypes, user32 = _win32_user32()
+        SW_RESTORE = 9
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        if not _set_foreground(hwnd):
+            return False
         _last_focus_monotonic = time.monotonic()
         logger.info("Focused LinkedIn browser hwnd=%s title=%r", hwnd, title)
         return True
     except Exception:  # noqa: BLE001
-        logger.exception("SetForegroundWindow failed")
+        logger.exception("Focus LinkedIn browser failed")
         return False
 
 

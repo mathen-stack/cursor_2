@@ -19,6 +19,8 @@ def test_default_pace_is_human(monkeypatch):
     assert pace.detail_wait_s <= 1.0
     assert pace.page_load_wait_s <= 2.0
     assert pace.step_announce_s <= 0.4
+    # Mouse travel should stay visible on the LinkedIn page.
+    assert pace.move_duration_s >= 0.45
 
 
 def test_fast_pace(monkeypatch):

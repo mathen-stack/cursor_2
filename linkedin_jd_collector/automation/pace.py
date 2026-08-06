@@ -39,7 +39,8 @@ class AutomationPace:
 HUMAN = AutomationPace(
     name="human",
     safety_delay_s=0.45,
-    move_duration_s=0.35,
+    # Long enough that the pointer path is clearly visible on LinkedIn.
+    move_duration_s=0.55,
     select_drag_s=0.95,
     after_select_s=0.3,
     after_click_s=0.35,

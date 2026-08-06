@@ -10,8 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QCloseEvent, QFont
+from PyQt6.QtCore import QRect, Qt, QTimer
+from PyQt6.QtGui import QCloseEvent, QFont, QGuiApplication
 from PyQt6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -42,12 +42,14 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.16")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.17")
         self.resize(920, 720)
 
         self.settings = settings or load_settings()
         self.controller = AgentController(self)
         self._hidden_for_run = False
+        self._pre_run_geometry: QRect | None = None
+        self._bottom_strip_px = 260
 
         self._build_ui()
         self._bind_controller()
@@ -64,7 +66,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.16")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.17")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -140,9 +142,9 @@ class MainWindow(QMainWindow):
         form.addRow("Vision Model Name", self.model_input)
         form.addRow("Automation Pace", self.pace_combo)
         model_hint = QLabel(
-            "Tip: Human pace stays watchable with short screen-capture waits "
-            "(detect → click → wait → drag-select → Ctrl+C → save). "
-            f"Free default model: {DEFAULT_MODEL}"
+            "Tip: On Start, this window docks at the bottom and LinkedIn stays "
+            "above so you can watch the mouse. Human pace keeps moves visible "
+            f"with short capture waits. Free default model: {DEFAULT_MODEL}"
         )
         model_hint.setWordWrap(True)
         model_hint.setStyleSheet("color: #555;")
@@ -221,15 +223,16 @@ class MainWindow(QMainWindow):
                 f"{settings.output_dir or default_output_dir()}"
             )
             self.log_panel.info(
-                "Focusing LinkedIn, then minimizing this window so clicks "
-                "cannot hit Close on the Collector."
+                "Moving this window down and placing LinkedIn above it so you "
+                "can watch the mouse pointer on the Jobs page."
             )
             self._set_buttons_running()
-            # Focus LinkedIn while we still hold foreground rights (user click).
+            # Dock down + arrange LinkedIn while we still hold foreground rights.
+            self._dock_down_for_run()
             self._focus_linkedin_for_run()
             self.controller.start(settings)
-            # After the worker is spawned, get our UI out of the click path.
-            QTimer.singleShot(250, self._minimize_for_run)
+            # Re-assert layout after the worker spawns (Windows can reshuffle).
+            QTimer.singleShot(300, self._reassert_watch_layout)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Start Agent failed")
             self._restore_after_run()
@@ -325,7 +328,7 @@ class MainWindow(QMainWindow):
         self.btn_pause.setText("Pause")
         self.saved_label.setText(f"Saved: {snap.get('jobs_saved', 0)}")
         self.log_panel.info(
-            "Agent finished. Window restored — use Stop next time from the taskbar."
+            "Agent finished. Collector window restored to its normal size."
         )
 
     def _on_failed(self, message: str) -> None:
@@ -362,33 +365,68 @@ class MainWindow(QMainWindow):
 
     def _focus_linkedin_for_run(self) -> None:
         try:
-            from automation.window_focus import focus_linkedin_browser
+            from automation.window_focus import (
+                arrange_linkedin_above_bottom_strip,
+                focus_linkedin_browser,
+            )
 
+            arranged = arrange_linkedin_above_bottom_strip(self._bottom_strip_px)
             ok = focus_linkedin_browser(force=True)
-            if ok:
-                self.log_panel.info("LinkedIn browser focused")
+            if arranged or ok:
+                self.log_panel.info(
+                    "LinkedIn placed above this window — watch the mouse on the Jobs page."
+                )
             else:
                 self.log_panel.append(
-                    "Could not auto-focus LinkedIn — keep the Jobs tab in front.",
+                    "Could not auto-arrange LinkedIn — keep the Jobs tab in front "
+                    "so mouse movement stays visible.",
                     level="WARN",
                 )
         except Exception:  # noqa: BLE001
-            logger.debug("UI LinkedIn focus failed", exc_info=True)
+            logger.debug("UI LinkedIn focus/arrange failed", exc_info=True)
 
-    def _minimize_for_run(self) -> None:
-        if not self.controller.is_running:
-            return
+    def _work_area(self) -> QRect:
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is None:
+            return QRect(0, 0, 1280, 720)
+        return screen.availableGeometry()
+
+    def _dock_down_for_run(self) -> None:
+        """Move Collector to a bottom strip so LinkedIn + mouse stay visible."""
+        if self._pre_run_geometry is None:
+            self._pre_run_geometry = self.geometry()
         self._hidden_for_run = True
-        self.showMinimized()
+        if self.isMinimized():
+            self.showNormal()
+        area = self._work_area()
+        strip = max(180, min(self._bottom_strip_px, area.height() // 3))
+        self._bottom_strip_px = strip
+        geo = QRect(area.left(), area.bottom() - strip + 1, area.width(), strip)
+        self.setGeometry(geo)
+        self.show()
+        self.raise_()
         self.log_panel.info(
-            "Collector minimized while agent runs (restore from taskbar to Stop)."
+            f"Collector docked at bottom ({strip}px) so LinkedIn stays visible above."
         )
 
+    def _reassert_watch_layout(self) -> None:
+        """Keep the bottom-dock + LinkedIn layout after the worker starts."""
+        if not self.controller.is_running:
+            return
+        self._dock_down_for_run()
+        self._focus_linkedin_for_run()
+
     def _restore_after_run(self) -> None:
-        if not self._hidden_for_run and not self.isMinimized():
+        if not self._hidden_for_run and self._pre_run_geometry is None:
             return
         self._hidden_for_run = False
-        self.showNormal()
+        if self.isMinimized():
+            self.showNormal()
+        if self._pre_run_geometry is not None:
+            self.setGeometry(self._pre_run_geometry)
+            self._pre_run_geometry = None
+        else:
+            self.showNormal()
         self.raise_()
         self.activateWindow()
 
@@ -406,9 +444,9 @@ class MainWindow(QMainWindow):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
-                # Stay out of the click path if we were minimized for a run.
+                # Stay docked at the bottom so clicks keep landing on LinkedIn.
                 if self._hidden_for_run:
-                    self.showMinimized()
+                    self._dock_down_for_run()
                 return
             try:
                 self.controller.stop()

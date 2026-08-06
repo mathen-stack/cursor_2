@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from automation.window_focus import (
+    DEFAULT_BOTTOM_STRIP_PX,
     _browser_rank,
     _is_linkedin_browser_title,
     _is_self_app_title,
+    arrange_linkedin_above_bottom_strip,
+    focus_linkedin_browser,
 )
 
 
@@ -26,3 +29,10 @@ def test_browser_rank_prefers_chrome_over_generic():
     chrome = _browser_rank("Jobs | LinkedIn - Google Chrome")
     generic = _browser_rank("Jobs | LinkedIn")
     assert chrome > generic
+
+
+def test_arrange_and_focus_are_noop_off_windows():
+    # Linux/mac CI: helpers must fail soft without raising.
+    assert DEFAULT_BOTTOM_STRIP_PX >= 160
+    assert arrange_linkedin_above_bottom_strip() is False
+    assert focus_linkedin_browser(force=True) is False
