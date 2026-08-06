@@ -1,0 +1,89 @@
+name: Windows EXE Build
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-exe:
+    name: Build LinkedIn_JD_Collector.exe
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: linkedin_jd_collector
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller pynput pywin32
+
+      - name: Verify icon exists
+        run: |
+          if (!(Test-Path "resources\app.ico")) { throw "Missing resources/app.ico" }
+          Get-Item "resources\app.ico" | Format-List FullName, Length
+
+      - name: Build EXE (onedir)
+        run: python build\build_exe.py
+
+      - name: Verify EXE artifact
+        run: |
+          $exe = "dist\LinkedIn_JD_Collector\LinkedIn_JD_Collector.exe"
+          if (!(Test-Path $exe)) { throw "EXE not found: $exe" }
+          $item = Get-Item $exe
+          if ($item.Length -lt 100000) { throw "EXE unexpectedly small: $($item.Length) bytes" }
+          Write-Host "EXE OK: $($item.FullName) ($($item.Length) bytes)"
+
+      - name: Smoke-launch EXE (short)
+        run: |
+          $exe = Resolve-Path "dist\LinkedIn_JD_Collector\LinkedIn_JD_Collector.exe"
+          # Windowed GUI app: start process, confirm it stays alive briefly, then stop.
+          $p = Start-Process -FilePath $exe -PassThru -WorkingDirectory (Split-Path $exe)
+          Start-Sleep -Seconds 8
+          if ($p.HasExited -and $p.ExitCode -ne 0) {
+            throw "EXE exited early with code $($p.ExitCode)"
+          }
+          if (-not $p.HasExited) {
+            Stop-Process -Id $p.Id -Force
+            Write-Host "EXE launched successfully and was stopped after smoke window."
+          } else {
+            Write-Host "EXE exited during smoke window with code $($p.ExitCode)"
+          }
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Build installer
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "ISCC not found at $iscc" }
+          & $iscc "build\installer.iss"
+          $setup = "dist\installer\LinkedIn_JD_Collector_Setup.exe"
+          if (!(Test-Path $setup)) { throw "Installer not found: $setup" }
+          Write-Host "Installer OK: $((Get-Item $setup).FullName)"
+
+      - name: Upload EXE folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinkedIn_JD_Collector-windows-onedir
+          path: linkedin_jd_collector/dist/LinkedIn_JD_Collector/**
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinkedIn_JD_Collector-windows-setup
+          path: linkedin_jd_collector/dist/installer/LinkedIn_JD_Collector_Setup.exe

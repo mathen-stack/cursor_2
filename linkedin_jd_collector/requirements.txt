@@ -1,0 +1,29 @@
+# LinkedIn JD Collector Agent — Python dependencies
+# Structure only; versions may be pinned during implementation.
+
+# Desktop UI
+PyQt6
+
+# Automation
+pyautogui
+pywinauto
+# Optional on Windows for emergency-stop hotkey listener (graceful fallback if missing)
+pynput; platform_system=="Windows"
+
+# Screenshot / imaging
+mss
+Pillow
+
+# Clipboard
+pyperclip
+
+# AI / HTTP
+httpx
+python-dotenv
+pydantic
+
+# Packaging (dev/build)
+pyinstaller
+
+# Tests
+pytest
