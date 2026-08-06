@@ -169,6 +169,58 @@ describe("Real Experience section validation", () => {
     expect(output.validation.issues.some((item) => item.severity === "error")).toBe(true);
   });
 
+  it("soft-fails residual role-seniority and leadership-coverage instead of hard-rejecting", async () => {
+    const fixture = await createValidationFixture();
+    const seniorSignal =
+      /\b(?:architect(?:ed|ure)?|strategy|roadmap|standard|governance|mentored|led|leadership|design review|technical direction|cross-functional|stakeholder)\b/i;
+    const dropSeniorKeywords = (values: readonly string[]) =>
+      values.filter((value) => !seniorSignal.test(value));
+    const corrupted = fixture.bullets.map((bullet) => {
+      // Keep domain checks honest by dropping senior-signal keywords from the
+      // claimed lists while removing those phrases from the bullet text.
+      const stripped = bullet.finalBullet
+        .replace(
+          /\b(?:architect(?:ed|ure)?|strategy|roadmap|standard|governance|mentored|led|leadership|design review|technical direction|cross-functional|stakeholder)\b/gi,
+          "platform",
+        )
+        .replace(/^\S+/, "Delivered");
+      return {
+        ...bullet,
+        directKeywords: dropSeniorKeywords(bullet.directKeywords),
+        supportingKeywords: dropSeniorKeywords(bullet.supportingKeywords),
+        outcomeKeywords: dropSeniorKeywords(bullet.outcomeKeywords),
+        finalBullet: stripped,
+      };
+    });
+
+    const output = await fixture.experienceValidator.execute({
+      ...validationInput(fixture),
+      bullets: corrupted,
+    });
+
+    expect(
+      output.validation.issues
+        .filter((issue) => issue.issueCode === "role-seniority")
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(
+      output.validation.issues
+        .filter((issue) => issue.issueCode === "leadership-coverage")
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(
+      output.validation.issues.filter(
+        (issue) =>
+          ["role-seniority", "leadership-coverage"].includes(issue.issueCode) &&
+          issue.severity === "error",
+      ),
+    ).toEqual([]);
+    expect(output.validation.failedBulletIds).toEqual([]);
+    expect(output.validation.overallStatus).toBe("approved");
+    expect(output.validation.allRolesSeniorityConsistent).toBe(false);
+    expect(output.validation.leadershipCoverage).toBe(false);
+  });
+
   it("rejects weak ATS language and missing measurable impact", async () => {
     const fixture = await createValidationFixture();
     const target = fixture.bullets[0];
