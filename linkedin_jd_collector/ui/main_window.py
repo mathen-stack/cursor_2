@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.15")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.16")
         self.resize(920, 720)
 
         self.settings = settings or load_settings()
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.15")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.16")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -140,8 +140,8 @@ class MainWindow(QMainWindow):
         form.addRow("Vision Model Name", self.model_input)
         form.addRow("Automation Pace", self.pace_combo)
         model_hint = QLabel(
-            "Tip: Human pace is slower on purpose so you can follow detect → "
-            "click → wait → drag-select → Ctrl+C → save. "
+            "Tip: Human pace stays watchable with short screen-capture waits "
+            "(detect → click → wait → drag-select → Ctrl+C → save). "
             f"Free default model: {DEFAULT_MODEL}"
         )
         model_hint.setWordWrap(True)

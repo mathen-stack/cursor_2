@@ -157,11 +157,11 @@ class JdDetector:
         except Exception:  # noqa: BLE001
             pace = None
         if self.detail_wait_s is None:
-            self.detail_wait_s = pace.detail_wait_s if pace else 2.2
+            self.detail_wait_s = pace.detail_wait_s if pace else 0.8
         if self.select_drag_duration_s is None:
-            self.select_drag_duration_s = pace.select_drag_s if pace else 2.0
+            self.select_drag_duration_s = pace.select_drag_s if pace else 0.95
         if self.after_select_s is None:
-            self.after_select_s = pace.after_select_s if pace else 0.9
+            self.after_select_s = pace.after_select_s if pace else 0.3
 
     # --- panel readiness -------------------------------------------------
 

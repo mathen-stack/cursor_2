@@ -34,19 +34,20 @@ class AutomationPace:
     step_announce_s: float
 
 
-# Watchable human pace: slow enough to follow each stage live.
+# Watchable human pace: followable on screen, but short waits before
+# each screenshot so capture cycles do not feel idle.
 HUMAN = AutomationPace(
     name="human",
-    safety_delay_s=1.0,
-    move_duration_s=0.85,
-    select_drag_s=2.0,
-    after_select_s=0.9,
-    after_click_s=1.0,
-    copy_settle_s=0.55,
-    detail_wait_s=2.2,
-    between_jobs_s=2.0,
-    page_load_wait_s=3.0,
-    step_announce_s=0.85,
+    safety_delay_s=0.45,
+    move_duration_s=0.35,
+    select_drag_s=0.95,
+    after_select_s=0.3,
+    after_click_s=0.35,
+    copy_settle_s=0.25,
+    detail_wait_s=0.8,
+    between_jobs_s=0.7,
+    page_load_wait_s=1.5,
+    step_announce_s=0.25,
 )
 
 FAST = AutomationPace(
@@ -57,9 +58,9 @@ FAST = AutomationPace(
     after_select_s=0.1,
     after_click_s=0.15,
     copy_settle_s=0.12,
-    detail_wait_s=1.0,
+    detail_wait_s=0.45,
     between_jobs_s=0.35,
-    page_load_wait_s=1.6,
+    page_load_wait_s=1.0,
     step_announce_s=0.0,
 )
 

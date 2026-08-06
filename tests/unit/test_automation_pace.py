@@ -11,10 +11,14 @@ def test_default_pace_is_human(monkeypatch):
     pace = resolve_pace()
     assert pace.name == "human"
     assert pace.move_duration_s == HUMAN.move_duration_s
-    assert pace.select_drag_s >= 1.5
-    assert pace.safety_delay_s >= 0.75
+    assert pace.select_drag_s >= 0.8
+    assert pace.safety_delay_s >= 0.35
     assert pace.step_announce_s > 0
-    assert pace.between_jobs_s >= 1.5
+    assert pace.between_jobs_s >= 0.5
+    # Capture-related waits should stay short so screen grabs are not idle-heavy.
+    assert pace.detail_wait_s <= 1.0
+    assert pace.page_load_wait_s <= 2.0
+    assert pace.step_announce_s <= 0.4
 
 
 def test_fast_pace(monkeypatch):

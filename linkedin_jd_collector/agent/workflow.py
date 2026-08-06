@@ -71,9 +71,9 @@ class WorkflowConfig:
         except Exception:  # noqa: BLE001
             pace = None
         if self.detail_wait_s is None:
-            self.detail_wait_s = pace.detail_wait_s if pace else 2.2
+            self.detail_wait_s = pace.detail_wait_s if pace else 0.8
         if self.between_jobs_s is None:
-            self.between_jobs_s = pace.between_jobs_s if pace else 2.0
+            self.between_jobs_s = pace.between_jobs_s if pace else 0.7
 
 
 class LinkedInWorkflow:
@@ -170,7 +170,7 @@ class LinkedInWorkflow:
 
             delay = float(resolve_pace().step_announce_s)
         except Exception:  # noqa: BLE001
-            delay = 0.85
+            delay = 0.25
         if delay > 0:
             time.sleep(delay)
 
@@ -528,7 +528,7 @@ class LinkedInWorkflow:
 
                     time.sleep(resolve_pace().after_click_s)
                 except Exception:  # noqa: BLE001
-                    time.sleep(1.0)
+                    time.sleep(0.35)
 
                 # 2. Right detail panel opens — wait / scroll until JD area is ready
                 self._announce_step(
