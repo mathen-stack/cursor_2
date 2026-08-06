@@ -250,6 +250,43 @@ describe("Real JD Requirement Extraction Engine", () => {
     expect(result.requirements[0]?.normalizedText).toMatch(/collaborate/i);
   });
 
+  it("skips empty normalizedText candidates without failing the run", async () => {
+    const jd =
+      "Collaborate with product stakeholders and communicate architecture decisions to engineering teams while delivering production services.";
+    const input = createExtractorInput(jd);
+    const extractor = new RealRequirementExtractor({
+      model: new StaticStructuredModel({
+        requirements: [
+          {
+            sourceText: jd,
+            normalizedText: "   ",
+            category: "technical-skill",
+            priority: "high",
+            necessity: "implied",
+          },
+          {
+            sourceText: jd,
+            normalizedText: "",
+            category: "tool-or-platform",
+            priority: "medium",
+            necessity: "preferred",
+          },
+          {
+            sourceText: jd,
+            normalizedText: "Collaborate with product stakeholders.",
+            category: "collaboration",
+            priority: "high",
+            necessity: "implied",
+          },
+        ],
+      }),
+    });
+
+    const result = await extractor.execute(input);
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]?.normalizedText).toMatch(/collaborate/i);
+  });
+
   it("rejects an empty JD without fabricating requirements", async () => {
     const jobDescription = createJobDescription("") as JobDescription;
     const input = {
