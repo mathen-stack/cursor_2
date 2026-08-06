@@ -10,6 +10,7 @@ import {
   directKeywordRepresented,
   ensureCompositionCommunicationSignal,
   ensureAllocatedOpeningVerb,
+  ensureUniqueActionScopeBullet,
   finalizeComposedBullet,
   actionScopeFingerprint,
   actionScopePhraseKeys,
@@ -718,6 +719,33 @@ export class RealBulletComposer implements BulletComposer {
             finalBullet: finalized,
           });
         });
+        validation = runValidation();
+      }
+    }
+
+    // Final document-wide action-scope uniquify. Per-bullet finalize already
+    // claims scopes, but later repairs can reintroduce clones — reassert once.
+    {
+      const usedScopeKeys = new Set<string>();
+      const before = drafts.map((draft) => draft.finalBullet).join("\n");
+      drafts = drafts.map((draft) => {
+        const verb = draft.actionVerb.trim();
+        const uniquified = ensureUniqueActionScopeBullet({
+          finalBullet: draft.finalBullet,
+          actionVerb: verb,
+          bulletId: draft.bulletId,
+          usedScopeKeys,
+          minimumWords,
+        });
+        if (uniquified === draft.finalBullet) {
+          return draft;
+        }
+        return syncClaimedKeywords({
+          ...draft,
+          finalBullet: uniquified,
+        });
+      });
+      if (drafts.map((draft) => draft.finalBullet).join("\n") !== before) {
         validation = runValidation();
       }
     }

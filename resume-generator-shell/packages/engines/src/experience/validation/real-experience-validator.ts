@@ -322,10 +322,13 @@ export class RealExperienceValidator implements ExperienceValidator {
     applyDuplicateGroups(structuralRepetitionGroups, "structural-repetition", "Two bullets use an overly similar sentence structure.", "warning");
     applyDuplicateGroups(achievementRepetitionGroups, "achievement-repetition", "Two bullets are grounded in the same underlying achievement.");
     applyDuplicateGroups(metricRepetitionGroups, "metric-repetition", "A metric measure pattern is repeated across the resume.");
+    // Composition already rewrites colliding scopes. Residual clones stay as
+    // warnings so generation does not hard-stop after uniqueness repair.
     applyDuplicateGroups(
       actionScopeRepetitionGroups,
       "action-scope-repetition",
       "The same multi-word action scope is cloned across bullets.",
+      "warning",
     );
 
     const bulletDiagnostics: ExperienceBulletDiagnostic[] = [];

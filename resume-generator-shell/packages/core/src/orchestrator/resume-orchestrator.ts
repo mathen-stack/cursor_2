@@ -36,7 +36,11 @@ export class ResumeEngineRejectedError extends Error {
         ).validation;
         const issueMessages =
           validation?.issues
-            ?.map((issue) => issue.message)
+            ?.filter(
+              (issue) =>
+                (issue as { severity?: string }).severity !== "warning",
+            )
+            .map((issue) => issue.message)
             .filter((message): message is string => Boolean(message))
             .slice(0, 5) ?? [];
         const diagnosticMessages =
