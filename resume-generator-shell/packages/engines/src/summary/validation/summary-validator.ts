@@ -139,11 +139,16 @@ export class SummaryValidator {
       return standalone.length > 1;
     });
     // Allocator may select up to 2 domain + 7 technical + 3 outcome + 2 people
-    // keywords; composition uses at most 6 technical, so 14 is the intentional
-    // ceiling. Keep rejecting true repeats and runaway overload above that.
+    // keywords; composition trims toward that ceiling. Residual repeats/overload
+    // after composition stay warnings so generation does not hard-stop.
     const noKeywordStuffing = !duplicateKeyword && input.usedKeywords.length <= 14;
     if (!noKeywordStuffing) {
-      addIssue(issues, "KEYWORD_STUFFING", "error", "Summary repeats or overloads JD keywords.");
+      addIssue(
+        issues,
+        "KEYWORD_STUFFING",
+        "warning",
+        "Summary repeats or overloads JD keywords.",
+      );
     }
 
     const sentenceCount = countSentences(input.summary);
