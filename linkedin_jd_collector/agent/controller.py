@@ -297,8 +297,11 @@ class AgentController(QObject):
                     "JOB",
                 )
             elif name == "job_saved":
+                folder = payload.get("folder") or ""
                 self.log_message.emit(
-                    f"Saved JD → {payload.get('path')} (total saved={payload.get('saved')})",
+                    f"PASTED JD to Documents → {payload.get('path')} "
+                    f"(total saved={payload.get('saved')})"
+                    + (f" | folder={folder}" if folder else ""),
                     "JOB",
                 )
             elif name == "job_duplicate_skipped":

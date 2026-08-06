@@ -13,7 +13,7 @@ Architecture and project structure are in place.
 - File storage (`storage/`) → `Documents/LinkedIn_JD/Company_Title_Date_Time.txt` with URL/timestamp/raw JD; duplicate-safe
 - PyQt6 UI (`ui/`, `main.py`, `agent/controller.py`) — Start/Pause/Stop/Open Folder, settings, log panel
 - Human-visible automation pace (default) — Status + Log announce each workflow stage so you can watch the full run
-- Collection loop: left list top→bottom → right-panel JD (scroll if needed) → copy → Documents → Next page
+- Collection loop: left list top→bottom → right-panel JD (scroll if needed) → copy → paste into `Documents/LinkedIn_JD` → Next page
 - Supporting: screenshot capture, state manager
 
 ### Run UI

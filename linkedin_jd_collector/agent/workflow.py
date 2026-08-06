@@ -571,24 +571,34 @@ class LinkedInWorkflow:
                     select_fallback_region=self._jd_fallback_region(),
                     image_size=self._image_size(),
                 )
-                text = extraction.text  # exact clipboard contents; do not modify
+                # Exact clipboard JD — re-read clipboard so paste uses what was copied
+                text = extraction.text
+                try:
+                    clip_now = self.jd.clipboard.read()
+                    if clip_now and len(clip_now.strip()) >= len(str(text or "").strip()):
+                        text = clip_now
+                except Exception:  # noqa: BLE001
+                    logger.debug("Clipboard re-read for paste skipped", exc_info=True)
 
-                # 4. Paste/save this JD into Documents
+                # 4. Paste this copied JD into Documents/LinkedIn_JD as a .txt file
+                dest = str(self.files.output_root)
                 self._announce_step(
                     "save_jd",
-                    "Pasting JD into Documents/LinkedIn_JD…",
+                    f"Pasting copied JD into Documents → {dest}",
                     WorkflowState.SAVE_JD,
                 )
-                saved = self.files.save_jd(
+                saved = self.files.paste_jd_to_documents(
                     text,
                     title=card.title,
                     company=card.company,
                     url=card.url,
-                    signature=card.signature,
+                    # Prefer content/url signature so paste is not skipped by
+                    # unstable left-list click coordinates.
+                    signature=None,
                     history=self.history,
                 )
 
-                # 10. Mark completed / skip duplicates
+                # 5. Mark completed / skip duplicates
                 self._announce_step(
                     "mark_done",
                     "Marking this job done…",
@@ -602,13 +612,19 @@ class LinkedInWorkflow:
                         signature=saved.signature,
                         title=card.title,
                         company=card.company,
+                        path=str(self.files.output_root),
                     )
                     self._announce_step(
                         "next_job",
-                        "Duplicate — moving to the next job…",
+                        "Duplicate JD — already in Documents; next left-list job…",
                         WorkflowState.NEXT_JOB,
                     )
                     return True
+
+                if not saved.path.exists():
+                    raise WorkflowError(
+                        f"JD was copied but not pasted to Documents: {saved.path}"
+                    )
 
                 record = JobRecord(
                     signature=saved.signature,
@@ -624,16 +640,22 @@ class LinkedInWorkflow:
                 self.state.stats.jobs_saved += 1
                 self._announce_step(
                     "next_job",
-                    "JD saved to Documents — next left-list job…",
+                    f"Pasted JD to {saved.path.name} — next left-list job…",
                     WorkflowState.NEXT_JOB,
                 )
                 self._emit(
                     "job_saved",
                     path=str(saved.path),
+                    folder=str(self.files.output_root),
                     signature=saved.signature,
                     saved=self.state.stats.jobs_saved,
                     url=card.url,
                     chars=len(text),
+                )
+                self._emit(
+                    "log",
+                    message=f"PASTED to Documents: {saved.path}",
+                    level="JOB",
                 )
                 return True
 

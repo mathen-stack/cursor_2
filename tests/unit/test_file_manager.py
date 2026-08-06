@@ -123,3 +123,29 @@ def test_job_signature_prefers_url():
 def test_content_hash_stable():
     assert content_hash("abc") == content_hash("abc")
     assert content_hash("abc") != content_hash("abcd")
+
+
+def test_paste_jd_to_documents_writes_and_verifies(tmp_path: Path):
+    fm = FileManager(tmp_path)
+    raw = "About the job\nPaste me into Documents with enough characters.\n"
+    saved = fm.paste_jd_to_documents(
+        raw,
+        company="Haystack",
+        title="Junior Frontend Developer",
+    )
+    assert saved.skipped_duplicate is False
+    assert saved.path.exists()
+    assert saved.path.parent == tmp_path
+    body = saved.path.read_text(encoding="utf-8")
+    assert "About the job" in body
+    assert "Junior" in saved.path.name or "Frontend" in saved.path.name
+
+
+def test_default_output_dir_uses_documents_linkedin_jd(monkeypatch, tmp_path: Path):
+    from storage import file_manager as fm
+
+    monkeypatch.delenv("OUTPUT_DIR", raising=False)
+    monkeypatch.setattr(fm, "windows_documents_dir", lambda: tmp_path / "Documents")
+    (tmp_path / "Documents").mkdir()
+    out = fm.default_output_dir()
+    assert out == (tmp_path / "Documents" / "LinkedIn_JD").resolve()

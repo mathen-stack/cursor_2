@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.14")
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.15")
         self.resize(920, 720)
 
         self.settings = settings or load_settings()
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.14")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.15")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -72,8 +72,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Open LinkedIn Jobs, then Start. The agent clicks left-list jobs "
-            "top→bottom, copies each right-panel JD, saves to Documents, then Next page."
+            "Open LinkedIn Jobs, then Start. Left list top→bottom → copy right-panel JD "
+            "→ paste each JD into Documents\\LinkedIn_JD → Next page."
         )
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
@@ -102,6 +102,12 @@ class MainWindow(QMainWindow):
             stats_row.addWidget(lbl)
         stats_row.addStretch(1)
         layout.addLayout(stats_row)
+
+        out_path = self.settings.output_dir or str(default_output_dir())
+        self.folder_label = QLabel(f"Paste folder: {out_path}")
+        self.folder_label.setWordWrap(True)
+        self.folder_label.setStyleSheet("color: #444;")
+        layout.addWidget(self.folder_label)
 
         # Buttons
         buttons = QHBoxLayout()
@@ -205,8 +211,15 @@ class MainWindow(QMainWindow):
                 )
             self.settings = settings
             self.settings.apply_to_environ()
+            self.folder_label.setText(
+                f"Paste folder: {settings.output_dir or default_output_dir()}"
+            )
             self.log_panel.clear()
             self.log_panel.info("Starting agent…")
+            self.log_panel.info(
+                f"Each copied JD will be pasted into: "
+                f"{settings.output_dir or default_output_dir()}"
+            )
             self.log_panel.info(
                 "Focusing LinkedIn, then minimizing this window so clicks "
                 "cannot hit Close on the Collector."

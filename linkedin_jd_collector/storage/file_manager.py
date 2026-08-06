@@ -22,6 +22,7 @@ import hashlib
 import logging
 import os
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,15 +42,52 @@ class DuplicateChecker(Protocol):
     ) -> bool: ...
 
 
+def windows_documents_dir() -> Path | None:
+    """Resolve the real Windows Documents folder (incl. OneDrive redirect)."""
+    if not sys.platform.startswith("win"):
+        return None
+    # 1) Shell CSIDL_PERSONAL (Documents), OneDrive-aware on modern Windows
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        CSIDL_PERSONAL = 5
+        SHGFP_TYPE_CURRENT = 0
+        buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+        hr = ctypes.windll.shell32.SHGetFolderPathW(
+            None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buf
+        )
+        if hr == 0 and buf.value:
+            path = Path(buf.value)
+            if path.exists():
+                return path
+    except Exception:  # noqa: BLE001
+        logger.debug("SHGetFolderPathW Documents failed", exc_info=True)
+
+    # 2) USERPROFILE\Documents
+    for key in ("USERPROFILE", "HOME"):
+        base = os.environ.get(key)
+        if base:
+            candidate = Path(base) / "Documents"
+            if candidate.exists():
+                return candidate
+    # 3) Home fallback
+    return Path.home() / "Documents"
+
+
 def default_output_dir() -> Path:
     """
     Resolve Documents/LinkedIn_JD/.
 
-    Uses OUTPUT_DIR from env when set; otherwise ~/Documents/LinkedIn_JD.
+    Uses OUTPUT_DIR from env when set; otherwise the real Documents folder
+    (Windows Known Folder / OneDrive-aware) / LinkedIn_JD.
     """
-    env = os.getenv("OUTPUT_DIR")
+    env = (os.getenv("OUTPUT_DIR") or "").strip()
     if env:
         return Path(env).expanduser().resolve()
+    docs = windows_documents_dir()
+    if docs is not None:
+        return (docs / DEFAULT_FOLDER_NAME).resolve()
     return (Path.home() / "Documents" / DEFAULT_FOLDER_NAME).resolve()
 
 
@@ -208,9 +246,13 @@ class FileManager:
         tmp.write_text(body, encoding="utf-8", newline="\n")
         tmp.replace(path)
 
+        if not path.exists() or path.stat().st_size <= 0:
+            raise OSError(f"JD paste to Documents failed — file missing: {path}")
+
         logger.info(
-            "Saved JD file=%s chars=%s url=%s sig=%s",
+            "PASTED JD to Documents file=%s path=%s chars=%s url=%s sig=%s",
             path.name,
+            path,
             len(raw),
             bool(url),
             sig,
@@ -223,6 +265,33 @@ class FileManager:
             url=url,
             content_hash=digest,
             skipped_duplicate=False,
+        )
+
+    def paste_jd_to_documents(
+        self,
+        text: str,
+        *,
+        title: str = "Job",
+        company: str = "Company",
+        url: str | None = None,
+        signature: str | None = None,
+        timestamp: datetime | None = None,
+        history: DuplicateChecker | HistoryStore | None = None,
+    ) -> SavedJobFile:
+        """
+        Paste a copied JD into Documents/LinkedIn_JD as a .txt file.
+
+        Same as save_jd — named for the human copy→paste-to-Documents step.
+        """
+        self._ensure_dirs()
+        return self.save_jd(
+            text,
+            title=title,
+            company=company,
+            url=url,
+            signature=signature,
+            timestamp=timestamp,
+            history=history,
         )
 
     def _unique_path(self, path: Path) -> Path:
