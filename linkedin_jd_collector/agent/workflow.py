@@ -71,9 +71,9 @@ class WorkflowConfig:
         except Exception:  # noqa: BLE001
             pace = None
         if self.detail_wait_s is None:
-            self.detail_wait_s = pace.detail_wait_s if pace else 1.8
+            self.detail_wait_s = pace.detail_wait_s if pace else 2.2
         if self.between_jobs_s is None:
-            self.between_jobs_s = pace.between_jobs_s if pace else 1.25
+            self.between_jobs_s = pace.between_jobs_s if pace else 2.0
 
 
 class LinkedInWorkflow:
@@ -144,12 +144,47 @@ class LinkedInWorkflow:
             except Exception:  # noqa: BLE001
                 logger.exception("on_event handler failed for %s", event)
 
+    def _announce_step(
+        self,
+        step: str,
+        message: str,
+        state: WorkflowState,
+        *,
+        pause: bool = True,
+    ) -> None:
+        """
+        Publish a human-readable workflow stage, update UI status, then briefly
+        pause so the user can watch before the mouse/keyboard moves.
+        """
+        self.state.set_state(state)
+        self._emit(
+            "step",
+            step=step,
+            message=message,
+            **self.state.snapshot(),
+        )
+        if not pause:
+            return
+        try:
+            from automation.pace import resolve_pace
+
+            delay = float(resolve_pace().step_announce_s)
+        except Exception:  # noqa: BLE001
+            delay = 0.85
+        if delay > 0:
+            time.sleep(delay)
+
     def request_stop(self) -> None:
         self.state.request_stop()
         self.guard.trigger_emergency_stop("user stop")
 
     def _capture(self) -> bytes:
-        self.state.set_state(WorkflowState.CAPTURE)
+        self._announce_step(
+            "capture",
+            "Capturing screen…",
+            WorkflowState.CAPTURE,
+            pause=False,
+        )
         logger.info("Capturing screenshot…")
         result = self.screenshots.capture()
         logger.info(
@@ -172,18 +207,20 @@ class LinkedInWorkflow:
 
             pace = resolve_pace()
             logger.info(
-                "Automation pace=%s (mouse=%.2fs drag=%.2fs pause=%.2fs) — "
+                "Automation pace=%s (mouse=%.2fs drag=%.2fs pause=%.2fs announce=%.2fs) — "
                 "human-visible speed so you can follow each step",
                 pace.name,
                 pace.move_duration_s,
                 pace.select_drag_s,
                 pace.safety_delay_s,
+                pace.step_announce_s,
             )
             self._emit(
                 "log",
                 message=(
-                    f"Running at {pace.name} speed — mouse moves and JD drag-select "
-                    "are slowed so you can watch each step."
+                    f"Running at {pace.name} speed — every workflow stage is slowed "
+                    "and announced so you can watch: detect → click job → wait → "
+                    "drag-select JD → Ctrl+C → save → next / paginate."
                 ),
                 level="INFO",
             )
@@ -200,7 +237,11 @@ class LinkedInWorkflow:
 
         try:
             if self.config.require_linkedin_detection:
-                self.state.set_state(WorkflowState.ANALYZE)
+                self._announce_step(
+                    "detect_linkedin",
+                    "Detecting LinkedIn jobs page…",
+                    WorkflowState.ANALYZE,
+                )
                 self._emit("ai_decision", ai_decision="Detecting LinkedIn jobs page…")
                 detection = self.linkedin.detect(
                     self._capture, should_stop=self._stopped
@@ -256,7 +297,11 @@ class LinkedInWorkflow:
                     break
 
                 # Paginate only after a fully processed page
-                self.state.set_state(WorkflowState.PAGINATE)
+                self._announce_step(
+                    "paginate",
+                    "Looking for Next page and clicking it…",
+                    WorkflowState.PAGINATE,
+                )
                 self.jobs.reset_page()
 
                 moved = self.pages.go_to_next_page(
@@ -328,7 +373,11 @@ class LinkedInWorkflow:
         Returns True when the page is exhausted normally.
         """
         screenshot = self._capture()
-        self.state.set_state(WorkflowState.ANALYZE)
+        self._announce_step(
+            "analyze",
+            "Analyzing visible job cards on this page…",
+            WorkflowState.ANALYZE,
+        )
         cards = self.jobs.identify_visible_jobs(
             screenshot,
             extra_context=self.state.context_for_ai(),
@@ -456,7 +505,11 @@ class LinkedInWorkflow:
                 return False
             try:
                 # 4. Click job
-                self.state.set_state(WorkflowState.OPEN_JOB)
+                self._announce_step(
+                    "open_job",
+                    f"Moving cursor to job and clicking: {card.title}",
+                    WorkflowState.OPEN_JOB,
+                )
                 logger.info(
                     "Clicking job '%s' at img(%s,%s) attempt=%s",
                     card.title,
@@ -472,10 +525,14 @@ class LinkedInWorkflow:
 
                     time.sleep(resolve_pace().after_click_s)
                 except Exception:  # noqa: BLE001
-                    time.sleep(0.55)
+                    time.sleep(1.0)
 
                 # 5. Wait for details panel
-                self.state.set_state(WorkflowState.WAIT_DETAIL)
+                self._announce_step(
+                    "wait_detail",
+                    "Waiting for the right-side job details panel…",
+                    WorkflowState.WAIT_DETAIL,
+                )
                 detail = self.jd.wait_for_details_panel(
                     self._capture, should_stop=self._stopped
                 )
@@ -486,10 +543,24 @@ class LinkedInWorkflow:
                         detail.observation or "Blocked while waiting for job details"
                     )
 
-                # 6-8. Identify JD → select → Ctrl+C → clipboard (exact text)
-                self.state.set_state(WorkflowState.FIND_JD)
-                self.state.set_state(WorkflowState.SELECT_JD)
-                self.state.set_state(WorkflowState.COPY_JD)
+                # 6. Identify JD section
+                self._announce_step(
+                    "find_jd",
+                    "Finding the 'About the job' section…",
+                    WorkflowState.FIND_JD,
+                )
+                # 7-8. Select → Ctrl+C → clipboard (exact text)
+                self._announce_step(
+                    "select_jd",
+                    "Drag-selecting the job description like a human…",
+                    WorkflowState.SELECT_JD,
+                )
+                self._announce_step(
+                    "copy_jd",
+                    "Copying selected JD with Ctrl+C…",
+                    WorkflowState.COPY_JD,
+                    pause=False,
+                )
                 extraction = self.jd.extract_jd(
                     self._capture,
                     should_stop=self._stopped,
@@ -498,7 +569,11 @@ class LinkedInWorkflow:
                 text = extraction.text  # exact clipboard contents; do not modify
 
                 # 9. Save TXT exactly as copied
-                self.state.set_state(WorkflowState.SAVE_JD)
+                self._announce_step(
+                    "save_jd",
+                    "Saving original JD text to a TXT file…",
+                    WorkflowState.SAVE_JD,
+                )
                 saved = self.files.save_jd(
                     text,
                     title=card.title,
@@ -509,7 +584,12 @@ class LinkedInWorkflow:
                 )
 
                 # 10. Mark completed / skip duplicates
-                self.state.set_state(WorkflowState.MARK_DONE)
+                self._announce_step(
+                    "mark_done",
+                    "Marking this job done…",
+                    WorkflowState.MARK_DONE,
+                    pause=False,
+                )
                 self.jobs.mark_completed(card.signature)
                 if saved.skipped_duplicate:
                     self._emit(
@@ -518,7 +598,11 @@ class LinkedInWorkflow:
                         title=card.title,
                         company=card.company,
                     )
-                    self.state.set_state(WorkflowState.NEXT_JOB)
+                    self._announce_step(
+                        "next_job",
+                        "Duplicate — moving to the next job…",
+                        WorkflowState.NEXT_JOB,
+                    )
                     return True
 
                 record = JobRecord(
@@ -533,7 +617,11 @@ class LinkedInWorkflow:
                 )
                 self.history.mark_completed(record)
                 self.state.stats.jobs_saved += 1
-                self.state.set_state(WorkflowState.NEXT_JOB)
+                self._announce_step(
+                    "next_job",
+                    "JD saved — pausing, then moving to the next job…",
+                    WorkflowState.NEXT_JOB,
+                )
                 self._emit(
                     "job_saved",
                     path=str(saved.path),
@@ -566,7 +654,11 @@ class LinkedInWorkflow:
                         signature=card.signature,
                         error=str(exc),
                     )
-                    self.state.set_state(WorkflowState.NEXT_JOB)
+                    self._announce_step(
+                        "next_job",
+                        "Job failed — skipping to the next job…",
+                        WorkflowState.NEXT_JOB,
+                    )
                     return True
                 time.sleep(0.8)
         return True

@@ -11,23 +11,39 @@ from ui.status import UiStatus, ui_status_for_state
 
 def test_ui_status_mapping():
     assert ui_status_for_state(WorkflowState.IDLE) == UiStatus.WAITING
+    assert ui_status_for_state(WorkflowState.CAPTURE) == UiStatus.CAPTURING_SCREEN
     assert ui_status_for_state(WorkflowState.ANALYZE) == UiStatus.ANALYZING_SCREEN
-    assert ui_status_for_state(WorkflowState.OPEN_JOB) == UiStatus.PROCESSING_JOBS
+    assert ui_status_for_state(WorkflowState.OPEN_JOB) == UiStatus.CLICKING_JOB
+    assert ui_status_for_state(WorkflowState.WAIT_DETAIL) == UiStatus.WAITING_DETAILS
+    assert ui_status_for_state(WorkflowState.FIND_JD) == UiStatus.FINDING_JD
+    assert ui_status_for_state(WorkflowState.SELECT_JD) == UiStatus.SELECTING_JD
     assert ui_status_for_state(WorkflowState.COPY_JD) == UiStatus.COPYING_JD
+    assert ui_status_for_state(WorkflowState.SAVE_JD) == UiStatus.SAVING_JD
+    assert ui_status_for_state(WorkflowState.PAGINATE) == UiStatus.PAGINATING
     assert ui_status_for_state(WorkflowState.COMPLETE) == UiStatus.COMPLETED
     assert ui_status_for_state(WorkflowState.ANALYZE, paused=True) == UiStatus.PAUSED
+
+
+def test_ui_status_for_step():
+    from ui.status import ui_status_for_step
+
+    assert ui_status_for_step("select_jd") == UiStatus.SELECTING_JD
+    assert ui_status_for_step("paginate") == UiStatus.PAGINATING
+    assert ui_status_for_step("", WorkflowState.COPY_JD) == UiStatus.COPYING_JD
 
 
 def test_save_and_load_settings(tmp_path: Path, monkeypatch):
     settings_file = tmp_path / "ui_settings.json"
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("OPENROUTER_MODEL", "")
+    monkeypatch.delenv("AUTOMATION_PACE", raising=False)
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "out"))
 
     original = AppSettings(
         openrouter_api_key="sk-test-key",
         vision_model="test/vision-model",
         output_dir=str(tmp_path / "LinkedIn_JD"),
+        automation_pace="human",
     )
     # Avoid rewriting package .env during unit test: patch helper
     import ui.settings as settings_mod
@@ -38,6 +54,7 @@ def test_save_and_load_settings(tmp_path: Path, monkeypatch):
     loaded = load_settings(path=settings_file)
     assert loaded.openrouter_api_key == "sk-test-key"
     assert loaded.vision_model == "test/vision-model"
+    assert loaded.automation_pace == "human"
 
 
 def test_user_data_settings_path(tmp_path: Path, monkeypatch):

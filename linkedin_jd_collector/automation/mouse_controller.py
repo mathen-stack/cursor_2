@@ -99,7 +99,7 @@ class MouseController:
 
                 move_duration_s = resolve_pace().move_duration_s
             except Exception:  # noqa: BLE001
-                move_duration_s = 0.45
+                move_duration_s = 0.85
         self.move_duration_s = max(0.0, float(move_duration_s))
         if not self._lazy_backend and self._backend is None:
             self._backend = _load_pyautogui()

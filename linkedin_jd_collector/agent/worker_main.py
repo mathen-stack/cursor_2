@@ -42,6 +42,12 @@ def run_worker(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-key", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--pace",
+        default="human",
+        choices=("human", "fast", "watch", "demo", "quick", "speed"),
+        help="Automation pace (default: human — watchable)",
+    )
     parser.add_argument("--events-file", required=True)
     parser.add_argument("--control-file", required=True)
     parser.add_argument("--heartbeat-file", required=True)
@@ -102,11 +108,25 @@ def run_worker(argv: list[str] | None = None) -> int:
         os.environ["OPENROUTER_API_KEY"] = args.api_key.strip()
         os.environ["OPENROUTER_MODEL"] = args.model.strip()
         os.environ["OUTPUT_DIR"] = args.output_dir.strip()
+        pace = (args.pace or "human").strip().lower()
+        if pace in {"fast", "quick", "speed"}:
+            os.environ["AUTOMATION_PACE"] = "fast"
+        else:
+            os.environ["AUTOMATION_PACE"] = "human"
         # Avoid Win32 hooks / pywinauto / mss in the worker unless explicitly enabled.
         os.environ.setdefault("ENABLE_EMERGENCY_HOTKEY", "0")
         os.environ.setdefault("ENABLE_PYWINAUTO", "0")
         os.environ.setdefault("SCREENSHOT_BACKEND", "pil")
         os.environ.setdefault("USE_MSS", "0")
+
+        emit(
+            "log",
+            message=(
+                f"Automation pace={os.environ['AUTOMATION_PACE']} — "
+                "watch Status + Log for each workflow stage."
+            ),
+            level="INFO",
+        )
 
         if sys.platform.startswith("win"):
             try:

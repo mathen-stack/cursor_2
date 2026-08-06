@@ -31,7 +31,7 @@ class PageNavigator:
 
                 self.page_load_wait_s = resolve_pace().page_load_wait_s
             except Exception:  # noqa: BLE001
-                self.page_load_wait_s = 2.5
+                self.page_load_wait_s = 3.0
 
     def detect_pagination(
         self,

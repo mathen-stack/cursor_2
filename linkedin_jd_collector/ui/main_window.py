@@ -13,6 +13,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -41,8 +42,8 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         # Version bump helps confirm the user installed the latest EXE.
-        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.12")
-        self.resize(920, 680)
+        self.setWindowTitle("LinkedIn JD Collector Agent v1.0.13")
+        self.resize(920, 720)
 
         self.settings = settings or load_settings()
         self.controller = AgentController(self)
@@ -63,7 +64,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Title
-        title = QLabel("LinkedIn JD Collector Agent v1.0.12")
+        title = QLabel("LinkedIn JD Collector Agent v1.0.13")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -71,8 +72,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "After you open LinkedIn job results in your browser, start the agent "
-            "to collect original job descriptions."
+            "After you open LinkedIn job results in your browser, start the agent. "
+            "Default Human pace slows every stage so you can watch the full workflow."
         )
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
@@ -126,11 +127,16 @@ class MainWindow(QMainWindow):
         self.api_key_input.setPlaceholderText("sk-or-…")
         self.model_input = QLineEdit()
         self.model_input.setPlaceholderText(DEFAULT_MODEL)
+        self.pace_combo = QComboBox()
+        self.pace_combo.addItem("Human (watch every step)", "human")
+        self.pace_combo.addItem("Fast", "fast")
         form.addRow("OpenRouter API Key", self.api_key_input)
         form.addRow("Vision Model Name", self.model_input)
+        form.addRow("Automation Pace", self.pace_combo)
         model_hint = QLabel(
-            "Tip: paid models (e.g. openai/gpt-4o) need OpenRouter credits. "
-            f"Free default: {DEFAULT_MODEL}"
+            "Tip: Human pace is slower on purpose so you can follow detect → "
+            "click → wait → drag-select → Ctrl+C → save. "
+            f"Free default model: {DEFAULT_MODEL}"
         )
         model_hint.setWordWrap(True)
         model_hint.setStyleSheet("color: #555;")
@@ -163,12 +169,17 @@ class MainWindow(QMainWindow):
     def _load_settings_into_form(self) -> None:
         self.api_key_input.setText(self.settings.openrouter_api_key)
         self.model_input.setText(self.settings.vision_model)
+        pace = (self.settings.automation_pace or "human").strip().lower()
+        idx = self.pace_combo.findData("fast" if pace == "fast" else "human")
+        self.pace_combo.setCurrentIndex(max(0, idx))
 
     def _read_settings_from_form(self) -> AppSettings:
+        pace = self.pace_combo.currentData()
         return AppSettings(
             openrouter_api_key=self.api_key_input.text().strip(),
             vision_model=self.model_input.text().strip() or DEFAULT_MODEL,
             output_dir=self.settings.output_dir or str(default_output_dir()),
+            automation_pace=str(pace or "human"),
         )
 
     def on_start(self) -> None:
@@ -247,9 +258,19 @@ class MainWindow(QMainWindow):
         self.status_label.setText(status)
         colors = {
             UiStatus.WAITING.value: ("#eef3f8", "#123"),
+            UiStatus.CAPTURING_SCREEN.value: ("#fff8e1", "#6d4c00"),
             UiStatus.ANALYZING_SCREEN.value: ("#fff4d6", "#5c4500"),
-            UiStatus.PROCESSING_JOBS.value: ("#e3f2fd", "#0d47a1"),
+            UiStatus.DETECTING_LINKEDIN.value: ("#fff4d6", "#5c4500"),
+            UiStatus.CLICKING_JOB.value: ("#e3f2fd", "#0d47a1"),
+            UiStatus.WAITING_DETAILS.value: ("#e8eaf6", "#1a237e"),
+            UiStatus.FINDING_JD.value: ("#f3e5f5", "#4a148c"),
+            UiStatus.SELECTING_JD.value: ("#fce4ec", "#880e4f"),
             UiStatus.COPYING_JD.value: ("#f3e5f5", "#4a148c"),
+            UiStatus.SAVING_JD.value: ("#e0f2f1", "#004d40"),
+            UiStatus.MARKING_DONE.value: ("#e8f5e9", "#1b5e20"),
+            UiStatus.NEXT_JOB.value: ("#e3f2fd", "#0d47a1"),
+            UiStatus.PAGINATING.value: ("#e3f2fd", "#01579b"),
+            UiStatus.PROCESSING_JOBS.value: ("#e3f2fd", "#0d47a1"),
             UiStatus.COMPLETED.value: ("#e8f5e9", "#1b5e20"),
             UiStatus.PAUSED.value: ("#eceff1", "#37474f"),
             UiStatus.ERROR.value: ("#ffebee", "#b71c1c"),
@@ -389,6 +410,7 @@ class MainWindow(QMainWindow):
         self.btn_folder.setEnabled(True)
         self.api_key_input.setEnabled(True)
         self.model_input.setEnabled(True)
+        self.pace_combo.setEnabled(True)
 
     def _set_buttons_running(self) -> None:
         self.btn_start.setEnabled(False)
@@ -397,3 +419,4 @@ class MainWindow(QMainWindow):
         self.btn_folder.setEnabled(True)
         self.api_key_input.setEnabled(False)
         self.model_input.setEnabled(False)
+        self.pace_combo.setEnabled(False)

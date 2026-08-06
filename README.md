@@ -12,6 +12,7 @@ Architecture and project structure are in place.
 - JD extraction (`linkedin/jd_detector.py`, `automation/clipboard.py`) — locate → select → Ctrl+C → exact text
 - File storage (`storage/`) → `Documents/LinkedIn_JD/Company_Title_Date_Time.txt` with URL/timestamp/raw JD; duplicate-safe
 - PyQt6 UI (`ui/`, `main.py`, `agent/controller.py`) — Start/Pause/Stop/Open Folder, settings, log panel
+- Human-visible automation pace (default) — Status + Log announce each workflow stage so you can watch the full run
 - Supporting: screenshot capture, state manager
 
 ### Run UI
@@ -21,6 +22,8 @@ cd linkedin_jd_collector
 pip install -r requirements.txt
 python main.py
 ```
+
+In Settings, leave **Automation Pace** on **Human (watch every step)** to follow detect → click → wait → drag-select → Ctrl+C → save. Choose **Fast** for quicker runs.
 
 ### Package Windows EXE
 

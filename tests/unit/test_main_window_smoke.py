@@ -36,7 +36,7 @@ def test_main_window_builds_and_shows_status(qapp, tmp_path, monkeypatch):
     )
     window = MainWindow(settings=settings)
     assert "LinkedIn JD Collector Agent" in window.windowTitle()
-    assert "v1.0.12" in window.windowTitle()
+    assert "v1.0.13" in window.windowTitle()
     assert window.status_label.text() == "Waiting"
     assert window.btn_start.text() == "Start Agent"
     assert window.btn_pause.text() == "Pause"
@@ -44,10 +44,13 @@ def test_main_window_builds_and_shows_status(qapp, tmp_path, monkeypatch):
     assert window.btn_folder.text() == "Open Folder"
     assert window.api_key_input.text() == "sk-test"
     assert window.model_input.text() == "openai/gpt-4o"
+    assert window.pace_combo.currentData() == "human"
     window._on_log("action=click target=job_card", "AI")
     window._on_log("Current job: Eng @ Acme (page 1)", "JOB")
     window._on_log("Page number: 2", "PAGE")
     window._on_log("boom", "ERROR")
+    window._set_status("Drag-Selecting JD")
+    assert window.status_label.text() == "Drag-Selecting JD"
     text = window.log_panel.view.toPlainText()
     assert "AI:" in text
     assert "Current job:" in text

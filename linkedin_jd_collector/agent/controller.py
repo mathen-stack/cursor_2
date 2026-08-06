@@ -43,6 +43,8 @@ def _worker_command(settings: AppSettings, paths: dict[str, Path]) -> list[str]:
         settings.vision_model.strip(),
         "--output-dir",
         settings.output_dir or str(default_output_dir()),
+        "--pace",
+        (settings.automation_pace or "human").strip() or "human",
         "--events-file",
         str(paths["events"]),
         "--control-file",
@@ -259,13 +261,23 @@ class AgentController(QObject):
         self._handle_event(name, payload)
 
     def _handle_event(self, name: str, payload: dict) -> None:
-        from ui.status import ui_status_for_state
+        from ui.status import ui_status_for_state, ui_status_for_step
 
         try:
-            state = payload.get("state")
-            if state:
-                status = ui_status_for_state(state, paused=self._paused)
-                self.status_changed.emit(status.value)
+            if name == "step":
+                status = ui_status_for_step(
+                    str(payload.get("step") or ""),
+                    payload.get("state"),
+                )
+                if not self._paused:
+                    self.status_changed.emit(status.value)
+                message = str(payload.get("message") or status.value)
+                self.log_message.emit(f"STEP: {message}", "INFO")
+            else:
+                state = payload.get("state")
+                if state:
+                    status = ui_status_for_state(state, paused=self._paused)
+                    self.status_changed.emit(status.value)
 
             page = payload.get("page") or payload.get("page_index")
             if page is not None:
@@ -275,6 +287,8 @@ class AgentController(QObject):
                 self.log_message.emit(
                     f"Run started. Saving to: {payload.get('run_dir', '')}", "INFO"
                 )
+            elif name == "step":
+                pass  # already logged above
             elif name == "job_started":
                 title = payload.get("title", "job")
                 company = payload.get("company", "company")

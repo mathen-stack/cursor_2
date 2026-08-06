@@ -31,10 +31,14 @@ class AppSettings:
     openrouter_api_key: str = ""
     vision_model: str = DEFAULT_MODEL
     output_dir: str = ""
+    # human = watchable; fast = quicker automation
+    automation_pace: str = "human"
 
     def __post_init__(self) -> None:
         if not self.output_dir:
             self.output_dir = str(default_output_dir())
+        pace = (self.automation_pace or "human").strip().lower()
+        self.automation_pace = "fast" if pace in {"fast", "quick", "speed"} else "human"
 
     def apply_to_environ(self) -> None:
         """Push settings into process env for OpenRouter client / storage."""
@@ -44,6 +48,7 @@ class AppSettings:
             os.environ["OPENROUTER_MODEL"] = self.vision_model.strip()
         if self.output_dir:
             os.environ["OUTPUT_DIR"] = self.output_dir.strip()
+        os.environ["AUTOMATION_PACE"] = self.automation_pace.strip() or "human"
 
 
 def _settings_file(path: Path | None = None) -> Path:
@@ -70,6 +75,7 @@ def load_settings(path: Path | None = None) -> AppSettings:
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         vision_model=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
         output_dir=os.getenv("OUTPUT_DIR") or str(default_output_dir()),
+        automation_pace=os.getenv("AUTOMATION_PACE", "human"),
     )
 
     settings_file = _settings_file(path)
@@ -88,6 +94,8 @@ def load_settings(path: Path | None = None) -> AppSettings:
                         settings.vision_model = env_model
                 if data.get("output_dir"):
                     settings.output_dir = str(data["output_dir"])
+                if data.get("automation_pace") and not os.getenv("AUTOMATION_PACE"):
+                    settings.automation_pace = str(data["automation_pace"])
         except Exception:  # noqa: BLE001
             logger.exception("Failed to load UI settings from %s", settings_file)
 
@@ -131,6 +139,7 @@ def save_settings(settings: AppSettings, path: Path | None = None) -> None:
                 "OPENROUTER_API_KEY": settings.openrouter_api_key,
                 "OPENROUTER_MODEL": settings.vision_model,
                 "OUTPUT_DIR": settings.output_dir,
+                "AUTOMATION_PACE": settings.automation_pace,
             }
         )
     except OSError as exc:
