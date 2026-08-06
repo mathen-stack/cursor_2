@@ -169,6 +169,44 @@ describe("Real Experience section validation", () => {
     expect(output.validation.issues.some((item) => item.severity === "error")).toBe(true);
   });
 
+  it("soft-fails residual passive voice instead of hard-rejecting", async () => {
+    const fixture = await createValidationFixture();
+    const target = fixture.bullets[0];
+    if (!target) throw new Error("Fixture requires one bullet.");
+    // Inject a residual passive clause while keeping the allocated opening verb,
+    // metric, and claimed keywords intact.
+    const corrupted = fixture.bullets.map((bullet, index) => {
+      if (index !== 0) return bullet;
+      const withoutPeriod = bullet.finalBullet.replace(/\.+$/, "");
+      return {
+        ...bullet,
+        finalBullet: `${withoutPeriod} after services were deployed with monitoring.`,
+      };
+    });
+
+    const output = await fixture.experienceValidator.execute({
+      ...validationInput(fixture),
+      bullets: corrupted,
+    });
+    const diagnostic = output.validation.diagnostics.find(
+      (item) => item.bulletId === target.bulletId,
+    );
+
+    expect(
+      diagnostic?.warnings.some((warning) => /avoidable passive voice/i.test(warning)),
+    ).toBe(true);
+    expect(
+      diagnostic?.errors.some((error) => /avoidable passive voice/i.test(error)),
+    ).toBe(false);
+    expect(
+      output.validation.issues
+        .filter((issue) => /avoidable passive voice/i.test(issue.message))
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(output.validation.failedBulletIds).not.toContain(target.bulletId);
+    expect(output.validation.overallStatus).toBe("approved");
+  });
+
   it("soft-fails residual role-seniority and leadership-coverage instead of hard-rejecting", async () => {
     const fixture = await createValidationFixture();
     const seniorSignal =

@@ -35,7 +35,7 @@ export class ResumeEngineRejectedError extends Error {
           }
         ).validation;
         const isSoftResidualMessage = (message: string): boolean =>
-          /ownership or leadership scope does not match|lacks architecture, leadership, mentoring|below the preferred strength|repeats or overloads JD keywords|metric measure pattern is repeated|action scope is cloned|residual repetition risk/i.test(
+          /ownership or leadership scope does not match|lacks architecture, leadership, mentoring|below the preferred strength|repeats or overloads JD keywords|metric measure pattern is repeated|action scope is cloned|residual repetition risk|avoidable passive voice|residual passive voice/i.test(
             message,
           );
         const issueMessages =

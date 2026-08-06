@@ -385,14 +385,43 @@ export class RealExperienceValidator implements ExperienceValidator {
       }
 
       const languageErrors = atsLanguageErrors(bullet.finalBullet);
-      if (languageErrors.length > 0) {
-        errors.push(...languageErrors);
+      // Composition targets active voice; residual passive-detector hits stay
+      // warnings so generation does not hard-stop after wording repair.
+      const softLanguageErrors = languageErrors.filter((item) =>
+        /avoidable passive voice/i.test(item),
+      );
+      const hardLanguageErrors = languageErrors.filter(
+        (item) => !/avoidable passive voice/i.test(item),
+      );
+      if (softLanguageErrors.length > 0) {
+        warnings.push(...softLanguageErrors);
+      }
+      if (hardLanguageErrors.length > 0) {
+        errors.push(...hardLanguageErrors);
         addFailure(
           bullet.bulletId,
-          languageErrors.some((item) => /weak|filler/i.test(item))
+          hardLanguageErrors.some((item) => /weak|filler/i.test(item))
             ? "weak-language"
             : "ats-language",
         );
+      } else if (softLanguageErrors.length > 0) {
+        if (
+          !issues.some(
+            (item) =>
+              item.issueCode === "ats-language" &&
+              item.bulletIds.includes(bullet.bulletId),
+          )
+        ) {
+          issues.push(
+            issue(
+              "ats-language",
+              softLanguageErrors[0]!,
+              [bullet.bulletId],
+              context.experienceId,
+              "warning",
+            ),
+          );
+        }
       }
 
       if (
