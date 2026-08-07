@@ -198,6 +198,41 @@ function collectPatternCandidates(
   return candidates;
 }
 
+function groundedPhraseCandidate(
+  jobDescription: JobDescription,
+  requirement: JDRequirement,
+  phrase: string,
+  score: number,
+): DirectKeywordCandidate | null {
+  const cleaned = cleanMatchedText(phrase);
+  if (!cleaned) {
+    return null;
+  }
+  const startIndex = jobDescription.rawText
+    .toLocaleLowerCase()
+    .indexOf(cleaned.toLocaleLowerCase());
+  if (startIndex < 0) {
+    return null;
+  }
+  const keyword = jobDescription.rawText.slice(
+    startIndex,
+    startIndex + cleaned.length,
+  );
+  const canonicalKey = canonicalKeywordKey(keyword);
+  if (!canonicalKey) {
+    return null;
+  }
+  return {
+    keyword,
+    requirementId: requirement.requirementId,
+    sourceText: requirement.sourceText || keyword,
+    startIndex,
+    endIndex: startIndex + keyword.length,
+    canonicalKey,
+    score,
+  };
+}
+
 function fallbackCandidate(requirement: JDRequirement): DirectKeywordCandidate | null {
   const source = requirement.sourceText.trim().replace(/[.?!]+$/, "");
   if (!source) {
@@ -238,6 +273,87 @@ function fallbackCandidate(requirement: JDRequirement): DirectKeywordCandidate |
     canonicalKey,
     score: 25,
   };
+}
+
+/**
+ * Last-resort grounded extraction when curated patterns and requirement-local
+ * fallbacks all miss. Never invents wording: every candidate must appear in the
+ * immutable JD raw text with a valid evidence range.
+ */
+function ultimateGroundedFallback(
+  jobDescription: JobDescription,
+  requirement: JDRequirement,
+): DirectKeywordCandidate | null {
+  const raw = jobDescription.rawText;
+  if (!raw.trim()) {
+    return null;
+  }
+
+  const source = (requirement.sourceText || requirement.normalizedText || "").trim();
+  const words = source
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^A-Za-z0-9.+#/-]+|[^A-Za-z0-9.+#/-]+$/g, ""))
+    .filter(Boolean);
+  for (let size = Math.min(6, words.length); size >= 1; size -= 1) {
+    for (let start = 0; start + size <= words.length; start += 1) {
+      const window = words.slice(start, start + size).join(" ");
+      const finalized = finalizeKeywordPhrase(window);
+      const candidate = groundedPhraseCandidate(
+        jobDescription,
+        requirement,
+        finalized ?? window,
+        18 + size,
+      );
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  for (const match of raw.matchAll(/\b[A-Z][A-Za-z0-9.+#/-]{1,32}\b/g)) {
+    const token = match[0] ?? "";
+    if (
+      /^(?:The|And|For|With|This|That|You|Our|Your|Job|Role|Company|About|Senior|Junior|Staff|Lead)$/i.test(
+        token,
+      )
+    ) {
+      continue;
+    }
+    const candidate = groundedPhraseCandidate(
+      jobDescription,
+      requirement,
+      token,
+      14,
+    );
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const contentWords = raw
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^A-Za-z0-9.+#/-]+|[^A-Za-z0-9.+#/-]+$/g, ""))
+    .filter(
+      (word) =>
+        word.length >= 3 &&
+        !/^(?:and|the|for|with|you|will|this|that|from|into|your|our|are|have|job|role)$/i.test(
+          word,
+        ),
+    );
+  for (let size = Math.min(4, contentWords.length); size >= 1; size -= 1) {
+    const phrase = contentWords.slice(0, size).join(" ");
+    const candidate = groundedPhraseCandidate(
+      jobDescription,
+      requirement,
+      phrase,
+      10,
+    );
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 function semanticOverlap(left: string, right: string): number {
@@ -429,6 +545,15 @@ export class DirectJDKeywordEngine {
         ),
       );
       candidates.push(...absoluteFallbacks.slice(0, 5));
+    }
+
+    if (candidates.length === 0) {
+      // Keep generation moving when pattern inventory is empty for a late bullet
+      // (e.g. EXP-*-B-005) by allocating any remaining JD-grounded phrase/token.
+      const ultimate = ultimateGroundedFallback(input.jobDescription, primary);
+      if (ultimate) {
+        candidates.push(ultimate);
+      }
     }
 
     if (candidates.length === 0) {
