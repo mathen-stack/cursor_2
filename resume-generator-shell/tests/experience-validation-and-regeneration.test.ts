@@ -169,6 +169,96 @@ describe("Real Experience section validation", () => {
     expect(output.validation.issues.some((item) => item.severity === "error")).toBe(true);
   });
 
+  it("soft-fails residual passive voice instead of hard-rejecting", async () => {
+    const fixture = await createValidationFixture();
+    const target = fixture.bullets[0];
+    if (!target) throw new Error("Fixture requires one bullet.");
+    // Inject a residual passive clause while keeping the allocated opening verb,
+    // metric, and claimed keywords intact.
+    const corrupted = fixture.bullets.map((bullet, index) => {
+      if (index !== 0) return bullet;
+      const withoutPeriod = bullet.finalBullet.replace(/\.+$/, "");
+      return {
+        ...bullet,
+        finalBullet: `${withoutPeriod} after services were deployed with monitoring.`,
+      };
+    });
+
+    const output = await fixture.experienceValidator.execute({
+      ...validationInput(fixture),
+      bullets: corrupted,
+    });
+    const diagnostic = output.validation.diagnostics.find(
+      (item) => item.bulletId === target.bulletId,
+    );
+
+    expect(
+      diagnostic?.warnings.some((warning) => /avoidable passive voice/i.test(warning)),
+    ).toBe(true);
+    expect(
+      diagnostic?.errors.some((error) => /avoidable passive voice/i.test(error)),
+    ).toBe(false);
+    expect(
+      output.validation.issues
+        .filter((issue) => /avoidable passive voice/i.test(issue.message))
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(output.validation.failedBulletIds).not.toContain(target.bulletId);
+    expect(output.validation.overallStatus).toBe("approved");
+  });
+
+  it("soft-fails residual role-seniority and leadership-coverage instead of hard-rejecting", async () => {
+    const fixture = await createValidationFixture();
+    const seniorSignal =
+      /\b(?:architect(?:ed|ure)?|strategy|roadmap|standard|governance|mentored|led|leadership|design review|technical direction|cross-functional|stakeholder)\b/i;
+    const dropSeniorKeywords = (values: readonly string[]) =>
+      values.filter((value) => !seniorSignal.test(value));
+    const corrupted = fixture.bullets.map((bullet) => {
+      // Keep domain checks honest by dropping senior-signal keywords from the
+      // claimed lists while removing those phrases from the bullet text.
+      const stripped = bullet.finalBullet
+        .replace(
+          /\b(?:architect(?:ed|ure)?|strategy|roadmap|standard|governance|mentored|led|leadership|design review|technical direction|cross-functional|stakeholder)\b/gi,
+          "platform",
+        )
+        .replace(/^\S+/, "Delivered");
+      return {
+        ...bullet,
+        directKeywords: dropSeniorKeywords(bullet.directKeywords),
+        supportingKeywords: dropSeniorKeywords(bullet.supportingKeywords),
+        outcomeKeywords: dropSeniorKeywords(bullet.outcomeKeywords),
+        finalBullet: stripped,
+      };
+    });
+
+    const output = await fixture.experienceValidator.execute({
+      ...validationInput(fixture),
+      bullets: corrupted,
+    });
+
+    expect(
+      output.validation.issues
+        .filter((issue) => issue.issueCode === "role-seniority")
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(
+      output.validation.issues
+        .filter((issue) => issue.issueCode === "leadership-coverage")
+        .every((issue) => issue.severity === "warning"),
+    ).toBe(true);
+    expect(
+      output.validation.issues.filter(
+        (issue) =>
+          ["role-seniority", "leadership-coverage"].includes(issue.issueCode) &&
+          issue.severity === "error",
+      ),
+    ).toEqual([]);
+    expect(output.validation.failedBulletIds).toEqual([]);
+    expect(output.validation.overallStatus).toBe("approved");
+    expect(output.validation.allRolesSeniorityConsistent).toBe(false);
+    expect(output.validation.leadershipCoverage).toBe(false);
+  });
+
   it("rejects weak ATS language and missing measurable impact", async () => {
     const fixture = await createValidationFixture();
     const target = fixture.bullets[0];

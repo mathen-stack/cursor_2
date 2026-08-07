@@ -1,0 +1,734 @@
+import { describe, expect, it } from "vitest";
+import type { BaseResumeRecord } from "@resume/contracts";
+import {
+  ImmutableFinalResumeAssembler,
+  ResumeOrchestrator,
+  createJobDescription,
+} from "@resume/core";
+import {
+  createProductionExperienceEngine,
+  createProductionSkillsEngine,
+  createProductionSummaryEngine,
+  createProductionTemplateEngine,
+} from "@resume/engines";
+import { parseBaseResumeText } from "../apps/web/lib/base-resume-parser";
+import {
+  matchBaseResumesToJd,
+  pickBestBaseResumeMatch,
+} from "../apps/web/lib/base-resume-match";
+import {
+  isJunkBulletText,
+  sanitizeBulletList,
+  sanitizeBulletText,
+} from "../apps/web/lib/base-resume-bullet-sanitize";
+import { ensurePreservedExtractedFields } from "../apps/web/lib/base-resume-preserve-fields";
+import {
+  __baseResumeBulletMergeForTests,
+  assemblePreservedBaseResumeTailor,
+} from "../apps/web/lib/base-resume-preserve-tailor";
+import { baseResumeToUserProfile } from "../apps/web/lib/base-resume-to-profile";
+
+const SAMPLE_RESUME = `Alex Morgan
+alex.morgan@example.com | +1 555 0142 | Remote
+https://linkedin.com/in/alex-morgan
+
+Professional Summary
+Frontend engineer focused on React platforms, design systems, and reliable realtime UX.
+
+Professional Experience
+
+Senior Frontend Engineer | HP
+Mar 2022 - Present
+- Built React and TypeScript interfaces with Next.js and Tailwind CSS
+- Collaborated with product stakeholders on delivery planning
+- Improved WebSocket reliability for real-time gameplay features
+- Helped with assorted UI tasks
+- Worked on various frontend tickets
+
+Frontend Engineer | Visa
+Jun 2019 - Feb 2022
+- Implemented RESTful API integrations and Cypress test coverage
+- Optimized React performance for high-traffic checkout flows
+- Delivered accessible component library updates across checkout
+
+Education
+State University
+Bachelor of Science in Computer Science
+Sep 2011 - Jun 2015
+
+Skills
+React, Next.js, TypeScript, Tailwind CSS, WebSockets, Cypress, Git
+`;
+
+describe("base resume extraction", () => {
+  it("extracts roles and stacks from a well-structured resume", () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.personalInformation.fullName).toMatch(/Alex Morgan/i);
+    expect(extracted.personalInformation.email).toBe("alex.morgan@example.com");
+    expect(extracted.experiences.length).toBeGreaterThanOrEqual(2);
+    expect(extracted.experiences[0]?.companyName).toMatch(/HP/i);
+    expect(extracted.experiences[0]?.role).toMatch(/Frontend/i);
+    expect(extracted.stacks.join(" ")).toMatch(/React|TypeScript|Next/i);
+    expect(extracted.skills.length).toBeGreaterThan(0);
+  });
+
+  it("maps extracted resume data into a generation-ready profile", () => {
+    const profile = baseResumeToUserProfile(parseBaseResumeText(SAMPLE_RESUME), {
+      identityFrom: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+        linkedin: "https://linkedin.com/in/kenny",
+      },
+    });
+    expect(profile.personalInformation.fullName).toBe("Kenny User");
+    expect(profile.personalInformation.email).toBe("kenny@example.com");
+    expect(profile.personalInformation.phone).toBe("+1 555 9999");
+    expect(profile.personalInformation.location).toBe("Austin, TX");
+    expect(profile.personalInformation.linkedin).toBe(
+      "https://linkedin.com/in/kenny",
+    );
+    // Uploaded resume identity must not leak through.
+    expect(profile.personalInformation.fullName).not.toMatch(/Alex/i);
+    expect(profile.personalInformation.email).not.toBe("alex.morgan@example.com");
+    expect(profile.careerHistory.length).toBeGreaterThanOrEqual(2);
+    expect(profile.careerHistory[0]?.startDate).toBeTruthy();
+    expect(profile.education[0]?.institution).toBeTruthy();
+  });
+});
+
+describe("base resume JD matching", () => {
+  it("ranks the stronger stack match first", () => {
+    const frontend = parseBaseResumeText(SAMPLE_RESUME);
+    const backendText = `Jordan Lee
+jordan@example.com
+
+Experience
+Backend Engineer | Acme
+2021 - Present
+- Built Node.js and PostgreSQL services on AWS
+- Deployed Docker and Kubernetes workloads
+
+Skills
+Node.js, PostgreSQL, AWS, Docker, Kubernetes
+`;
+    const backend = parseBaseResumeText(backendText);
+    const now = new Date().toISOString();
+    const records: BaseResumeRecord[] = [
+      {
+        id: "BR-BE",
+        username: "demo",
+        title: "Backend base",
+        originalFilename: "backend.txt",
+        mimeType: "text/plain",
+        rawText: backendText,
+        extracted: backend,
+        isFavorite: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "BR-FE",
+        username: "demo",
+        title: "Frontend base",
+        originalFilename: "frontend.txt",
+        mimeType: "text/plain",
+        rawText: SAMPLE_RESUME,
+        extracted: frontend,
+        isFavorite: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+
+    const matches = matchBaseResumesToJd(
+      `Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams.`,
+      records,
+    );
+
+    expect(matches[0]?.baseResumeId).toBe("BR-FE");
+    expect(pickBestBaseResumeMatch(matches)?.title).toBe("Frontend base");
+    expect(matches[0]?.matchedStacks.length).toBeGreaterThan(0);
+  });
+});
+
+describe("base-resume bullet sanitization", () => {
+  it("removes mojibake bullets, junk lines, and broken fragments", () => {
+    expect(sanitizeBulletText("ð •  Built React apps with TypeScript")).toMatch(
+      /^Built React apps with TypeScript/i,
+    );
+    expect(isJunkBulletText("Tultepec, México, Mexico +52 1 56 5638 1831")).toBe(true);
+    expect(isJunkBulletText("1 of 3")).toBe(true);
+    expect(isJunkBulletText("2018 - Present")).toBe(true);
+    expect(
+      isJunkBulletText(
+        "Improved comfortable translating product requirements into technical tasks",
+      ),
+    ).toBe(true);
+
+    const cleaned = sanitizeBulletList([
+      "ð • Engineered a multi-modal deepfake verification pipeline that fuses Vision Transformers",
+      "(ViT), Wav2Vec2,",
+      "and TensorRT for GPU-accelerated feature extraction.",
+      "nssoftware2025@outlook.com",
+      "Page 2 of 3",
+      "Helped with assorted UI tasks across the board for stakeholders.",
+    ]);
+    expect(cleaned.some((bullet) => /multi-modal deepfake/i.test(bullet))).toBe(true);
+    expect(cleaned.join(" ")).toMatch(/Vision Transformers/i);
+    expect(cleaned.every((bullet) => !/ð|outlook\.com|Page 2/i.test(bullet))).toBe(true);
+  });
+});
+
+describe("base-resume JD bullet merge rules", () => {
+  it("appends 1–2 when count ≤4, replaces poorest 1–2 when count >4", () => {
+    const { jdBulletBudget, mergeExperienceBullets, REPLACE_THRESHOLD_EXCLUSIVE } =
+      __baseResumeBulletMergeForTests;
+
+    expect(jdBulletBudget(0)).toBe(2);
+    expect(jdBulletBudget(1)).toBe(1);
+    expect(jdBulletBudget(3)).toBe(2);
+    expect(jdBulletBudget(5)).toBe(2);
+    expect(REPLACE_THRESHOLD_EXCLUSIVE).toBe(4);
+
+    const strongJdBullets = [
+      {
+        bulletId: "G1",
+        requirementId: "R1",
+        situation: "s",
+        task: "t",
+        action: "a",
+        result: "r",
+        actionVerb: "Built",
+        directKeywords: ["React", "TypeScript"],
+        supportingKeywords: [],
+        outcomeKeywords: [],
+        finalBullet:
+          "Built React and Next.js delivery pipelines with TypeScript, cutting release defects by 28%.",
+        strengthScore: 9.5,
+        distinctivenessScore: 9,
+        status: "approved" as const,
+      },
+      {
+        bulletId: "G2",
+        requirementId: "R2",
+        situation: "s",
+        task: "t",
+        action: "a",
+        result: "r",
+        actionVerb: "Improved",
+        directKeywords: ["WebSocket"],
+        supportingKeywords: [],
+        outcomeKeywords: [],
+        finalBullet:
+          "Improved WebSocket reliability for realtime UX, sustaining 99.9% session continuity.",
+        strengthScore: 9.2,
+        distinctivenessScore: 8.8,
+        status: "approved" as const,
+      },
+    ];
+
+    const generatedStub = {
+      jobDescription: {
+        rawText:
+          "Senior Frontend Engineer React Next.js TypeScript WebSocket realtime delivery pipelines",
+      },
+      experience: {
+        experiences: [
+          {
+            experienceId: "EXP-GEN-1",
+            companyName: "Generated Co",
+            startDate: "2022",
+            endDate: "Present",
+            assignedRole: "Senior Frontend Engineer",
+            bullets: strongJdBullets,
+          },
+        ],
+      },
+    } as unknown as import("@resume/contracts").FinalResumeData;
+
+    const jdText = generatedStub.jobDescription.rawText;
+
+    const threeOriginals = [
+      "Implemented RESTful API integrations and Cypress test coverage",
+      "Optimized React performance for high-traffic checkout flows",
+      "Helped with assorted UI tasks",
+    ];
+    const appended = mergeExperienceBullets({
+      experienceId: "EXP-APPEND",
+      experienceIndex: 0,
+      originalTexts: threeOriginals,
+      roleStacks: ["React", "TypeScript", "Cypress"],
+      jdText,
+      generated: generatedStub,
+    });
+    // ≤4 originals → append 1–2 JD bullets.
+    expect(appended.length).toBe(5);
+    expect(
+      appended.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
+    ).toBe(3);
+    expect(
+      appended.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+    ).toBe(2);
+    expect(appended.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
+      true,
+    );
+
+    const fiveOriginals = [
+      "Built React and TypeScript interfaces with Next.js and Tailwind CSS",
+      "Improved WebSocket reliability for real-time gameplay features",
+      "Collaborated with product stakeholders on delivery planning",
+      "Helped with assorted UI tasks",
+      "Worked on various frontend tickets",
+    ];
+    const replaced = mergeExperienceBullets({
+      experienceId: "EXP-REPLACE",
+      experienceIndex: 0,
+      originalTexts: fiveOriginals,
+      roleStacks: ["React", "TypeScript", "WebSocket"],
+      jdText,
+      generated: generatedStub,
+    });
+    // >4 originals → replace poorest 1–2, keep count.
+    expect(replaced.length).toBe(5);
+    expect(replaced.some((bullet) => /Helped with assorted UI tasks/i.test(bullet.finalBullet))).toBe(
+      false,
+    );
+    expect(
+      replaced.some((bullet) => /Worked on various frontend tickets/i.test(bullet.finalBullet)),
+    ).toBe(false);
+    expect(
+      replaced.filter((bullet) => bullet.requirementId === "PRESERVED-ORIGINAL").length,
+    ).toBe(3);
+    expect(
+      replaced.filter((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL").length,
+    ).toBe(2);
+  });
+
+  it("creates a full JD bullet set for profile-only roles with no uploaded bullets", () => {
+    const { createBulletsForNewExperience, NEW_ROLE_BULLET_TARGET } =
+      __baseResumeBulletMergeForTests;
+
+    const strongJdBullets = Array.from({ length: 5 }, (_, index) => ({
+      bulletId: `G${index + 1}`,
+      requirementId: `R${index + 1}`,
+      situation: "s",
+      task: "t",
+      action: "a",
+      result: "r",
+      actionVerb: "Built",
+      directKeywords: ["React", "TypeScript"],
+      supportingKeywords: [],
+      outcomeKeywords: [],
+      finalBullet: `Built React platform capability ${index + 1} with TypeScript, improving delivery reliability by ${20 + index}%.`,
+      strengthScore: 9.5,
+      distinctivenessScore: 9,
+      status: "approved" as const,
+    }));
+
+    const generatedStub = {
+      jobDescription: {
+        rawText:
+          "Senior Frontend Engineer React TypeScript delivery reliability platforms",
+      },
+      experience: {
+        experiences: [
+          {
+            experienceId: "EXP-GEN-1",
+            companyName: "Generated Co",
+            startDate: "2020",
+            endDate: "2022",
+            assignedRole: "Frontend Engineer",
+            bullets: strongJdBullets.slice(0, 2),
+          },
+          {
+            experienceId: "EXP-GEN-2",
+            companyName: "Generated Labs",
+            startDate: "2018",
+            endDate: "2020",
+            assignedRole: "Software Engineer",
+            bullets: strongJdBullets,
+          },
+        ],
+      },
+    } as unknown as import("@resume/contracts").FinalResumeData;
+
+    const created = createBulletsForNewExperience({
+      experienceId: "EXP-NEW",
+      experienceIndex: 1,
+      roleStacks: ["React", "TypeScript"],
+      jdText: generatedStub.jobDescription.rawText,
+      generated: generatedStub,
+    });
+
+    expect(NEW_ROLE_BULLET_TARGET).toBe(5);
+    expect(created.length).toBe(NEW_ROLE_BULLET_TARGET);
+    expect(
+      created.every((bullet) => bullet.requirementId !== "PRESERVED-ORIGINAL"),
+    ).toBe(true);
+    expect(created.every((bullet) => /React|TypeScript/i.test(bullet.finalBullet))).toBe(
+      true,
+    );
+  });
+});
+
+describe("preserved base-resume tailor", () => {
+  it("recovers summary/skills from rawText when stored extract left them empty", () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    const hollow = {
+      ...extracted,
+      summary: "",
+      skills: [] as string[],
+    };
+    const recovered = ensurePreservedExtractedFields(hollow, SAMPLE_RESUME);
+    expect(recovered.summary).toMatch(/Frontend engineer focused on React/i);
+    expect(recovered.skills.join(" ")).toMatch(/React|TypeScript/i);
+  });
+
+  it("preserves original content, overlays profile headers, and applies bullet rules", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.summary).toMatch(/Frontend engineer focused on React/i);
+
+    const userProfile = {
+      profileId: "PROFILE-PRESERVE",
+      personalInformation: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Corp",
+          role: "Staff Frontend Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Kenny Labs",
+          role: "Frontend Engineer",
+          startDate: "2019-06",
+          endDate: "2022-02",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const generationProfile = baseResumeToUserProfile(extracted, {
+      profileId: userProfile.profileId,
+      identityFrom: userProfile.personalInformation,
+    });
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: {
+        ...generationProfile,
+        careerHistory: userProfile.careerHistory,
+        education: userProfile.education,
+      },
+      locale: "en-US",
+    });
+
+    // Simulate older uploads with empty summary/skills in stored extract.
+    const hollowExtracted = {
+      ...extracted,
+      summary: "",
+      skills: [] as string[],
+    };
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted: hollowExtracted,
+      userProfile,
+      rawText: SAMPLE_RESUME,
+    });
+
+    const contact = tailored.document.sections.find((section) => section.id === "contact");
+    const summary = tailored.document.sections.find(
+      (section) => section.id === "professional-summary",
+    );
+    const skills = tailored.document.sections.find((section) => section.id === "skills");
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    const education = tailored.document.sections.find(
+      (section) => section.id === "education",
+    );
+
+    expect(contact?.id === "contact" && contact.content.fullName).toBe("Kenny User");
+    expect(contact?.id === "contact" && contact.content.email).toBe("kenny@example.com");
+    expect(summary?.id === "professional-summary" && summary.content).toMatch(
+      /Frontend engineer focused on React/i,
+    );
+    // Must keep the uploaded summary — not the JD-generated one.
+    expect(summary?.id === "professional-summary" && summary.content).toBe(
+      extracted.summary,
+    );
+    expect(summary?.id === "professional-summary" && summary.content).not.toBe(
+      generated.summary.summary,
+    );
+    expect(skills?.id === "skills" && skills.content[0]?.skills.join(" ")).toMatch(
+      /React|TypeScript/i,
+    );
+    // Must keep uploaded skills — not JD-generated skill categories.
+    expect(skills?.id === "skills" && skills.content[0]?.skills).toEqual(
+      expect.arrayContaining(extracted.skills.slice(0, 5)),
+    );
+    expect(education?.id === "education" && education.content[0]?.institution).toBe(
+      "Kenny University",
+    );
+    expect(education?.id === "education" && education.content[0]?.field).toBe(
+      "Software Engineering",
+    );
+
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    expect(experience.content.length).toBe(userProfile.careerHistory.length);
+    expect(experience.content[0]?.companyName).toBe("Kenny Corp");
+    expect(experience.content[0]?.assignedRole).toBe("Staff Frontend Engineer");
+    expect(experience.content[1]?.companyName).toBe("Kenny Labs");
+
+    experience.content.forEach((entry, index) => {
+      const original = extracted.experiences[index]?.bullets ?? [];
+      if (original.length === 0) {
+        expect(entry.bullets.length).toBeGreaterThanOrEqual(2);
+        return;
+      }
+      if (original.length > 4) {
+        expect(entry.bullets.length).toBe(original.length);
+        expect(entry.bullets).not.toContain("Helped with assorted UI tasks");
+        expect(entry.bullets).not.toContain("Worked on various frontend tickets");
+      } else {
+        expect(entry.bullets.length).toBeGreaterThan(original.length);
+        expect(entry.bullets.length - original.length).toBeLessThanOrEqual(2);
+        for (const bullet of original) {
+          expect(entry.bullets).toContain(bullet);
+        }
+      }
+    });
+
+    // Uploaded identity must not appear on the tailored contact block.
+    expect(JSON.stringify(contact)).not.toContain("alex.morgan@example.com");
+    expect(tailored.assemblyValidation.overallStatus).toBe("approved");
+
+    const { ProductionResumeRenderer } = await import("@resume/rendering");
+    const exporter = new ProductionResumeRenderer();
+    const docx = await exporter.export(tailored, "docx");
+    expect(docx.validation.overallStatus).toBe("approved");
+    expect(docx.byteLength).toBeGreaterThan(100);
+    const pdf = await exporter.export(tailored, "pdf");
+    expect(pdf.validation.overallStatus).toBe("approved");
+    const txt = await exporter.export(tailored, "txt");
+    expect(new TextDecoder().decode(txt.bytes)).toMatch(/Kenny User/);
+    expect(new TextDecoder().decode(txt.bytes)).toMatch(
+      /Built React and TypeScript interfaces/i,
+    );
+  }, 60_000);
+
+  it("matches profile experience count and creates bullets for extra profile roles", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.experiences.length).toBe(2);
+
+    const userProfile = {
+      profileId: "PROFILE-COUNT",
+      personalInformation: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        phone: "+1 555 9999",
+        location: "Austin, TX",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Corp",
+          role: "Staff Frontend Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+        {
+          experienceId: "EXP-002",
+          companyName: "Kenny Labs",
+          role: "Frontend Engineer",
+          startDate: "2019-06",
+          endDate: "2022-02",
+        },
+        {
+          experienceId: "EXP-003",
+          companyName: "Kenny Start",
+          role: "Junior Engineer",
+          startDate: "2017-01",
+          endDate: "2019-05",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: userProfile,
+      locale: "en-US",
+      approvalPolicy: "preserve-tailor",
+    });
+
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted,
+      userProfile,
+      rawText: SAMPLE_RESUME,
+    });
+
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    expect(experience.content.length).toBe(3);
+    expect(experience.content.map((entry) => entry.companyName)).toEqual([
+      "Kenny Corp",
+      "Kenny Labs",
+      "Kenny Start",
+    ]);
+    expect(experience.content[2]?.assignedRole).toBe("Junior Engineer");
+    expect(experience.content[2]?.bullets.length).toBeGreaterThanOrEqual(2);
+    // Extra profile role has no uploaded originals to preserve.
+    for (const bullet of experience.content[2]?.bullets ?? []) {
+      expect(extracted.experiences.flatMap((entry) => entry.bullets)).not.toContain(
+        bullet,
+      );
+    }
+    // Surplus uploaded roles are not the driver; count stays at profile length.
+    expect(tailored.profile.careerHistory.length).toBe(3);
+  }, 60_000);
+
+  it("drops surplus uploaded experiences when profile has fewer roles", async () => {
+    const extracted = parseBaseResumeText(SAMPLE_RESUME);
+    expect(extracted.experiences.length).toBeGreaterThanOrEqual(2);
+
+    const userProfile = {
+      profileId: "PROFILE-SHORT",
+      personalInformation: {
+        fullName: "Kenny User",
+        email: "kenny@example.com",
+        location: "Austin, TX",
+      },
+      careerHistory: [
+        {
+          experienceId: "EXP-001",
+          companyName: "Kenny Only",
+          role: "Staff Engineer",
+          startDate: "2022-03",
+          endDate: "Present",
+        },
+      ],
+      education: [
+        {
+          educationId: "EDU-001",
+          institution: "Kenny University",
+          degree: "Bachelor of Science",
+          field: "Software Engineering",
+          startDate: "2011-09",
+          endDate: "2015-06",
+        },
+      ],
+    };
+
+    const orchestrator = new ResumeOrchestrator(
+      {
+        experience: createProductionExperienceEngine().engine,
+        summary: createProductionSummaryEngine(),
+        skills: createProductionSkillsEngine(),
+        template: createProductionTemplateEngine(),
+      },
+      new ImmutableFinalResumeAssembler(),
+    );
+
+    const generated = await orchestrator.generate({
+      jobDescription: createJobDescription(`Senior Frontend Engineer
+Build React and Next.js applications with TypeScript and Tailwind CSS.
+Integrate WebSockets and collaborate with product teams on delivery.`),
+      profile: userProfile,
+      locale: "en-US",
+      approvalPolicy: "preserve-tailor",
+    });
+
+    const tailored = assemblePreservedBaseResumeTailor({
+      generated,
+      extracted,
+      userProfile,
+    });
+
+    const experience = tailored.document.sections.find(
+      (section) => section.id === "professional-experience",
+    );
+    expect(experience?.id).toBe("professional-experience");
+    if (experience?.id !== "professional-experience") {
+      throw new Error("Expected professional experience section");
+    }
+
+    expect(experience.content.length).toBe(1);
+    expect(experience.content[0]?.companyName).toBe("Kenny Only");
+    expect(experience.content[0]?.assignedRole).toBe("Staff Engineer");
+    // First uploaded role keeps strong originals (weakest may be replaced).
+    expect(experience.content[0]?.bullets.join(" ")).toMatch(
+      /Built React and TypeScript interfaces/i,
+    );
+    expect(experience.content[0]?.bullets.join(" ")).toMatch(
+      /Improved WebSocket reliability/i,
+    );
+    expect(experience.content[0]?.bullets).not.toContain(
+      "Helped with assorted UI tasks",
+    );
+  }, 60_000);
+});

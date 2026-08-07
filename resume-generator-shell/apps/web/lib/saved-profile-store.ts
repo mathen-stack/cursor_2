@@ -1,4 +1,8 @@
-import type { CareerEntry, UserProfile } from "@resume/contracts";
+import {
+  normalizeOptionalHttpUrl,
+  type CareerEntry,
+  type UserProfile,
+} from "@resume/contracts";
 
 export const SAVED_PROFILE_STORAGE_KEY_PREFIX = "resume-tailor:saved-profile:v1";
 
@@ -112,10 +116,10 @@ export function normalizeStoredProfile(value: unknown): UserProfile | null {
         )
     : [];
 
-  const linkedin = asTrimmedString(
+  const linkedin = normalizeOptionalHttpUrl(
     (personal as { linkedin?: unknown }).linkedin,
   );
-  const portfolio = asTrimmedString(
+  const portfolio = normalizeOptionalHttpUrl(
     (personal as { portfolio?: unknown }).portfolio,
   );
 

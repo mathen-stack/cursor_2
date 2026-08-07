@@ -39,6 +39,7 @@ export class ResumeGenerationService {
       jobDescription,
       profile: structuredClone(submission.profile),
       locale: submission.locale,
+      approvalPolicy: submission.approvalPolicy,
     });
 
     if (this.store) {

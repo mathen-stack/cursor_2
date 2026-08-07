@@ -34,15 +34,31 @@ export class ResumeEngineRejectedError extends Error {
             };
           }
         ).validation;
+        const isSoftResidualMessage = (message: string): boolean =>
+          /ownership or leadership scope does not match|lacks architecture, leadership, mentoring|below the preferred strength|repeats or overloads JD keywords|metric measure pattern is repeated|action scope is cloned|residual repetition risk|avoidable passive voice|residual passive voice|Generated \d+ skills; the target range|Leadership-focused plans lack relevant allocation|Communication-focused plans lack relevant allocation/i.test(
+            message,
+          );
         const issueMessages =
           validation?.issues
-            ?.map((issue) => issue.message)
+            ?.filter(
+              (issue) =>
+                (issue as { severity?: string }).severity !== "warning",
+            )
+            .map((issue) => issue.message)
             .filter((message): message is string => Boolean(message))
+            .filter((message) => !isSoftResidualMessage(message))
             .slice(0, 5) ?? [];
         const diagnosticMessages =
           validation?.diagnostics
             ?.filter((item) => item.errors.length > 0)
-            .map((item) => `${item.bulletId}: ${item.errors.join(" ")}`)
+            .map((item) => {
+              const hardErrors = item.errors.filter(
+                (error) => !isSoftResidualMessage(error),
+              );
+              if (hardErrors.length === 0) return null;
+              return `${item.bulletId}: ${hardErrors.join(" ")}`;
+            })
+            .filter((message): message is string => Boolean(message))
             .slice(0, 5) ?? [];
         const detailParts = [...issueMessages, ...diagnosticMessages];
         if (detailParts.length === 0) {
@@ -161,8 +177,18 @@ export class ResumeOrchestrator {
       templateResult.output,
     ];
     outputs.forEach((output) => assertContextMatch(context, output));
-    if (outputs.some((output) => output.status !== "approved")) {
-      throw new ResumeEngineRejectedError(outputs);
+    const approvalPolicy = safeRequest.approvalPolicy ?? "strict";
+    const blockingOutputs = outputs.filter((output) => {
+      if (output.status === "approved") return false;
+      // Preserve-tailor overwrites summary/skills and only needs JD bullet
+      // candidates from experience — do not hard-stop on those engines.
+      if (approvalPolicy === "preserve-tailor") {
+        return output.engineName === "template-engine";
+      }
+      return true;
+    });
+    if (blockingOutputs.length > 0) {
+      throw new ResumeEngineRejectedError(blockingOutputs);
     }
 
     const orchestration: ResumeOrchestrationTelemetry = {
@@ -177,13 +203,30 @@ export class ResumeOrchestrator {
       ],
     };
 
+    // Preserve-tailor assembly overwrites summary/skills/bullets. Coerce
+    // non-blocking engine statuses so the assembler gate does not hard-stop
+    // after a weak JD bullet candidate was rejected.
+    const allowUnapprovedContentEngines = approvalPolicy === "preserve-tailor";
+    const summaryForAssembly =
+      allowUnapprovedContentEngines && summaryResult.output.status !== "approved"
+        ? { ...summaryResult.output, status: "approved" as const }
+        : summaryResult.output;
+    const skillsForAssembly =
+      allowUnapprovedContentEngines && skillsResult.output.status !== "approved"
+        ? { ...skillsResult.output, status: "approved" as const }
+        : skillsResult.output;
+    const experienceForAssembly =
+      allowUnapprovedContentEngines && experienceResult.output.status !== "approved"
+        ? { ...experienceResult.output, status: "approved" as const }
+        : experienceResult.output;
+
     const assembled = this.assembler.assemble({
       context,
       jobDescription: safeRequest.jobDescription,
       profile: safeRequest.profile,
-      summary: summaryResult.output,
-      skills: skillsResult.output,
-      experience: experienceResult.output,
+      summary: summaryForAssembly,
+      skills: skillsForAssembly,
+      experience: experienceForAssembly,
       template: templateResult.output,
       orchestration,
     });

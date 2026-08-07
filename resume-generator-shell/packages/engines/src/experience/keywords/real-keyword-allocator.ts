@@ -16,6 +16,10 @@ import {
 import { DirectJDKeywordEngine } from "./direct-jd-keyword-engine";
 import { validateKeywordAllocation } from "./keyword-allocation-validator";
 import {
+  hasLeadershipAllocationSignal,
+  pickLeadershipSupportingKeyword,
+} from "./leadership-allocation";
+import {
   canonicalKeywordKey,
 } from "./keyword-normalizer";
 import { OutcomeKeywordEngine } from "./outcome-keyword-engine";
@@ -270,6 +274,43 @@ export class RealKeywordAllocator implements KeywordAllocator {
           rationale: emergency.controlledReuse
             ? "Reused a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence."
             : "Injected a collaboration supporting keyword so the communication-focused package retained stakeholder or cross-functional evidence.",
+          controlledReuse: emergency.controlledReuse,
+        };
+        supporting =
+          supporting.length > 0
+            ? [...supporting.slice(0, -1), emergencyDetail]
+            : [emergencyDetail];
+      }
+
+      // Last-resort: leadership-focused packages must retain ownership/strategy
+      // evidence even when uniqueness locks push allocation toward delivery methods.
+      if (
+        plan.leadershipFocused &&
+        !hasLeadershipAllocationSignal(
+          packageAllocationText({
+            directKeywords: direct.keywords,
+            supportingKeywords: supporting.map((detail) => detail.keyword),
+            outcomeKeywords: outcomes.map((detail) => detail.keyword),
+            actionVerb: action.actionVerb,
+          }),
+        )
+      ) {
+        const blocked = new Set([
+          ...directKeys,
+          ...outcomes.map((detail) => detail.canonicalKey),
+          ...supporting.map((detail) => detail.canonicalKey),
+        ]);
+        const emergency = pickLeadershipSupportingKeyword(
+          documentState.usedGlobalKeywordKeys,
+          blocked,
+        );
+        const emergencyDetail: SupportingKeywordDetail = {
+          keyword: emergency.keyword,
+          canonicalKey: emergency.canonicalKey,
+          origin: "strongly-inferred",
+          rationale: emergency.controlledReuse
+            ? "Reused a leadership supporting keyword so the leadership-focused package retained ownership or strategic direction evidence."
+            : "Injected a leadership supporting keyword so the leadership-focused package retained ownership or strategic direction evidence.",
           controlledReuse: emergency.controlledReuse,
         };
         supporting =

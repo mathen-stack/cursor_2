@@ -175,6 +175,86 @@ describe("Real global keyword allocation", () => {
     expect(output.validation?.leadershipPackagesRelevant).toBe(true);
   });
 
+  it("keeps multi-role principal leadership packages allocated without hard-failing", async () => {
+    const jobDescription = createJobDescription(
+      `Principal Engineer | Target Company
+Lead technical strategy, architecture decisions, and engineering standards across platforms.
+Mentor engineers and guide roadmap planning for complex delivery programs.
+Collaborate with product and platform stakeholders on priorities.
+Build reliable services with TypeScript, Node.js, AWS, Kubernetes, and PostgreSQL.
+Improve reliability, scalability, and delivery quality across production systems.`,
+    );
+    const context = createGenerationContext("PROFILE-PRINCIPAL", jobDescription);
+    const careerHistory = [
+      {
+        experienceId: "EXP-001",
+        companyName: "Current Co",
+        startDate: "2022-01",
+        endDate: "Present",
+      },
+      {
+        experienceId: "EXP-002",
+        companyName: "Prior Co",
+        startDate: "2019-01",
+        endDate: "2021-12",
+      },
+      {
+        experienceId: "EXP-003",
+        companyName: "Earlier Co",
+        startDate: "2015-01",
+        endDate: "2018-12",
+      },
+    ];
+    const extractor = new RealRequirementExtractor({
+      model: new RuleBasedRequirementModel(),
+    });
+    const extracted = await extractor.execute({ context, jobDescription });
+    const roles = await new RealRoleAssignmentEngine({
+      referenceDate: REFERENCE_DATE,
+    }).execute({
+      context,
+      jobDescription,
+      careerHistory,
+      requirements: extracted.requirements,
+    });
+    const plans = await new RealBulletPlanner().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      minimumBulletsPerRole: 5,
+    });
+
+    const output = await new RealKeywordAllocator().execute({
+      context,
+      jobDescription,
+      assignments: roles.assignments,
+      requirements: extracted.requirements,
+      plans: plans.plans,
+    });
+
+    expect(output.validation?.overallStatus).toBe("approved");
+    expect(output.validation?.errors ?? []).toEqual([]);
+    const leadershipPlans = plans.plans.filter((plan) => plan.leadershipFocused);
+    expect(leadershipPlans.length).toBeGreaterThan(0);
+    for (const plan of leadershipPlans) {
+      const keywordPackage = output.packages.find(
+        (item) => item.bulletId === plan.bulletId,
+      );
+      expect(keywordPackage).toBeDefined();
+      expect(
+        [
+          ...(keywordPackage?.directKeywords ?? []),
+          ...(keywordPackage?.supportingKeywords ?? []),
+          ...(keywordPackage?.outcomeKeywords ?? []),
+          keywordPackage?.actionVerb ?? "",
+        ].join(" "),
+      ).toMatch(
+        /lead|spearhead|direct|champion|guide|mentor|strategy|roadmap|governance|engineering standard|architecture|ownership/i,
+      );
+    }
+  });
+
   it("never allocates Resume Worded soft-skill buzzphrases as direct keywords", async () => {
     const jobDescription = createJobDescription(
       `Senior Frontend Engineer

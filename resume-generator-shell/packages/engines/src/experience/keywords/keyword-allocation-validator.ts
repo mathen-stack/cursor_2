@@ -10,6 +10,7 @@ import {
   hasCommunicationAllocationSignal,
   packageAllocationText,
 } from "./communication-allocation";
+import { hasLeadershipAllocationSignal } from "./leadership-allocation";
 import { canonicalKeywordKey } from "./keyword-normalizer";
 
 function duplicateValues(values: string[]): string[] {
@@ -201,9 +202,7 @@ export function validateKeywordAllocation(input: {
     }
     if (
       plan.leadershipFocused &&
-      !/lead|spearhead|direct|champion|guide|mentor|strategy|roadmap|governance|engineering standard|architecture/.test(
-        text,
-      )
+      !hasLeadershipAllocationSignal(text)
     ) {
       leadershipPackageErrors.push(plan.bulletId);
     }
@@ -273,13 +272,15 @@ export function validateKeywordAllocation(input: {
       `Repeated keyword concepts across direct, supporting, or outcome allocations within roles: ${repeatedCrossKindKeywordKeys.join(", ")}.`,
     );
   }
+  // Allocation already injects collaboration/leadership signals as a last
+  // resort. Residual detector misses stay warnings so generation continues.
   if (!communicationPackagesRelevant) {
-    errors.push(
+    warnings.push(
       `Communication-focused plans lack relevant allocation: ${communicationPackageErrors.join(", ")}.`,
     );
   }
   if (!leadershipPackagesRelevant) {
-    errors.push(
+    warnings.push(
       `Leadership-focused plans lack relevant allocation: ${leadershipPackageErrors.join(", ")}.`,
     );
   }

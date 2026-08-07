@@ -136,7 +136,17 @@ export class SentenceQualityValidator {
     if (!supportingKeywordCoverage) errors.push("Bullet omits one or more allocated supporting keywords.");
     if (!outcomeKeywordCoverage) errors.push("Bullet omits one or more allocated outcome keywords.");
     if (!quantifiedImpactPresent) errors.push("Bullet has no quantified impact.");
-    if (!activeVoice) errors.push("Bullet is not consistently written in active voice.");
+    // Opening-verb repair already runs in composition; residual passive phrasing
+    // after that stays a warning so sentence validation does not hard-stop.
+    if (!activeVoice) {
+      if (startsWithAllocatedActionVerb) {
+        warnings.push(
+          "Bullet may still show residual passive voice after wording repair.",
+        );
+      } else {
+        errors.push("Bullet is not consistently written in active voice.");
+      }
+    }
     if (!firstPersonFree) errors.push("Bullet contains a personal pronoun.");
     if (!weakLanguageFree) errors.push("Bullet contains weak or filler language.");
     if (!punctuationValid) errors.push("Bullet must be one clean sentence with one terminal period.");

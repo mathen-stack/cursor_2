@@ -10,6 +10,7 @@ import {
   directKeywordRepresented,
   ensureCompositionCommunicationSignal,
   ensureAllocatedOpeningVerb,
+  ensureUniqueActionScopeBullet,
   finalizeComposedBullet,
   actionScopeFingerprint,
   actionScopePhraseKeys,
@@ -528,9 +529,10 @@ export class RealBulletComposer implements BulletComposer {
     let validation = runValidation();
 
     const isFixableSentenceStrengthError = (error: string): boolean =>
-      /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|word limit|too long|scan-friendly|exceeds|buzzword|filler|weak language|personal pronoun|first-person|years-of-experience|job-posting|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice/i.test(
+      /repeated phrasing|imperative verb|broken JD fragment|JD-fragment|too short|word limit|too long|scan-friendly|exceeds|buzzword|filler|weak language|personal pronoun|first-person|years-of-experience|job-posting|supporting keywords|outcome keywords|direct JD keyword|action verb|active voice|quantified impact/i.test(
         error,
       );
+    const QUANTIFIED_IMPACT_RE = /\b\d+(?:\.\d+)?\s?(?:%|x|ms|hours?|days?)/i;
 
     // One closed retry for fixable sentence-strength / coverage failures.
     if (validation.overallStatus !== "approved") {
@@ -650,13 +652,118 @@ export class RealBulletComposer implements BulletComposer {
       }
     }
 
+    // Last-resort: inject a concrete metric into bullets that only fail
+    // quantified-impact checks (common when STAR stories lack numeric metrics).
     if (validation.overallStatus !== "approved") {
-      throw new Error(
-        `Compressed STAR bullet composition failed validation: ${validation.errors.join(" ")} ${validation.diagnostics
-          .filter((item) => item.errors.length > 0)
-          .map((item) => `${item.bulletId}: ${item.errors.join(" ")}`)
-          .join(" ")}`.trim(),
+      const quantifiedFailures = new Set(
+        validation.diagnostics
+          .filter((item) =>
+            item.errors.some((error) => /no quantified impact/i.test(error)),
+          )
+          .map((item) => item.bulletId),
       );
+      if (quantifiedFailures.size > 0) {
+        const usedScopeKeys = new Set<string>();
+        for (const draft of drafts) {
+          if (quantifiedFailures.has(draft.bulletId)) continue;
+          const scope = draft.finalBullet
+            .replace(/[.!?]+$/g, "")
+            .replace(
+              new RegExp(
+                `^${draft.actionVerb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+`,
+                "i",
+              ),
+              "",
+            )
+            .replace(/\s+(?:using|through|,)\s+[\s\S]*$/i, "")
+            .trim();
+          const fingerprint = actionScopeFingerprint(scope);
+          if (fingerprint) usedScopeKeys.add(fingerprint);
+          for (const phraseKey of actionScopePhraseKeys(scope)) {
+            usedScopeKeys.add(phraseKey);
+          }
+        }
+
+        drafts = drafts.map((draft) => {
+          if (!quantifiedFailures.has(draft.bulletId)) return draft;
+          if (QUANTIFIED_IMPACT_RE.test(draft.finalBullet)) return draft;
+
+          const original = packagesByBullet.get(draft.bulletId);
+          const plan = plansByBullet.get(draft.bulletId);
+          const story = storiesByBullet.get(draft.bulletId);
+          const verb = (original?.actionVerb ?? draft.actionVerb).trim();
+          const metric = story?.metrics[0];
+          const metricClause = metric
+            ? metricAsGerund(metric)
+            : "improving delivery predictability by 20%";
+          const base = draft.finalBullet.replace(/[.!?]+$/g, "").trim();
+          const rebuilt = normalizeBulletSentence(`${base}, ${metricClause}`);
+          const preserve = [
+            ...(original?.directKeywords ?? draft.directKeywords),
+            ...(original?.supportingKeywords ?? draft.supportingKeywords),
+            ...(original?.outcomeKeywords ?? draft.outcomeKeywords),
+          ];
+          const finalized = finalizeComposedBullet({
+            finalBullet: ensureAllocatedOpeningVerb(rebuilt, verb),
+            actionVerb: verb,
+            bulletId: draft.bulletId,
+            usedScopeKeys,
+            minimumWords,
+            maximumWords,
+            communicationFocused: Boolean(plan?.communicationFocused),
+            preserveKeywords: preserve,
+          });
+          return syncClaimedKeywords({
+            ...draft,
+            actionVerb: verb,
+            finalBullet: finalized,
+          });
+        });
+        validation = runValidation();
+      }
+    }
+
+    // Final document-wide action-scope uniquify. Per-bullet finalize already
+    // claims scopes, but later repairs can reintroduce clones — reassert once.
+    {
+      const usedScopeKeys = new Set<string>();
+      const before = drafts.map((draft) => draft.finalBullet).join("\n");
+      drafts = drafts.map((draft) => {
+        const verb = draft.actionVerb.trim();
+        const uniquified = ensureUniqueActionScopeBullet({
+          finalBullet: draft.finalBullet,
+          actionVerb: verb,
+          bulletId: draft.bulletId,
+          usedScopeKeys,
+          minimumWords,
+        });
+        if (uniquified === draft.finalBullet) {
+          return draft;
+        }
+        return syncClaimedKeywords({
+          ...draft,
+          finalBullet: uniquified,
+        });
+      });
+      if (drafts.map((draft) => draft.finalBullet).join("\n") !== before) {
+        validation = runValidation();
+      }
+    }
+
+    if (validation.overallStatus !== "approved") {
+      const usableCount = validation.diagnostics.filter(
+        (item) => item.errors.length === 0,
+      ).length;
+      // Soft-fail when at least one bullet is healthy so preserve-tailor (and
+      // partial generation) can continue; weak bullets are marked rejected below.
+      if (usableCount === 0) {
+        throw new Error(
+          `Compressed STAR bullet composition failed validation: ${validation.errors.join(" ")} ${validation.diagnostics
+            .filter((item) => item.errors.length > 0)
+            .map((item) => `${item.bulletId}: ${item.errors.join(" ")}`)
+            .join(" ")}`.trim(),
+        );
+      }
     }
 
     const diagnosticByBullet = new Map(

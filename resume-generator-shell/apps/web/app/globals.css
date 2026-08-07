@@ -428,7 +428,7 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.profile-field input,
+.profile-field input:not([type="radio"]):not([type="checkbox"]),
 .profile-field select,
 .control-input {
   width: 100%;
@@ -453,7 +453,7 @@ textarea::placeholder {
   color: #627068;
 }
 
-.profile-field input:focus,
+.profile-field input:not([type="radio"]):not([type="checkbox"]):focus,
 .profile-field select:focus,
 .control-input:focus,
 textarea:focus {

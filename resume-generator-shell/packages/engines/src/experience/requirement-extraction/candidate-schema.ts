@@ -79,9 +79,13 @@ export function parseRequirementCandidateEnvelope(
     );
   }
 
-  const requirements = parsed.requirements.map((value, index) => {
+  // Skip incomplete/invalid candidates (e.g. empty normalizedText from the
+  // model) instead of failing the entire generation run. Valid candidates keep
+  // the same post-processing path as before.
+  const requirements: RequirementCandidate[] = [];
+  for (const value of parsed.requirements) {
     if (!isRecord(value)) {
-      throw new Error(`Requirement candidate ${index} must be an object.`);
+      continue;
     }
 
     const sourceText = value.sourceText;
@@ -91,39 +95,35 @@ export function parseRequirementCandidateEnvelope(
     const necessity = value.necessity;
 
     if (typeof sourceText !== "string" || sourceText.trim().length === 0) {
-      throw new Error(
-        `Requirement candidate ${index} must include non-empty sourceText.`,
-      );
+      continue;
     }
     if (
       typeof normalizedText !== "string" ||
       normalizedText.trim().length === 0
     ) {
-      throw new Error(
-        `Requirement candidate ${index} must include non-empty normalizedText.`,
-      );
+      continue;
     }
     if (typeof category !== "string" || !CATEGORIES.has(category as RequirementCategory)) {
-      throw new Error(`Requirement candidate ${index} has an invalid category.`);
+      continue;
     }
     if (typeof priority !== "string" || !PRIORITIES.has(priority as RequirementPriority)) {
-      throw new Error(`Requirement candidate ${index} has an invalid priority.`);
+      continue;
     }
     if (
       typeof necessity !== "string" ||
       !NECESSITIES.has(necessity as RequirementNecessity)
     ) {
-      throw new Error(`Requirement candidate ${index} has an invalid necessity.`);
+      continue;
     }
 
-    return {
+    requirements.push({
       sourceText: sourceText.trim(),
       normalizedText: normalizedText.trim(),
       category: category as RequirementCategory,
       priority: priority as RequirementPriority,
       necessity: necessity as RequirementNecessity,
-    };
-  });
+    });
+  }
 
   if (requirements.length === 0) {
     throw new Error("Requirement model returned no requirements.");

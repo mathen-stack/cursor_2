@@ -178,17 +178,21 @@ export class SummaryComposer {
     const technical = input.keywords.filter((keyword) => keyword.category === "technical");
     const outcomes = input.keywords.filter((keyword) => keyword.category === "outcome");
     const people = input.keywords.filter((keyword) => keyword.category === "leadership" || keyword.category === "collaboration");
+    const titleLower = input.targetRole.title.toLowerCase();
 
     const peopleKeys = new Set(people.map((keyword) => keyword.normalizedKey));
     const usesLeadershipSentence =
       peopleKeys.has("MENTORING") || peopleKeys.has("TECHNICAL_LEADERSHIP");
+    // Drop domain phrases already stated by the target-role title (e.g. "security"
+    // inside "Senior Security Engineer") so sentence one does not echo them.
+    let selectedDomains = domains
+      .filter((keyword) => !titleLower.includes(keyword.text.toLowerCase()))
+      .slice(0, 2);
     // Avoid claiming the same phrase twice when the leadership sentence already
     // hardcodes technical leadership / architecture decisions wording.
     let selectedTechnical = technical
       .filter(
-        (keyword) => !input.targetRole.title
-          .toLowerCase()
-          .includes(keyword.text.toLowerCase()),
+        (keyword) => !titleLower.includes(keyword.text.toLowerCase()),
       )
       .filter((keyword) => {
         if (!usesLeadershipSentence) {
@@ -221,7 +225,7 @@ export class SummaryComposer {
     let summary = composeBody({
       targetRole: input.targetRole,
       experienceYears: input.experienceYears,
-      domains,
+      domains: selectedDomains,
       technical: selectedTechnical,
       outcomes: selectedOutcomes,
       people,
@@ -233,7 +237,7 @@ export class SummaryComposer {
     const withPeople = composeBody({
       targetRole: input.targetRole,
       experienceYears: input.experienceYears,
-      domains,
+      domains: selectedDomains,
       technical: selectedTechnical,
       outcomes: selectedOutcomes,
       people,
@@ -250,7 +254,7 @@ export class SummaryComposer {
       summary = composeBody({
         targetRole: input.targetRole,
         experienceYears: input.experienceYears,
-        domains,
+        domains: selectedDomains,
         technical: selectedTechnical,
         outcomes: selectedOutcomes,
         people,
@@ -263,7 +267,7 @@ export class SummaryComposer {
       summary = composeBody({
         targetRole: input.targetRole,
         experienceYears: input.experienceYears,
-        domains,
+        domains: selectedDomains,
         technical: selectedTechnical,
         outcomes: selectedOutcomes,
         people,
@@ -276,7 +280,7 @@ export class SummaryComposer {
       summary = composeBody({
         targetRole: input.targetRole,
         experienceYears: input.experienceYears,
-        domains,
+        domains: selectedDomains,
         technical: selectedTechnical,
         outcomes: selectedOutcomes,
         people,
@@ -291,7 +295,7 @@ export class SummaryComposer {
     // sentence template: drop lowest-priority technical, then outcome, phrases.
     const maxUsedKeywords = 14;
     const projected = () =>
-      [...domains, ...selectedTechnical, ...selectedOutcomes, ...people].filter(
+      [...selectedDomains, ...selectedTechnical, ...selectedOutcomes, ...people].filter(
         (keyword) => summary.toLowerCase().includes(keyword.text.toLowerCase()),
       );
     while (projected().length > maxUsedKeywords && selectedTechnical.length > 2) {
@@ -300,7 +304,7 @@ export class SummaryComposer {
         composeBody({
           targetRole: input.targetRole,
           experienceYears: input.experienceYears,
-          domains,
+          domains: selectedDomains,
           technical: selectedTechnical,
           outcomes: selectedOutcomes,
           people,
@@ -316,7 +320,23 @@ export class SummaryComposer {
         composeBody({
           targetRole: input.targetRole,
           experienceYears: input.experienceYears,
-          domains,
+          domains: selectedDomains,
+          technical: selectedTechnical,
+          outcomes: selectedOutcomes,
+          people,
+          includePeopleSentence,
+          metricSentence,
+        }),
+        input.targetRole,
+      );
+    }
+    while (projected().length > maxUsedKeywords && selectedDomains.length > 0) {
+      selectedDomains = selectedDomains.slice(0, -1);
+      summary = ensureMinimumWords(
+        composeBody({
+          targetRole: input.targetRole,
+          experienceYears: input.experienceYears,
+          domains: selectedDomains,
           technical: selectedTechnical,
           outcomes: selectedOutcomes,
           people,
@@ -329,6 +349,8 @@ export class SummaryComposer {
 
     const usedKeys = new Set<string>();
     summary = scrubSummaryPersonalPronouns(summary);
+    // Count title-overlapping domain keywords as used when they appear via the
+    // role title so direct-coverage stays honest without re-echoing them in focus.
     for (const keyword of [...domains, ...selectedTechnical, ...selectedOutcomes, ...people]) {
       if (summary.toLowerCase().includes(keyword.text.toLowerCase())) {
         usedKeys.add(keyword.normalizedKey);

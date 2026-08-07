@@ -276,8 +276,11 @@ function renderDocument(data: FinalResumeData): {
     addSectionHeading(context, section.id, section.heading);
 
     if (section.id === "professional-summary") {
-      addText(context, section.content, { after: template.spacing.paragraphGapPt });
-      context.emittedTokens.push(section.content);
+      const summaryText = section.content.trim();
+      if (summaryText) {
+        addText(context, summaryText, { after: template.spacing.paragraphGapPt });
+        context.emittedTokens.push(section.content);
+      }
       continue;
     }
 
