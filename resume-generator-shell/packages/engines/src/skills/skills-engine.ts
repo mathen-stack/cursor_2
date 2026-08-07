@@ -8,9 +8,69 @@ import { ExplicitSkillExtractor } from "./extraction/explicit-skill-extractor";
 import { matchSkillKeysFromExperienceKeywords } from "./experience-skill-evidence";
 import { SupportingSkillInferenceEngine } from "./inference/supporting-skill-inference-engine";
 import { SkillRankingEngine } from "./ranking/skill-ranking-engine";
-import { SKILL_CATEGORY_ORDER } from "./skill-taxonomy";
+import {
+  SKILL_CATEGORY_ORDER,
+  SKILL_DEFINITION_BY_KEY,
+} from "./skill-taxonomy";
+import type { SkillCandidate } from "./types/skill-candidate";
 import { assertSkillsContextMatch } from "./types/context";
 import { SkillsValidator } from "./validation/skills-validator";
+
+function candidatesFromExperienceHints(input: {
+  experienceKeywordHints: readonly string[];
+  existingKeys: ReadonlySet<string>;
+  jobDescriptionText: string;
+}): SkillCandidate[] {
+  const matchedKeys = matchSkillKeysFromExperienceKeywords(
+    input.experienceKeywordHints,
+  );
+  const extras: SkillCandidate[] = [];
+  for (const key of matchedKeys) {
+    if (input.existingKeys.has(key)) {
+      continue;
+    }
+    const definition = SKILL_DEFINITION_BY_KEY.get(key);
+    if (!definition) {
+      continue;
+    }
+    const alias = definition.aliases.find((item) =>
+      input.jobDescriptionText
+        .toLocaleLowerCase()
+        .includes(item.toLocaleLowerCase()),
+    );
+    if (!alias) {
+      continue;
+    }
+    const startIndex = input.jobDescriptionText
+      .toLocaleLowerCase()
+      .indexOf(alias.toLocaleLowerCase());
+    if (startIndex < 0) {
+      continue;
+    }
+    const sourceText = input.jobDescriptionText.slice(
+      startIndex,
+      startIndex + alias.length,
+    );
+    extras.push({
+      key: definition.key,
+      name: definition.name,
+      category: definition.category,
+      source: "explicit",
+      priority: "high",
+      score: 72,
+      evidence: [
+        {
+          sourceText,
+          startIndex,
+          endIndex: startIndex + sourceText.length,
+        },
+      ],
+      inferredFrom: [],
+      mentionCount: 1,
+    });
+  }
+  return extras;
+}
 
 export interface DefaultSkillsEngineOptions {
   engineVersion?: string;
@@ -77,10 +137,22 @@ export class DefaultSkillsEngine implements SkillsEngine {
       this.dependencies.explicitSkillExtractor.name,
     );
 
+    // Fold JD-grounded experience bullet keywords into the explicit pool so
+    // thin postings still reach density after experience composition.
+    const experienceHintCandidates = candidatesFromExperienceHints({
+      experienceKeywordHints: input.experienceKeywordHints ?? [],
+      existingKeys: new Set(explicit.candidates.map((candidate) => candidate.key)),
+      jobDescriptionText: input.jobDescription.rawText,
+    });
+    const explicitCandidates = [
+      ...explicit.candidates,
+      ...experienceHintCandidates,
+    ];
+
     const inferred = await this.dependencies.supportingSkillInferenceEngine.execute({
       context: input.context,
       jobDescription: input.jobDescription,
-      explicitCandidates: explicit.candidates,
+      explicitCandidates,
     });
     assertSkillsContextMatch(
       input.context,
@@ -95,7 +167,7 @@ export class DefaultSkillsEngine implements SkillsEngine {
     const ranked = await this.dependencies.skillRankingEngine.execute({
       context: input.context,
       jobDescription: input.jobDescription,
-      candidates: [...explicit.candidates, ...inferred.candidates],
+      candidates: [...explicitCandidates, ...inferred.candidates],
       maximumSkills: this.maximumSkills,
       minimumSkills: this.minimumSkills,
       experienceEvidenceKeys,
@@ -109,7 +181,7 @@ export class DefaultSkillsEngine implements SkillsEngine {
     const categories = buildCategories(ranked.selected);
     const validation = this.dependencies.skillsValidator.validate({
       jobDescription: input.jobDescription,
-      explicitCandidates: explicit.candidates,
+      explicitCandidates,
       selected: ranked.selected,
       categories,
       minimumSkills: this.minimumSkills,

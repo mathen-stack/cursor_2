@@ -166,10 +166,13 @@ export class SkillsValidator {
     const densityApproved =
       skillCount >= input.minimumSkills && skillCount <= effectiveMaximumSkills;
     if (!densityApproved) {
+      // Extraction/ranking already attempt density backfill. Residual shortfalls
+      // (including sparse/empty JDs) stay warnings so generation continues;
+      // only runaway overflow above the effective ceiling hard-fails.
       issues.push(
         issue(
           "SKILL_DENSITY_OUT_OF_RANGE",
-          skillCount < 4 || skillCount > effectiveMaximumSkills ? "error" : "warning",
+          skillCount > effectiveMaximumSkills ? "error" : "warning",
           `Generated ${skillCount} skills; the target range is ${input.minimumSkills}-${input.maximumSkills}.`,
         ),
       );

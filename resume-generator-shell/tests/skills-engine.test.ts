@@ -308,4 +308,20 @@ Deliver production outcomes with strong engineering standards across teams.`;
       expect(output.validation.inferredSkillsGrounded).toBe(true);
     }
   });
+
+  it("approves near-empty JDs instead of hard-failing on zero skills", async () => {
+    const output = await createProductionSkillsEngine().execute(
+      input("Job 1 | Target Company", "EMPTY-JD"),
+    );
+
+    expect(output.status).toBe("approved");
+    expect(output.skills.length).toBeGreaterThanOrEqual(6);
+    expect(
+      output.validation.issues.filter(
+        (issue) =>
+          issue.issueCode === "SKILL_DENSITY_OUT_OF_RANGE" &&
+          issue.severity === "error",
+      ),
+    ).toEqual([]);
+  });
 });
