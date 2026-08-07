@@ -144,6 +144,24 @@ export class ActionVerbEngine {
       }
     }
 
+    // Leadership-focused bullets similarly allow controlled reuse once the
+    // senior ownership-verb inventory is exhausted across many roles.
+    if (input.plan.leadershipFocused) {
+      const leadershipVerbs = ACTION_VERBS_BY_DIMENSION["technical-leadership"] ?? [];
+      for (const actionVerb of leadershipVerbs) {
+        if (!suitableForSeniority(actionVerb, input.assignment, input.plan)) {
+          continue;
+        }
+        return {
+          actionVerb,
+          canonicalKey: canonicalActionVerbKey(actionVerb),
+          controlledReuse: true,
+          rationale:
+            "Reused a leadership action verb after document-wide uniqueness locks exhausted the unused inventory for leadership-focused achievements.",
+        };
+      }
+    }
+
     throw new Error(
       `No unused action verb remains for ${input.plan.bulletId} in ${input.assignment.experienceId}.`,
     );
