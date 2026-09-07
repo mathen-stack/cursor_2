@@ -30,7 +30,6 @@ export interface EducationInput {
 }
 
 export interface CandidateProfile {
-  headline: string;
   personal: PersonalInfo;
   experiences: ExperienceInput[];
   education: EducationInput[];

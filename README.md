@@ -13,12 +13,11 @@ npm install
 2. Copy env and add your OpenRouter key:
 
 ```bash
-cp .env.example .env.local
+copy .env.example .env.local
 ```
 
 Set `OPENROUTER_API_KEY` from [openrouter.ai/keys](https://openrouter.ai/keys).  
-Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`).  
-Set `AUTH_SECRET` to a long random string in production (session cookies).
+Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`).
 
 3. Run the app:
 
@@ -26,16 +25,13 @@ Set `AUTH_SECRET` to a long random string in production (session cookies).
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign up, then fill **Profile** before generating packages.
-
-Accounts and profiles are stored in `data/app.json` on the server (local/dev). This file is not committed.
+Open [http://localhost:3000](http://localhost:3000).
 
 ## Flow
 
-1. Create an account (email + password) or sign in
-2. Enter your profile: name, headline, contact, work history, education
-3. Paste job URLs (one per line)
-4. The app scrapes each posting in parallel, extracts the JD, and writes a tailored resume + cover letter from **your** saved profile
+1. Profile is fixed in code (`src/lib/profile.ts`) for Saul D. Trujillo
+2. Paste job URLs (one per line)
+3. The app scrapes each posting in parallel, extracts the JD, and writes a tailored resume + cover letter
 
 ## Output
 
@@ -46,12 +42,12 @@ output/
   Company_Name/
     jd.txt
     extracted_jd.txt
-    Resume-{FirstName}.docx
-    Resume-{FirstName}.pdf
-    Coverletter-{FirstName}.docx
-    Coverletter-{FirstName}.txt
-  Company-Role.zip
-    ...
+    Resume-Saul.docx
+    Resume-Saul.pdf
+    Coverletter-Saul.docx
+    Coverletter-Saul.txt
+  Clara-Software Engineer.zip
+  ...
 ```
 
 Each completed job shows an ATS score (/100) in the UI.

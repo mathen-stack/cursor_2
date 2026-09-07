@@ -1,7 +1,6 @@
 import { ZodError } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { compactProfile, isProfileReady } from "@/lib/profile";
 import { processOneJob } from "@/lib/process-job";
+import { CANDIDATE_PROFILE } from "@/lib/profile";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
 
@@ -30,27 +29,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const user = await getCurrentUser();
-  if (!user) {
-    return new Response(JSON.stringify({ ok: false, error: "Sign in required." }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  if (!isProfileReady(user.profile)) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: "Save your name and at least one work role in Profile first.",
-      }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
-  }
-
-  const profile = compactProfile(user.profile);
+  const profile = CANDIDATE_PROFILE;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {

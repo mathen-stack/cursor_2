@@ -1,28 +1,41 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
 import ResumeForm from "@/components/ResumeForm";
-import SiteHeader from "@/components/SiteHeader";
-import { getCurrentUser } from "@/lib/auth";
-import { isProfileReady } from "@/lib/profile";
+import { CANDIDATE_HEADLINE, CANDIDATE_PROFILE } from "@/lib/profile";
 
-export default async function Home() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-
-  const ready = isProfileReady(user.profile);
+export default function Home() {
+  const { personal } = CANDIDATE_PROFILE;
 
   return (
     <div className="page">
       <div className="atmosphere" aria-hidden />
-      <SiteHeader email={user.email} profile={user.profile} active="generate" />
+
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand-block">
+            <p className="brand">Resume Tailor</p>
+            <p className="brand-sub">ATS packets from job URLs</p>
+          </div>
+          <div className="identity">
+            <p className="identity-name">{personal.name}</p>
+            <p className="identity-meta">
+              {CANDIDATE_HEADLINE} · {personal.location}
+            </p>
+            <p className="identity-contact">
+              <a href={`mailto:${personal.email}`}>{personal.email}</a>
+              <span aria-hidden>·</span>
+              <a href={`tel:${personal.phone.replace(/\s+/g, "")}`}>
+                {personal.phone}
+              </a>
+              <span aria-hidden>·</span>
+              <a href={personal.linkedin} target="_blank" rel="noreferrer">
+                LinkedIn
+              </a>
+            </p>
+          </div>
+        </div>
+      </header>
+
       <main className="main">
-        {!ready && (
-          <p className="notice">
-            Add your name and at least one job in{" "}
-            <Link href="/profile">your profile</Link> before generating packages.
-          </p>
-        )}
-        <ResumeForm canGenerate={ready} />
+        <ResumeForm />
       </main>
     </div>
   );

@@ -152,7 +152,7 @@ export function validateAndFixResume(
 
   const experiences = profile.experiences.map((exp, index) => {
     const generated = resume.experiences[index];
-    const title = sanitizePlainText(generated?.title || exp.title);
+    let title = sanitizePlainText(generated?.title || exp.title);
     let overview = sanitizePlainText(generated?.overview || "");
     let bullets = (generated?.bullets || [])
       .map((b) => sanitizePlainText(b))

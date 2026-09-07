@@ -32,7 +32,6 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-!.env.example
 
 # vercel
 .vercel
@@ -44,7 +43,3 @@ next-env.d.ts
 # generated resume packages
 /output
 next-debug.log
-
-# local user accounts and profiles
-/data
-

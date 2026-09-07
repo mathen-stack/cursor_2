@@ -200,11 +200,7 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
   return <span className={`badge badge-${status}`}>{label}</span>;
 }
 
-export default function ResumeForm({
-  canGenerate = true,
-}: {
-  canGenerate?: boolean;
-}) {
+export default function ResumeForm() {
   const [jobLinks, setJobLinks] = useState("");
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
@@ -348,11 +344,6 @@ export default function ResumeForm({
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!canGenerate) {
-      setError("Save your name and at least one work role in Profile first.");
-      return;
-    }
-
     const jobUrls = jobLinks
       .split(/\n+/)
       .map((line) => line.trim())
@@ -422,7 +413,7 @@ export default function ResumeForm({
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || linkCount === 0 || !canGenerate}
+            disabled={batchBusy || linkCount === 0}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>

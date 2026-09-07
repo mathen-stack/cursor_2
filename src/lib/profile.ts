@@ -1,23 +1,6 @@
 import type { CandidateProfile } from "./types";
 
-export function createBlankProfile(email = ""): CandidateProfile {
-  return {
-    headline: "",
-    personal: {
-      name: "",
-      phone: "",
-      linkedin: "",
-      email,
-      location: "",
-    },
-    experiences: [{ company: "", title: "", period: "", location: "" }],
-    education: [{ school: "", degree: "", period: "", location: "" }],
-  };
-}
-
-/** Example data users can load while filling their profile. */
-export const SAMPLE_PROFILE: CandidateProfile = {
-  headline: "Senior Software Engineer",
+export const CANDIDATE_PROFILE: CandidateProfile = {
   personal: {
     name: "Saul D. Trujillo",
     phone: "+57 313 6512121",
@@ -55,38 +38,4 @@ export const SAMPLE_PROFILE: CandidateProfile = {
   ],
 };
 
-export function isProfileReady(profile: CandidateProfile | null | undefined): boolean {
-  if (!profile) return false;
-  const name = profile.personal.name.trim();
-  const hasRole = profile.experiences.some(
-    (exp) => exp.company.trim() && exp.title.trim(),
-  );
-  return Boolean(name && hasRole);
-}
-
-export function compactProfile(profile: CandidateProfile): CandidateProfile {
-  return {
-    headline: profile.headline.trim(),
-    personal: {
-      name: profile.personal.name.trim(),
-      phone: profile.personal.phone.trim(),
-      linkedin: profile.personal.linkedin.trim(),
-      email: profile.personal.email.trim(),
-      location: profile.personal.location.trim(),
-    },
-    experiences: profile.experiences.filter(
-      (exp) =>
-        exp.company.trim() ||
-        exp.title.trim() ||
-        exp.period.trim() ||
-        exp.location.trim(),
-    ),
-    education: profile.education.filter(
-      (edu) =>
-        edu.school.trim() ||
-        edu.degree.trim() ||
-        edu.period.trim() ||
-        edu.location.trim(),
-    ),
-  };
-}
+export const CANDIDATE_HEADLINE = "Senior Software Engineer";
