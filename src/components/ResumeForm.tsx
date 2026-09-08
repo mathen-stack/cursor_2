@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -203,13 +203,18 @@ export default function ResumeForm() {
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
-  const readyJobs = useMemo(
-    () =>
-      jobTexts
-        .map((text, i) => ({ text: text.trim(), slot: i }))
-        .filter((entry) => entry.text.length >= MIN_JOB_DESCRIPTION_CHARS),
+  const jobEntries = useMemo(
+    () => jobTexts.map((text, i) => ({ text: text.trim(), slot: i })),
     [jobTexts],
   );
+  const readyJobs = useMemo(
+    () =>
+      jobEntries.filter(
+        (entry) => entry.text.length >= MIN_JOB_DESCRIPTION_CHARS,
+      ),
+    [jobEntries],
+  );
+  const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -230,6 +235,19 @@ export default function ResumeForm() {
 
   function setJobText(slot: number, value: string) {
     setJobTexts((prev) => prev.map((text, i) => (i === slot ? value : text)));
+  }
+
+  function onPasteJob(
+    slot: number,
+    event: ClipboardEvent<HTMLTextAreaElement>,
+  ) {
+    const pasted = event.clipboardData.getData("text");
+    if (!pasted) return;
+    event.preventDefault();
+    const el = event.currentTarget;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setJobText(slot, el.value.slice(0, start) + pasted + el.value.slice(end));
   }
 
   function addJob() {
@@ -346,8 +364,9 @@ export default function ResumeForm() {
     event.preventDefault();
 
     if (!readyJobs.length) {
+      const longest = Math.max(0, ...jobEntries.map((e) => e.text.length));
       setError(
-        `Paste at least one job description (~${MIN_JOB_DESCRIPTION_CHARS} characters).`,
+        `Paste a fuller job description (${MIN_JOB_DESCRIPTION_CHARS}+ characters). You currently have ${longest}.`,
       );
       return;
     }
@@ -378,8 +397,9 @@ export default function ResumeForm() {
           <div>
             <h2>Job descriptions</h2>
             <p className="hint">
-              Paste the full posting text. Add another to generate multiple
-              packages in parallel.
+              Paste the full posting text (at least {MIN_JOB_DESCRIPTION_CHARS}{" "}
+              characters). Add another to generate multiple packages in
+              parallel.
             </p>
           </div>
           <div className="link-count" aria-live="polite">
@@ -392,8 +412,16 @@ export default function ResumeForm() {
             <div key={slot} className="jd-item">
               <div className="jd-item-head">
                 <label htmlFor={`jd-${slot}`}>Job {slot + 1}</label>
-                <span className="jd-char-count">
-                  {text.trim().length.toLocaleString()} chars
+                <span
+                  className={`jd-char-count${
+                    text.trim().length > 0 &&
+                    text.trim().length < MIN_JOB_DESCRIPTION_CHARS
+                      ? " short"
+                      : ""
+                  }`}
+                >
+                  {text.trim().length.toLocaleString()}/
+                  {MIN_JOB_DESCRIPTION_CHARS} chars
                 </span>
                 {jobTexts.length > 1 && (
                   <button
@@ -407,10 +435,10 @@ export default function ResumeForm() {
               </div>
               <textarea
                 id={`jd-${slot}`}
-                required={jobTexts.length === 1}
                 rows={8}
                 value={text}
                 onChange={(e) => setJobText(slot, e.target.value)}
+                onPaste={(e) => onPasteJob(slot, e)}
                 placeholder="Paste the full job description here…"
                 spellCheck={false}
               />
@@ -422,7 +450,7 @@ export default function ResumeForm() {
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || readyJobs.length === 0}
+            disabled={batchBusy || !hasAnyJd}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>

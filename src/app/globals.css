@@ -215,6 +215,10 @@ a {
   margin-right: auto;
 }
 
+.jd-char-count.short {
+  color: var(--warn);
+}
+
 .text-btn {
   background: transparent;
   color: var(--muted);
@@ -291,8 +295,11 @@ button {
 }
 
 .primary:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  background: #3a4540;
+  color: #8a968e;
+  transform: none;
 }
 
 .inline-status {
