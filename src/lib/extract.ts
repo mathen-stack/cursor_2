@@ -35,11 +35,7 @@ function normalizeWorkMode(value: string): WorkMode {
   return "Onsite";
 }
 
-export async function extractJobDescription(
-  rawJd: string,
-  pageTitle: string,
-  jobUrl: string,
-): Promise<ExtractedJD> {
+export async function extractJobDescription(rawJd: string): Promise<ExtractedJD> {
   const client = getLlmClient();
 
   const completion = await client.chat.completions.create({
@@ -60,15 +56,12 @@ Return ONLY valid JSON (no markdown) with keys:
 - hardTechnicalSkills (string array of concrete technologies/tools/domains)
 - softSkills (string array)
 
-Infer company from the page title or URL when missing. Prefer specific skill names.
+Infer company and title from the posting text when they are not explicit. Prefer specific skill names.
 Escape quotes inside strings.`,
       },
       {
         role: "user",
-        content: `Job URL: ${jobUrl}
-Page title: ${pageTitle}
-
-Job posting text:
+        content: `Job posting text:
 ${rawJd.slice(0, 20000)}`,
       },
     ],

@@ -1,6 +1,4 @@
 export const JOB_STEPS = [
-  "scraping",
-  "fetch_jd",
   "extracting",
   "generating",
   "validating",
@@ -10,8 +8,6 @@ export const JOB_STEPS = [
 export type JobStep = (typeof JOB_STEPS)[number];
 
 export const JOB_STEP_LABELS: Record<JobStep, string> = {
-  scraping: "Scraping job page",
-  fetch_jd: "Fetching job description",
   extracting: "Extracting JD",
   generating: "Generating resume",
   validating: "Validating content",
@@ -22,14 +18,12 @@ export type ProgressEvent =
   | {
       type: "step";
       index: number;
-      jobUrl: string;
       step: JobStep;
       message: string;
     }
   | {
       type: "job_done";
       index: number;
-      jobUrl: string;
       company: string;
       zipName: string;
       folderName: string;
@@ -58,7 +52,6 @@ export type ProgressEvent =
   | {
       type: "job_error";
       index: number;
-      jobUrl: string;
       step?: JobStep;
       error: string;
     }

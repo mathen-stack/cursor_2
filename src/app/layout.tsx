@@ -15,7 +15,7 @@ const body = DM_Sans({
 export const metadata: Metadata = {
   title: "Resume Tailor",
   description:
-    "Scrape job posts, extract the JD, and generate ATS-optimized resumes and cover letters.",
+    "Paste a job description, extract the JD, and generate ATS-optimized resumes and cover letters.",
 };
 
 export default function RootLayout({
