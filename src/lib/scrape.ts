@@ -5,11 +5,108 @@ const BROWSER_UA =
 
 function cleanText(text: string): string {
   return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+function htmlFragmentToText(html: string): string {
+  const $ = cheerio.load(`<div id="jd-root">${html}</div>`);
+  return cleanText($("#jd-root").text());
+}
+
+function descriptionFromUnknown(value: unknown): string {
+  if (typeof value === "string") {
+    const text = htmlFragmentToText(value);
+    return text.length > 80 ? text : "";
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = descriptionFromUnknown(item);
+      if (text) return text;
+    }
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const type = String(record["@type"] || "");
+    if (type.includes("JobPosting")) {
+      return descriptionFromUnknown(record.description);
+    }
+    if (Array.isArray(record["@graph"])) {
+      return descriptionFromUnknown(record["@graph"]);
+    }
+  }
+  return "";
+}
+
+function extractJsonLdJobText($: cheerio.CheerioAPI): string {
+  let found = "";
+  $('script[type="application/ld+json"]').each((_, el) => {
+    if (found) return;
+    const raw = $(el).contents().text();
+    try {
+      found = descriptionFromUnknown(JSON.parse(raw));
+    } catch {
+      /* ignore malformed JSON-LD */
+    }
+  });
+  return found;
+}
+
+function unescapeJsString(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch {
+    return value
+      .replace(/\\u([\da-fA-F]{4})/g, (_, hex: string) =>
+        String.fromCharCode(Number.parseInt(hex, 16)),
+      )
+      .replace(/\\n/g, "\n")
+      .replace(/\\"/g, '"');
+  }
+}
+
+function extractFlightJobText(html: string): string {
+  const payloads: string[] = [];
+  const pushRe = /self\.__next_f\.push\(\[1,"((?:\\.|[^"\\])*)"\]\)/g;
+  for (const match of html.matchAll(pushRe)) {
+    payloads.push(unescapeJsString(match[1]));
+  }
+
+  const blob = payloads.join("\n") || html;
+  if (!blob.includes("JobPosting") && !blob.includes("job posting")) {
+    const descMatch = blob.match(/"description"\s*:\s*"((?:\\.|[^"\\])*)"/);
+    if (descMatch?.[1]) {
+      const text = htmlFragmentToText(unescapeJsString(descMatch[1]));
+      if (text.length > 120) return text;
+    }
+    return "";
+  }
+
+  const descMatch = blob.match(
+    /"@type"\s*:\s*"JobPosting"[\s\S]{0,4000}?"description"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
+  if (descMatch?.[1]) {
+    const text = htmlFragmentToText(unescapeJsString(descMatch[1]));
+    if (text.length > 120) return text;
+  }
+
+  const anyDesc = blob.match(/"description"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (anyDesc?.[1]) {
+    const text = htmlFragmentToText(unescapeJsString(anyDesc[1]));
+    if (text.length > 120) return text;
+  }
+
+  return "";
 }
 
 function extractFromSelectors(
@@ -47,10 +144,12 @@ export async function scrapeJobDescription(url: string): Promise<{
 
   const html = await response.text();
   const $ = cheerio.load(html);
+  const pageTitle = cleanText($("title").first().text() || "");
+
+  const embedded =
+    extractJsonLdJobText($) || extractFlightJobText(html);
 
   $("script, style, noscript, svg, nav, footer, header, iframe").remove();
-
-  const pageTitle = cleanText($("title").first().text() || "");
 
   const targeted = extractFromSelectors($, [
     "[data-testid='jobDescriptionText']",
@@ -68,7 +167,7 @@ export async function scrapeJobDescription(url: string): Promise<{
     "main",
   ]);
 
-  const rawText = targeted || cleanText($("body").text());
+  const rawText = embedded || targeted || cleanText($("body").text());
 
   if (rawText.length < 120) {
     throw new Error(

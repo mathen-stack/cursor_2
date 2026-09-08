@@ -327,7 +327,12 @@ export default function ResumeForm() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error");
+      const raw = err instanceof Error ? err.message : "Unexpected error";
+      setError(
+        raw === "Failed to fetch"
+          ? "Could not reach the generate API. Refresh the page and try again."
+          : raw,
+      );
       setStatus(null);
     } finally {
       if (mode === "batch") {
