@@ -4,8 +4,8 @@ const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
 
 /** Used when the configured paid model returns 402 (out of credits). */
 const FREE_FALLBACK_MODELS = [
-  "poolside/laguna-s-2.1:free",
   "openrouter/free",
+  "poolside/laguna-s-2.1:free",
 ];
 
 export function getLlmModel() {
@@ -40,8 +40,21 @@ function llmStatus(err: unknown): number | undefined {
 function isRetryableLlmError(err: unknown): boolean {
   const status = llmStatus(err);
   if (status === 402 || status === 429) return true;
+  const name =
+    err && typeof err === "object"
+      ? String((err as { name?: unknown }).name || "")
+      : "";
+  if (
+    name === "AbortError" ||
+    name === "TimeoutError" ||
+    name === "APIUserAbortError"
+  ) {
+    return true;
+  }
   const message = err instanceof Error ? err.message : String(err);
-  return /insufficient credits|rate limit|too many requests/i.test(message);
+  return /insufficient credits|rate limit|too many requests|timeout|timed out|aborted/i.test(
+    message,
+  );
 }
 
 function toLlmError(err: unknown): Error {
@@ -64,6 +77,7 @@ export async function completeJson(options: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   temperature: number;
   emptyError: string;
+  maxTokens?: number;
 }): Promise<string> {
   const client = getLlmClient();
   const preferred = getLlmModel();
@@ -76,12 +90,16 @@ export async function completeJson(options: {
   for (let i = 0; i < models.length; i += 1) {
     const model = models[i];
     try {
-      const completion = await client.chat.completions.create({
-        model,
-        temperature: options.temperature,
-        response_format: { type: "json_object" },
-        messages: options.messages,
-      });
+      const completion = await client.chat.completions.create(
+        {
+          model,
+          temperature: options.temperature,
+          max_tokens: options.maxTokens ?? 8000,
+          response_format: { type: "json_object" },
+          messages: options.messages,
+        },
+        { timeout: 90_000, maxRetries: 0 },
+      );
       const content = completion.choices[0]?.message?.content;
       if (!content?.trim()) {
         throw new Error(options.emptyError);

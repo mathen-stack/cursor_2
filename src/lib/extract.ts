@@ -71,6 +71,7 @@ async function requestExtract(
   const content = await completeJson({
     messages,
     temperature: 0.2,
+    maxTokens: 4000,
     emptyError: "Empty response while extracting job description.",
   });
   return normalizeExtracted(parseModelJson<ExtractRaw>(content));

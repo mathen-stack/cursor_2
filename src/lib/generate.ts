@@ -175,6 +175,7 @@ async function requestJson(
   return completeJson({
     messages,
     temperature: 0.3,
+    maxTokens: 8000,
     emptyError: "Empty response while generating tailored resume.",
   });
 }
