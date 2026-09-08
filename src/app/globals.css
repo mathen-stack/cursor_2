@@ -149,6 +149,49 @@ a {
   gap: 1rem;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  background: color-mix(in srgb, var(--surface) 94%, black);
+  border: 1px solid var(--line);
+}
+
+.tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.tab:hover:not(.active) {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.tab.active {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.tab-meta {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.tab-meta.short {
+  color: var(--warn);
+}
+
 .composer,
 .board {
   background: color-mix(in srgb, var(--surface) 94%, black);

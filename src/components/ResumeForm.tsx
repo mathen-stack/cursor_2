@@ -204,6 +204,7 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
 }
 
 export default function ResumeForm() {
+  const [tab, setTab] = useState<"profile" | "generate">("profile");
   const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
   const [jobTexts, setJobTexts] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
@@ -377,13 +378,9 @@ export default function ResumeForm() {
     if (!isProfileReady(profile)) {
       const reason =
         profileBlockReason(profile) ||
-        "Fill your background above, then generate.";
+        "Fill your profile, then generate.";
       setError(reason);
-      document.getElementById("your-background")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      document.getElementById("candidate-name")?.focus();
+      setTab("profile");
       return;
     }
 
@@ -416,30 +413,91 @@ export default function ResumeForm() {
 
   return (
     <div className="workspace">
-      <form className="composer" onSubmit={onSubmit}>
-        <div className="section-head" id="your-background">
-          <div>
-            <h2>Your background</h2>
-            <p className="hint">
-              Required before generate: name plus one experience with company,
-              title, period, and location.
-            </p>
-          </div>
-          <div
-            className={`link-count${profileReady ? "" : " short"}`}
-            aria-live="polite"
-          >
+      <div className="tabs" role="tablist" aria-label="Resume Tailor">
+        <button
+          type="button"
+          role="tab"
+          id="tab-profile"
+          aria-selected={tab === "profile"}
+          aria-controls="panel-profile"
+          className={`tab${tab === "profile" ? " active" : ""}`}
+          onClick={() => setTab("profile")}
+        >
+          Profile
+          <span className={`tab-meta${profileReady ? "" : " short"}`}>
             {profileReady ? "Ready" : "Incomplete"}
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-generate"
+          aria-selected={tab === "generate"}
+          aria-controls="panel-generate"
+          className={`tab${tab === "generate" ? " active" : ""}`}
+          onClick={() => setTab("generate")}
+        >
+          Generate resume
+        </button>
+      </div>
+
+      {tab === "profile" && (
+        <section
+          className="composer"
+          id="panel-profile"
+          role="tabpanel"
+          aria-labelledby="tab-profile"
+        >
+          <div className="section-head" id="your-background">
+            <div>
+              <h2>Your profile</h2>
+              <p className="hint">
+                Required before generate: name plus one experience with company,
+                title, period, and location.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <CandidateForm
-          profile={profile}
-          onChange={setProfile}
-          disabled={batchBusy}
-        />
+          <CandidateForm
+            profile={profile}
+            onChange={setProfile}
+            disabled={batchBusy}
+          />
 
-        <div className="section-head section-head-follow">
+          <div className="composer-footer">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                if (!isProfileReady(profile)) {
+                  setError(
+                    profileBlockReason(profile) ||
+                      "Fill your profile, then generate.",
+                  );
+                  document.getElementById("candidate-name")?.focus();
+                  return;
+                }
+                setError(null);
+                setTab("generate");
+              }}
+            >
+              Continue to generate
+            </button>
+            {error && tab === "profile" && <p className="error">{error}</p>}
+          </div>
+        </section>
+      )}
+
+      {tab === "generate" && (
+        <>
+      <form
+        className="composer"
+        id="panel-generate"
+        role="tabpanel"
+        aria-labelledby="tab-generate"
+        onSubmit={onSubmit}
+      >
+        <div className="section-head">
           <div>
             <h2>Job descriptions</h2>
             <p className="hint">
@@ -509,7 +567,7 @@ export default function ResumeForm() {
             Add another job
           </button>
           {status && <p className="inline-status">{status}</p>}
-          {!profileReady && hasAnyJd && (
+          {!profileReady && (
             <p className="inline-status warn-status">
               {profileBlockReason(profile)}
             </p>
@@ -533,7 +591,7 @@ export default function ResumeForm() {
 
         {jobs.length === 0 ? (
           <div className="empty-board">
-            <p>Add your background, paste a job description, and generate.</p>
+            <p>Paste a job description and generate.</p>
             <ol>
               <li>Extract JD fields</li>
               <li>Write resume + cover letter</li>
@@ -661,6 +719,8 @@ export default function ResumeForm() {
           </ul>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }
