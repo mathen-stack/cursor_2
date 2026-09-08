@@ -57,7 +57,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
       period: exp.period.trim(),
       location: exp.location.trim(),
     }))
-    .filter((exp) => exp.company || exp.title || exp.period || exp.location);
+    .filter(isExperienceComplete);
 
   const education = profile.education
     .map((edu) => ({
@@ -66,7 +66,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
       period: edu.period.trim(),
       location: edu.location.trim(),
     }))
-    .filter((edu) => edu.school || edu.degree || edu.period || edu.location);
+    .filter(isEducationComplete);
 
   return { personal, experiences, education };
 }
@@ -91,13 +91,20 @@ export function isEducationComplete(edu: EducationInput): boolean {
 
 export function isProfileReady(profile: CandidateProfile): boolean {
   const normalized = normalizeProfile(profile);
-  if (normalized.personal.name.length < 2) return false;
-  if (!normalized.experiences.some(isExperienceComplete)) return false;
-  if (
-    normalized.education.length > 0 &&
-    !normalized.education.every(isEducationComplete)
-  ) {
-    return false;
+  return (
+    normalized.personal.name.length >= 2 && normalized.experiences.length > 0
+  );
+}
+
+export function profileBlockReason(profile: CandidateProfile): string | null {
+  const normalized = normalizeProfile(profile);
+  const missing: string[] = [];
+  if (normalized.personal.name.length < 2) missing.push("your name");
+  if (normalized.experiences.length === 0) {
+    missing.push(
+      "one complete experience (company, title, period, and location)",
+    );
   }
-  return true;
+  if (!missing.length) return null;
+  return `Fill ${missing.join(" and ")} in Your background, then generate.`;
 }

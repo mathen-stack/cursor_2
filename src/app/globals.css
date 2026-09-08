@@ -268,6 +268,10 @@ input:disabled {
   padding-top: 0.2rem;
 }
 
+.link-count.short {
+  color: var(--warn);
+}
+
 .jd-list {
   display: grid;
   gap: 0.9rem;
@@ -384,6 +388,10 @@ button {
   margin: 0;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.inline-status.warn-status {
+  color: var(--warn);
 }
 
 .error {

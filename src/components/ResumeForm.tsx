@@ -12,6 +12,7 @@ import {
   emptyProfile,
   isProfileReady,
   normalizeProfile,
+  profileBlockReason,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import type { CandidateProfile } from "@/lib/types";
@@ -374,9 +375,15 @@ export default function ResumeForm() {
     event.preventDefault();
 
     if (!isProfileReady(profile)) {
-      setError(
-        "Fill your name and at least one complete work experience (company, title, period, location).",
-      );
+      const reason =
+        profileBlockReason(profile) ||
+        "Fill your background above, then generate.";
+      setError(reason);
+      document.getElementById("your-background")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      document.getElementById("candidate-name")?.focus();
       return;
     }
 
@@ -410,13 +417,19 @@ export default function ResumeForm() {
   return (
     <div className="workspace">
       <form className="composer" onSubmit={onSubmit}>
-        <div className="section-head">
+        <div className="section-head" id="your-background">
           <div>
             <h2>Your background</h2>
             <p className="hint">
-              Generation uses this profile: company names, dates, and
-              education stay as you enter them.
+              Required before generate: name plus one experience with company,
+              title, period, and location.
             </p>
+          </div>
+          <div
+            className={`link-count${profileReady ? "" : " short"}`}
+            aria-live="polite"
+          >
+            {profileReady ? "Ready" : "Incomplete"}
           </div>
         </div>
 
@@ -483,7 +496,7 @@ export default function ResumeForm() {
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || !hasAnyJd || !profileReady}
+            disabled={batchBusy || !hasAnyJd}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>
@@ -496,6 +509,11 @@ export default function ResumeForm() {
             Add another job
           </button>
           {status && <p className="inline-status">{status}</p>}
+          {!profileReady && hasAnyJd && (
+            <p className="inline-status warn-status">
+              {profileBlockReason(profile)}
+            </p>
+          )}
         </div>
 
         {error && <p className="error">{error}</p>}
