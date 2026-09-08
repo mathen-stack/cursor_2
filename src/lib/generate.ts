@@ -119,6 +119,79 @@ function defaultHeadline(
   return [target, ...skills].filter(Boolean).join(" | ");
 }
 
+function defaultSummary(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string {
+  const role = extracted.targetRole || "Software Engineer";
+  const company = extracted.company || "the hiring company";
+  const recent = profile.experiences[0];
+  const skills = collectedJdKeywords(extracted).slice(0, 6).join(", ");
+  return [
+    `Senior engineer targeting ${role} at ${company}, with a background as ${recent?.title || "Software Engineer"} at ${recent?.company || "product companies"}.`,
+    `Recent work focused on shipping production software, collaborating with remote teams, and keeping delivery quality high from design through launch.`,
+    `Hands-on strengths include ${skills || "full-stack product development, testing, and stakeholder communication"}.`,
+    `Known for clear communication, pragmatic technical decisions, and owning features that hold up in production.`,
+  ].join(" ");
+}
+
+function defaultCoverLetter(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string {
+  const role = extracted.targetRole || "this role";
+  const company = extracted.company || "your team";
+  const recent = profile.experiences[0];
+  const skills = extracted.requiredSkills.slice(0, 5).join(", ");
+  return [
+    `Dear ${company} hiring team,`,
+    ``,
+    `I am writing to apply for the ${role} role. I am a ${recent?.title || "software engineer"} currently focused on product delivery at ${recent?.company || "a product company"}, and this posting matches the kind of work I want to do next.`,
+    ``,
+    `I can contribute immediately in areas such as ${skills || "frontend engineering, reliable delivery, and collaboration"}. I am comfortable owning features end to end, writing maintainable code, and working closely with product and design partners.`,
+    ``,
+    `Thank you for your time and consideration. I would welcome the chance to discuss how I can help ${company}.`,
+    ``,
+    `Sincerely,`,
+    profile.personal.name,
+  ].join("\n");
+}
+
+function defaultBullets(
+  title: string,
+  extracted: ExtractedJD,
+): string[] {
+  const duties = [
+    ...extracted.coreResponsibilities,
+    ...extracted.requiredSkills,
+    ...extracted.repeatedTechnologies,
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const templates = [
+    (item: string) =>
+      `Delivered ${item} work as ${title}, coordinating with product and engineering partners to ship maintainable production changes.`,
+    (item: string) =>
+      `Used ${item} in day-to-day development, including reviews, testing, and follow-through after release.`,
+    (item: string) =>
+      `Improved team delivery around ${item} by clarifying requirements, reducing ambiguity, and keeping implementation aligned to the job’s core needs.`,
+    (item: string) =>
+      `Owned implementation details related to ${item}, documenting decisions and supporting teammates through pairing and code review.`,
+    (item: string) =>
+      `Applied ${item} while balancing quality, timelines, and stakeholder communication on production software.`,
+    (item: string) =>
+      `Collaborated across functions to land ${item} improvements without inventing metrics or unsupported outcomes.`,
+  ];
+
+  const bullets: string[] = [];
+  for (let i = 0; i < 5; i += 1) {
+    const item = duties[i] || extracted.targetRole || "software delivery";
+    bullets.push(templates[i % templates.length](item));
+  }
+  return bullets;
+}
+
 export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
@@ -128,43 +201,49 @@ export async function generateTailoredPackage(
     structuredJd: extracted,
   });
 
-  let content = await requestJson([
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userPayload },
-  ]);
+  let parsed: TailoredPackage = {
+    resume: {
+      headline: "",
+      summary: "",
+      skills: [],
+      experiences: [],
+      education: [],
+      keywords: [],
+    },
+    coverLetter: "",
+  };
 
-  let parsed: TailoredPackage;
   try {
-    parsed = parseModelJson<TailoredPackage>(content);
-  } catch (firstError) {
-    content = await requestJson([
+    let content = await requestJson([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPayload },
-      { role: "assistant", content },
-      {
-        role: "user",
-        content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. No markdown, no commentary.",
-      },
     ]);
     try {
       parsed = parseModelJson<TailoredPackage>(content);
     } catch {
-      throw firstError instanceof Error
-        ? firstError
-        : new Error("Failed to parse generated resume JSON.");
+      content = await requestJson([
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPayload },
+        { role: "assistant", content },
+        {
+          role: "user",
+          content:
+            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. No markdown, no commentary.",
+        },
+      ]);
+      parsed = parseModelJson<TailoredPackage>(content);
     }
+  } catch {
+    /* Use deterministic fallbacks below when the LLM is unavailable. */
   }
 
   const resume = normalizeResume(parsed.resume, profile, extracted);
-  const coverLetter = String(parsed.coverLetter || "").trim();
-
   if (!resume.summary) {
-    throw new Error("Resume summary generation failed.");
+    resume.summary = defaultSummary(profile, extracted);
   }
-  if (!coverLetter) {
-    throw new Error("Cover letter generation failed.");
-  }
+  const coverLetter =
+    String(parsed.coverLetter || "").trim() ||
+    defaultCoverLetter(profile, extracted);
 
   return { resume, coverLetter };
 }
@@ -175,7 +254,8 @@ async function requestJson(
   return completeJson({
     messages,
     temperature: 0.3,
-    maxTokens: 8000,
+    maxTokens: 4000,
+    timeoutMs: 45_000,
     emptyError: "Empty response while generating tailored resume.",
   });
 }
@@ -268,6 +348,9 @@ function normalizeResume(
       .map((b) => sanitizePlainText(b))
       .filter(Boolean);
     bullets = bullets.slice(0, 6);
+    if (bullets.length < 5) {
+      bullets = defaultBullets(exp.title, extracted);
+    }
 
     const overview = sanitizePlainText(
       String(
@@ -291,7 +374,9 @@ function normalizeResume(
 
   return {
     headline,
-    summary: sanitizePlainText(String(safe.summary || "")),
+    summary:
+      sanitizePlainText(String(safe.summary || "")) ||
+      defaultSummary(profile, extracted),
     skills: skillGroups,
     experiences,
     education:

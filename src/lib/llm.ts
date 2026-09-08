@@ -78,6 +78,7 @@ export async function completeJson(options: {
   temperature: number;
   emptyError: string;
   maxTokens?: number;
+  timeoutMs?: number;
 }): Promise<string> {
   const client = getLlmClient();
   const preferred = getLlmModel();
@@ -98,7 +99,7 @@ export async function completeJson(options: {
           response_format: { type: "json_object" },
           messages: options.messages,
         },
-        { timeout: 90_000, maxRetries: 0 },
+        { timeout: options.timeoutMs ?? 90_000, maxRetries: 0 },
       );
       const content = completion.choices[0]?.message?.content;
       if (!content?.trim()) {

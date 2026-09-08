@@ -6,7 +6,6 @@ import {
   JD_KEYWORD_MIN,
   capJdKeywords,
   countJdKeywords,
-  dedupeJdLists,
   padExtractedFromText,
 } from "./jd-fields";
 
@@ -73,6 +72,7 @@ async function requestExtract(
     messages,
     temperature: 0.2,
     maxTokens: 4000,
+    timeoutMs: 45_000,
     emptyError: "Empty response while extracting job description.",
   });
   return normalizeExtracted(parseModelJson<ExtractRaw>(content));
