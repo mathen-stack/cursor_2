@@ -76,7 +76,6 @@ export interface TailoredPackage {
 
 export interface JobResult {
   index: number;
-  jobUrl: string;
   company: string;
   folderPath: string;
   zipPath: string;
@@ -86,5 +85,5 @@ export interface JobResult {
 }
 
 export interface TailorRequest {
-  jobUrls: string[];
+  jobDescriptions: string[];
 }

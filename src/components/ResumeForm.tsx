@@ -1,18 +1,19 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
   type JobStep,
   type ProgressEvent,
 } from "@/lib/progress";
+import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
 type JobProgress = {
   index: number;
-  jobUrl: string;
+  jobDescription: string;
   status: "queued" | "running" | "done" | "error";
   currentStep: JobStep | null;
   stepStatuses: Record<JobStep, StepStatus>;
@@ -34,8 +35,6 @@ type JobProgress = {
 };
 
 const STEP_SHORT: Record<JobStep, string> = {
-  scraping: "Scrape",
-  fetch_jd: "Fetch",
   extracting: "Extract",
   generating: "Generate",
   validating: "Validate",
@@ -44,8 +43,6 @@ const STEP_SHORT: Record<JobStep, string> = {
 
 function initialStepStatuses(): Record<JobStep, StepStatus> {
   return {
-    scraping: "pending",
-    fetch_jd: "pending",
     extracting: "pending",
     generating: "pending",
     validating: "pending",
@@ -53,10 +50,16 @@ function initialStepStatuses(): Record<JobStep, StepStatus> {
   };
 }
 
-function createJobProgress(index: number, jobUrl: string): JobProgress {
+function previewJd(text: string, max = 140) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, max).trim()}…`;
+}
+
+function createJobProgress(index: number, jobDescription: string): JobProgress {
   return {
     index,
-    jobUrl,
+    jobDescription,
     status: "queued",
     currentStep: null,
     stepStatuses: initialStepStatuses(),
@@ -152,14 +155,6 @@ function markJobError(
   };
 }
 
-function hostFromUrl(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 function DownloadIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -201,22 +196,25 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
 }
 
 export default function ResumeForm() {
-  const [jobLinks, setJobLinks] = useState("");
+  const [jobTexts, setJobTexts] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
-  const [manualJds, setManualJds] = useState<Record<number, string>>({});
 
-  const linkCount = useMemo(
-    () =>
-      jobLinks
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter(Boolean).length,
-    [jobLinks],
+  const jobEntries = useMemo(
+    () => jobTexts.map((text, i) => ({ text: text.trim(), slot: i })),
+    [jobTexts],
   );
+  const readyJobs = useMemo(
+    () =>
+      jobEntries.filter(
+        (entry) => entry.text.length >= MIN_JOB_DESCRIPTION_CHARS,
+      ),
+    [jobEntries],
+  );
+  const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -235,19 +233,43 @@ export default function ResumeForm() {
     );
   }
 
-  function setManualJd(index: number, value: string) {
-    setManualJds((prev) => ({ ...prev, [index]: value }));
+  function setJobText(slot: number, value: string) {
+    setJobTexts((prev) => prev.map((text, i) => (i === slot ? value : text)));
+  }
+
+  function onPasteJob(
+    slot: number,
+    event: ClipboardEvent<HTMLTextAreaElement>,
+  ) {
+    const pasted = event.clipboardData.getData("text");
+    if (!pasted) return;
+    event.preventDefault();
+    const el = event.currentTarget;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setJobText(slot, el.value.slice(0, start) + pasted + el.value.slice(end));
+  }
+
+  function addJob() {
+    setJobTexts((prev) => [...prev, ""]);
+  }
+
+  function removeJob(slot: number) {
+    setJobTexts((prev) =>
+      prev.length === 1 ? [""] : prev.filter((_, i) => i !== slot),
+    );
   }
 
   async function runJobs(
-    targets: Array<{ url: string; index: number; manualJd?: string }>,
+    targets: Array<{ jobDescription: string; index: number }>,
     mode: "batch" | "retry",
   ) {
     setError(null);
 
     if (mode === "batch") {
-      setJobs(targets.map((t) => createJobProgress(t.index, t.url)));
-      setManualJds({});
+      setJobs(
+        targets.map((t) => createJobProgress(t.index, t.jobDescription)),
+      );
       setRetryingIndices([]);
       setLoading(true);
       setStatus(
@@ -258,12 +280,10 @@ export default function ResumeForm() {
       setRetryingIndices((prev) =>
         prev.includes(target.index) ? prev : [...prev, target.index],
       );
-      patchJob(target.index, () => createJobProgress(target.index, target.url));
-      setStatus(
-        target.manualJd?.trim()
-          ? `Retrying job ${target.index} with pasted JD…`
-          : `Retrying job ${target.index}…`,
+      patchJob(target.index, () =>
+        createJobProgress(target.index, target.jobDescription),
       );
+      setStatus(`Retrying job ${target.index}…`);
     }
 
     try {
@@ -271,9 +291,8 @@ export default function ResumeForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          jobUrls: targets.map((t) => t.url),
+          jobDescriptions: targets.map((t) => t.jobDescription),
           indices: targets.map((t) => t.index),
-          manualJds: targets.map((t) => t.manualJd || ""),
         }),
       });
 
@@ -344,39 +363,27 @@ export default function ResumeForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const jobUrls = jobLinks
-      .split(/\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (!jobUrls.length) {
-      setError("Add at least one job URL.");
+    if (!readyJobs.length) {
+      const longest = Math.max(0, ...jobEntries.map((e) => e.text.length));
+      setError(
+        `Paste a fuller job description (${MIN_JOB_DESCRIPTION_CHARS}+ characters). You currently have ${longest}.`,
+      );
       return;
     }
 
     await runJobs(
-      jobUrls.map((url, i) => ({ url, index: i + 1 })),
+      readyJobs.map((entry, i) => ({
+        jobDescription: entry.text,
+        index: i + 1,
+      })),
       "batch",
     );
   }
 
-  async function onRetry(job: JobProgress, useManualJd: boolean) {
+  async function onRetry(job: JobProgress) {
     if (isRetrying(job.index)) return;
-    const pasted = (manualJds[job.index] || "").trim();
-    if (useManualJd && pasted.length < 80) {
-      setError(
-        `Job ${job.index}: paste at least ~80 characters of the job description before generating.`,
-      );
-      return;
-    }
     await runJobs(
-      [
-        {
-          url: job.jobUrl,
-          index: job.index,
-          manualJd: useManualJd ? pasted : undefined,
-        },
-      ],
+      [{ jobDescription: job.jobDescription, index: job.index }],
       "retry",
     );
   }
@@ -388,34 +395,72 @@ export default function ResumeForm() {
       <form className="composer" onSubmit={onSubmit}>
         <div className="section-head">
           <div>
-            <h2>Job URLs</h2>
+            <h2>Job descriptions</h2>
             <p className="hint">
-              One link per line. Each package is saved as Company-Role.zip.
+              Paste the full posting text (at least {MIN_JOB_DESCRIPTION_CHARS}{" "}
+              characters). Add another to generate multiple packages in
+              parallel.
             </p>
           </div>
           <div className="link-count" aria-live="polite">
-            {linkCount} link{linkCount === 1 ? "" : "s"}
+            {readyJobs.length} ready
           </div>
         </div>
 
-        <textarea
-          required
-          rows={7}
-          value={jobLinks}
-          onChange={(e) => setJobLinks(e.target.value)}
-          placeholder={
-            "https://job-boards.greenhouse.io/…/jobs/123\nhttps://jobs.lever.co/…"
-          }
-          spellCheck={false}
-        />
+        <div className="jd-list">
+          {jobTexts.map((text, slot) => (
+            <div key={slot} className="jd-item">
+              <div className="jd-item-head">
+                <label htmlFor={`jd-${slot}`}>Job {slot + 1}</label>
+                <span
+                  className={`jd-char-count${
+                    text.trim().length > 0 &&
+                    text.trim().length < MIN_JOB_DESCRIPTION_CHARS
+                      ? " short"
+                      : ""
+                  }`}
+                >
+                  {text.trim().length.toLocaleString()}/
+                  {MIN_JOB_DESCRIPTION_CHARS} chars
+                </span>
+                {jobTexts.length > 1 && (
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => removeJob(slot)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <textarea
+                id={`jd-${slot}`}
+                rows={8}
+                value={text}
+                onChange={(e) => setJobText(slot, e.target.value)}
+                onPaste={(e) => onPasteJob(slot, e)}
+                placeholder="Paste the full job description here…"
+                spellCheck={false}
+              />
+            </div>
+          ))}
+        </div>
 
         <div className="composer-footer">
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || linkCount === 0}
+            disabled={batchBusy || !hasAnyJd}
           >
             {loading ? "Processing…" : "Generate packages"}
+          </button>
+          <button
+            type="button"
+            className="text-btn add-job"
+            onClick={addJob}
+            disabled={batchBusy}
+          >
+            Add another job
           </button>
           {status && <p className="inline-status">{status}</p>}
         </div>
@@ -437,10 +482,9 @@ export default function ResumeForm() {
 
         {jobs.length === 0 ? (
           <div className="empty-board">
-            <p>Paste job URLs and generate to start.</p>
+            <p>Paste a job description and generate to start.</p>
             <ol>
-              <li>Scrape posting</li>
-              <li>Extract JD</li>
+              <li>Extract JD fields</li>
               <li>Write resume + cover letter</li>
               <li>Validate format and content</li>
               <li>Score ATS match</li>
@@ -458,9 +502,7 @@ export default function ResumeForm() {
                       <div className="job-title-row">
                         <strong>
                           {job.company ||
-                            (job.status === "error"
-                              ? "Failed"
-                              : hostFromUrl(job.jobUrl))}
+                            (job.status === "error" ? "Failed" : "Job posting")}
                         </strong>
                         <StatusBadge status={job.status} />
                         {typeof job.atsScore === "number" && (
@@ -480,15 +522,9 @@ export default function ResumeForm() {
                       {job.jobTitle && (
                         <p className="job-role">{job.jobTitle}</p>
                       )}
-                      <a
-                        className="job-url"
-                        href={job.jobUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={job.jobUrl}
-                      >
-                        {job.jobUrl}
-                      </a>
+                      <p className="job-preview" title={job.jobDescription}>
+                        {previewJd(job.jobDescription)}
+                      </p>
                     </div>
                   </div>
 
@@ -556,47 +592,16 @@ export default function ResumeForm() {
                   )}
 
                   {job.status === "error" && (
-                    <div className="manual-jd-panel">
-                      <label className="manual-jd-label" htmlFor={`manual-jd-${job.index}`}>
-                        Paste job description (for blocked / captcha pages)
-                      </label>
-                      <textarea
-                        id={`manual-jd-${job.index}`}
-                        className="manual-jd-input"
-                        rows={6}
-                        value={manualJds[job.index] || ""}
-                        onChange={(e) => setManualJd(job.index, e.target.value)}
-                        placeholder="Paste the full job description text here, then generate with pasted JD…"
-                        spellCheck={false}
-                      />
-                      <div className="retry-row">
-                        <button
-                          type="button"
-                          className="retry-btn"
-                          disabled={isRetrying(job.index)}
-                          onClick={() => void onRetry(job, false)}
-                        >
-                          <RetryIcon />
-                          {isRetrying(job.index)
-                            ? "Retrying…"
-                            : "Retry scrape"}
-                        </button>
-                        <button
-                          type="button"
-                          className="retry-btn primary-ghost"
-                          disabled={
-                            isRetrying(job.index) ||
-                            (manualJds[job.index] || "").trim().length < 80
-                          }
-                          onClick={() => void onRetry(job, true)}
-                          title="Skip scraping and use the pasted JD"
-                        >
-                          <RetryIcon />
-                          {isRetrying(job.index)
-                            ? "Generating…"
-                            : "Generate with pasted JD"}
-                        </button>
-                      </div>
+                    <div className="retry-row">
+                      <button
+                        type="button"
+                        className="retry-btn"
+                        disabled={isRetrying(job.index)}
+                        onClick={() => void onRetry(job)}
+                      >
+                        <RetryIcon />
+                        {isRetrying(job.index) ? "Retrying…" : "Retry"}
+                      </button>
                     </div>
                   )}
                 </div>

@@ -14,7 +14,7 @@ import {
   buildDocumentFileNames,
   buildZipFileName,
   sanitizeCompanyFolderName,
-} from "./scrape";
+} from "./filenames";
 
 /** Vercel/Lambda only allow writes under /tmp — cwd (/var/task) is read-only. */
 export function isEphemeralFilesystem() {
@@ -50,7 +50,6 @@ async function zipDirectory(
 
 export async function saveJobPackage(options: {
   index: number;
-  jobUrl: string;
   rawJd: string;
   extracted: ExtractedJD;
   personal: PersonalInfo;
@@ -71,7 +70,7 @@ export async function saveJobPackage(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, jobUrl, rawJd, extracted, personal, tailored } = options;
+  const { index, rawJd, extracted, personal, tailored } = options;
   const outputRoot = getOutputRoot();
   await mkdir(outputRoot, { recursive: true });
 
@@ -92,11 +91,7 @@ export async function saveJobPackage(options: {
     tailored.resume.keywords,
   );
 
-  await writeFile(
-    path.join(folderPath, "jd.txt"),
-    `Source URL: ${jobUrl}\n\n${rawJd}`,
-    "utf8",
-  );
+  await writeFile(path.join(folderPath, "jd.txt"), rawJd, "utf8");
   await writeFile(path.join(folderPath, "extracted_jd.txt"), extractedText, "utf8");
   await writeFile(path.join(folderPath, files.resumeDocx), resumeDocx);
   await writeFile(path.join(folderPath, files.resumePdf), resumePdf);

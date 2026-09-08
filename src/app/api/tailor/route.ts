@@ -39,23 +39,21 @@ export async function POST(request: Request) {
 
       try {
         const outcomes = await Promise.all(
-          payload.jobUrls.map(async (jobUrl, i) => {
+          payload.jobDescriptions.map(async (jobDescription, i) => {
             const index = payload.indices?.[i] ?? i + 1;
             let currentStep: JobStep = JOB_STEPS[0];
 
             try {
               const result = await processOneJob({
                 index,
-                jobUrl,
+                jobDescription,
                 profile,
                 personal: profile.personal,
-                manualJd: payload.manualJds?.[i],
                 onStep: (step, message) => {
                   currentStep = step;
                   send({
                     type: "step",
                     index,
-                    jobUrl,
                     step,
                     message,
                   });
@@ -65,7 +63,6 @@ export async function POST(request: Request) {
               send({
                 type: "job_done",
                 index,
-                jobUrl,
                 company: result.company,
                 zipName: result.zipName,
                 folderName: result.folderName,
@@ -87,7 +84,6 @@ export async function POST(request: Request) {
               send({
                 type: "job_error",
                 index,
-                jobUrl,
                 step: currentStep,
                 error: message,
               });

@@ -1,33 +1,34 @@
 import { z } from "zod";
+import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
 
 export const tailorRequestSchema = z
   .object({
-    jobUrls: z.array(z.string().url()).min(1),
+    jobDescriptions: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(
+            MIN_JOB_DESCRIPTION_CHARS,
+            `Each job description must be at least ${MIN_JOB_DESCRIPTION_CHARS} characters`,
+          ),
+      )
+      .min(1),
     indices: z.array(z.number().int().positive()).optional(),
-    /** Optional pasted JD text per URL; empty/omitted entries still scrape */
-    manualJds: z.array(z.string()).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.indices && value.indices.length !== value.jobUrls.length) {
+    if (value.indices && value.indices.length !== value.jobDescriptions.length) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "indices length must match jobUrls length",
+        message: "indices length must match jobDescriptions length",
         path: ["indices"],
-      });
-    }
-    if (value.manualJds && value.manualJds.length !== value.jobUrls.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "manualJds length must match jobUrls length",
-        path: ["manualJds"],
       });
     }
   });
 
 export function parseTailorRequest(body: unknown): {
-  jobUrls: string[];
+  jobDescriptions: string[];
   indices?: number[];
-  manualJds?: string[];
 } {
   return tailorRequestSchema.parse(body);
 }

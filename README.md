@@ -1,6 +1,6 @@
 # Resume Tailor
 
-Web app that scrapes job links, extracts structured JD fields via OpenRouter (DeepSeek V4 Flash by default), and generates ATS-oriented resumes + cover letters as DOCX/PDF packages.
+Web app that extracts structured JD fields via OpenRouter (DeepSeek V4 Flash by default) from pasted job descriptions, and generates ATS-oriented resumes + cover letters as DOCX/PDF packages.
 
 ## Setup
 
@@ -30,12 +30,12 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Flow
 
 1. Profile is fixed in code (`src/lib/profile.ts`) for Saul D. Trujillo
-2. Paste job URLs (one per line)
-3. The app scrapes each posting in parallel, extracts the JD, and writes a tailored resume + cover letter
+2. Paste one or more job descriptions
+3. The app extracts each JD and writes a tailored resume + cover letter
 
 ## Output
 
-For each job link (in order):
+For each job (in order):
 
 ```
 output/
@@ -47,7 +47,7 @@ output/
     Coverletter-Saul.docx
     Coverletter-Saul.txt
   Clara-Software Engineer.zip
-  ...
+    ...
 ```
 
 Each completed job shows an ATS score (/100) in the UI.

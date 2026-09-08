@@ -2,22 +2,19 @@ import { scoreAtsMatch } from "./ats-score";
 import { extractJobDescription } from "./extract";
 import { generateTailoredPackage } from "./generate";
 import { saveJobPackage } from "./package";
-import { scrapeJobDescription } from "./scrape";
+import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
 import { validateAndFixResume } from "./validate-resume";
 import type { JobStep } from "./progress";
 import type { CandidateProfile, ExtractedJD, PersonalInfo } from "./types";
 
 export async function processOneJob(options: {
   index: number;
-  jobUrl: string;
+  jobDescription: string;
   profile: CandidateProfile;
   personal: PersonalInfo;
-  /** When provided, skip scrape and use this JD text */
-  manualJd?: string;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
-  jobUrl: string;
   company: string;
   zipName: string;
   folderName: string;
@@ -33,33 +30,17 @@ export async function processOneJob(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, jobUrl, profile, personal, manualJd, onStep } = options;
+  const { index, profile, personal, onStep } = options;
+  const rawText = options.jobDescription.trim().slice(0, 50000);
 
-  let rawText: string;
-  let pageTitle: string;
-
-  const pasted = manualJd?.trim();
-  if (pasted && pasted.length >= 80) {
-    onStep("scraping", "Using pasted job description (scrape skipped)…");
-    rawText = pasted.slice(0, 50000);
-    pageTitle = `Manual JD for ${jobUrl}`;
-    onStep(
-      "fetch_jd",
-      `Loaded manual JD (${rawText.length.toLocaleString()} chars)`,
-    );
-  } else {
-    onStep("scraping", "Scraping job page…");
-    const scraped = await scrapeJobDescription(jobUrl);
-    rawText = scraped.rawText;
-    pageTitle = scraped.pageTitle;
-    onStep(
-      "fetch_jd",
-      `Fetched JD (${rawText.length.toLocaleString()} chars)`,
+  if (rawText.length < MIN_JOB_DESCRIPTION_CHARS) {
+    throw new Error(
+      `Paste at least ~${MIN_JOB_DESCRIPTION_CHARS} characters of the job description.`,
     );
   }
 
   onStep("extracting", "Extracting structured JD…");
-  const extracted = await extractJobDescription(rawText, pageTitle, jobUrl);
+  const extracted = await extractJobDescription(rawText);
 
   onStep("generating", "Generating resume & cover letter…");
   let tailored = await generateTailoredPackage(profile, extracted, rawText);
@@ -94,7 +75,6 @@ export async function processOneJob(options: {
 
   const saved = await saveJobPackage({
     index,
-    jobUrl,
     rawJd: rawText,
     extracted,
     personal,
@@ -103,7 +83,6 @@ export async function processOneJob(options: {
 
   return {
     index,
-    jobUrl,
     company: saved.company,
     zipName: saved.zipName,
     folderName: saved.folderName,
