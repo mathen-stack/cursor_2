@@ -5,7 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
-import { getLlmClient, getLlmModel } from "./llm";
+import { completeJson } from "./llm";
 import { parseModelJson } from "./parse-json";
 import { collectedJdKeywords, jdTechKeywords } from "./jd-fields";
 import { sanitizePlainText } from "./validate-resume";
@@ -123,14 +123,12 @@ export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
 ): Promise<TailoredPackage> {
-  const client = getLlmClient();
-  const model = getLlmModel();
   const userPayload = JSON.stringify({
     candidate: profile,
     structuredJd: extracted,
   });
 
-  let content = await requestJson(client, model, [
+  let content = await requestJson([
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: userPayload },
   ]);
@@ -139,7 +137,7 @@ export async function generateTailoredPackage(
   try {
     parsed = parseModelJson<TailoredPackage>(content);
   } catch (firstError) {
-    content = await requestJson(client, model, [
+    content = await requestJson([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPayload },
       { role: "assistant", content },
@@ -172,22 +170,13 @@ export async function generateTailoredPackage(
 }
 
 async function requestJson(
-  client: ReturnType<typeof getLlmClient>,
-  model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ): Promise<string> {
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
+  return completeJson({
     messages,
+    temperature: 0.3,
+    emptyError: "Empty response while generating tailored resume.",
   });
-
-  const content = completion.choices[0]?.message?.content;
-  if (!content?.trim()) {
-    throw new Error("Empty response while generating tailored resume.");
-  }
-  return content;
 }
 
 function normalizeSkills(

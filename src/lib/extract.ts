@@ -1,5 +1,5 @@
 import type { ExtractedJD } from "./types";
-import { getLlmClient, getLlmModel } from "./llm";
+import { completeJson } from "./llm";
 import { parseModelJson } from "./parse-json";
 import {
   JD_KEYWORD_MAX,
@@ -66,22 +66,13 @@ function normalizeExtracted(parsed: ExtractRaw): ExtractedJD {
 }
 
 async function requestExtract(
-  client: ReturnType<typeof getLlmClient>,
-  model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ): Promise<ExtractedJD> {
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    response_format: { type: "json_object" },
+  const content = await completeJson({
     messages,
+    temperature: 0.2,
+    emptyError: "Empty response while extracting job description.",
   });
-
-  const content = completion.choices[0]?.message?.content;
-  if (!content?.trim()) {
-    throw new Error("Empty response while extracting job description.");
-  }
-
   return normalizeExtracted(parseModelJson<ExtractRaw>(content));
 }
 
@@ -90,8 +81,6 @@ export async function extractJobDescription(
   pageTitle: string,
   jobUrl: string,
 ): Promise<ExtractedJD> {
-  const client = getLlmClient();
-  const model = getLlmModel();
   const userContent = `Job URL: ${jobUrl}
 Page title: ${pageTitle}
 
@@ -103,11 +92,11 @@ ${rawJd.slice(0, 20000)}`;
     { role: "user" as const, content: userContent },
   ];
 
-  let extracted = await requestExtract(client, model, baseMessages);
+  let extracted = await requestExtract(baseMessages);
   let count = countJdKeywords(extracted);
 
   if (count < JD_KEYWORD_MIN) {
-    extracted = await requestExtract(client, model, [
+    extracted = await requestExtract([
       ...baseMessages,
       {
         role: "assistant",
