@@ -10,11 +10,13 @@ Web app that scrapes job links, extracts structured JD fields via OpenRouter (De
 npm install
 ```
 
-2. Copy env and add your OpenRouter key:
+2. Create `.env.local` from the example and add your OpenRouter key:
 
 ```bash
-copy .env.example .env.local
+cp .env.example .env.local
 ```
+
+On Windows: `copy .env.example .env.local`
 
 Set `OPENROUTER_API_KEY` from [openrouter.ai/keys](https://openrouter.ai/keys).  
 Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`).
@@ -25,7 +27,7 @@ Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`)
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The homepage is Resume Tailor — paste job URLs and click **Generate packages**.
 
 ## Flow
 
