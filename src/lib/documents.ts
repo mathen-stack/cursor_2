@@ -77,7 +77,11 @@ function plainContactRun(text: string) {
   });
 }
 
-function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
+function buildResumeHeader(
+  personal: PersonalInfo,
+  headline: string,
+  keywords: string[],
+): Paragraph[] {
   const contactChildren: Array<TextRun | ExternalHyperlink> = [];
 
   const pushSep = () => {
@@ -113,7 +117,7 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
   return [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
+      spacing: { after: 80 },
       children: [
         new TextRun({
           text: personal.name.toUpperCase(),
@@ -124,6 +128,15 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
         }),
       ],
     }),
+    ...(headline
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 80 },
+            children: runsFromText(headline, keywords, 20),
+          }),
+        ]
+      : []),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 160 },
@@ -197,7 +210,7 @@ export async function buildResumeDocx(
   const kw = resume.keywords;
 
   const children: Paragraph[] = [
-    ...buildResumeHeader(personal),
+    ...buildResumeHeader(personal, resume.headline, kw),
     sectionHeading("Summary"),
     new Paragraph({
       spacing: { after: 140, line: 276 },
@@ -332,7 +345,7 @@ export async function buildCoverLetterDocx(
           },
         },
         children: [
-          ...buildResumeHeader(personal),
+          ...buildResumeHeader(personal, "", []),
           new Paragraph({
             spacing: { before: 160, after: 200 },
             children: [
@@ -517,6 +530,11 @@ export async function buildResumePdf(
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
       });
     doc.moveDown(0.3);
+
+    if (resume.headline) {
+      drawSegmentedLine(doc, resume.headline, kw, { fontSize: 10.5 });
+      doc.moveDown(0.25);
+    }
 
     const contactParts: Array<{ label: string; href?: string }> = [];
     if (personal.phone) {

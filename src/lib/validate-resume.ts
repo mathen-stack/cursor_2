@@ -5,7 +5,6 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
-import { jdTechKeywords } from "./jd-fields";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -94,6 +93,7 @@ export function validateAndFixResume(
   const issues: ValidationIssue[] = [];
   const resume = tailored.resume;
 
+  issues.push(...collectMarkdownIssues("headline", resume.headline || ""));
   issues.push(...collectMarkdownIssues("summary", resume.summary));
   for (const [i, exp] of resume.experiences.entries()) {
     if (exp.overview) {
@@ -107,6 +107,7 @@ export function validateAndFixResume(
   }
   issues.push(...collectMarkdownIssues("cover letter", tailored.coverLetter));
 
+  const headline = sanitizePlainText(resume.headline || "");
   const summary = sanitizePlainText(resume.summary);
   const coverLetter = sanitizePlainText(tailored.coverLetter);
   const skills = sanitizeSkills(resume.skills);
@@ -114,10 +115,23 @@ export function validateAndFixResume(
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 20) {
+  if (!headline) {
+    issues.push({
+      level: "warning",
+      message: "Headline is missing; a fallback will be used if possible.",
+    });
+  }
+
+  const summaryWords = wordCount(summary);
+  if (!summary || summaryWords < 40) {
     issues.push({
       level: "error",
       message: "Summary is missing or too short.",
+    });
+  } else if (summaryWords < 70 || summaryWords > 85) {
+    issues.push({
+      level: "warning",
+      message: `Summary is ${summaryWords} words (target 70–85).`,
     });
   }
 
@@ -128,18 +142,18 @@ export function validateAndFixResume(
     });
   }
 
-  if (skills.length < 3) {
+  if (skills.length < 5) {
     issues.push({
       level: "warning",
-      message: "Skills should be grouped into at least 3 categories.",
+      message: "Skills should be grouped into 5–6 categories.",
     });
   }
 
   for (const group of skills) {
-    if (group.items.length < 2) {
+    if (group.items.length < 5) {
       issues.push({
         level: "warning",
-        message: `Skill group "${group.category}" has fewer than 2 items.`,
+        message: `Skill group "${group.category}" has fewer than 5 items.`,
       });
     }
   }
@@ -188,24 +202,19 @@ export function validateAndFixResume(
       overview = `${exp.company} delivers software products for its customers in a ${exp.location.toLowerCase()} environment; as ${title}, owned feature delivery and technical execution across core product workflows.`;
     }
 
-    if (bullets.length < 7) {
+    if (bullets.length < 5) {
       issues.push({
-        level: "fixed",
-        message: `Added missing bullets for ${exp.company} (need 7–8).`,
+        level: "warning",
+        message: `${exp.company} has ${bullets.length} bullets (target 5–6).`,
       });
-      while (bullets.length < 7) {
-        bullets.push(
-          `Collaborated with cross-functional partners to deliver ${jdTechKeywords(extracted).slice(0, 2).join(" and ") || "production software"} improvements that strengthened reliability and delivery outcomes for ${exp.company} customers.`,
-        );
-      }
     }
 
-    if (bullets.length > 8) {
+    if (bullets.length > 6) {
       issues.push({
         level: "fixed",
-        message: `Trimmed ${exp.company} experience to 8 bullets.`,
+        message: `Trimmed ${exp.company} experience to 6 bullets.`,
       });
-      bullets = bullets.slice(0, 8);
+      bullets = bullets.slice(0, 6);
     }
 
     for (const [j, bullet] of bullets.entries()) {
@@ -278,6 +287,12 @@ export function validateAndFixResume(
   }
 
   const cleanedResume: TailoredResume = {
+    headline:
+      headline ||
+      [extracted.targetRole, ...extracted.requiredSkills.slice(0, 4)]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" | "),
     summary,
     skills,
     experiences,

@@ -31,7 +31,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Profile is fixed in code (`src/lib/profile.ts`) for Saul D. Trujillo
 2. Paste job URLs (one per line)
-3. The app scrapes each posting, extracts 25–35 JD keywords (required/preferred skills, responsibilities, repeated technologies, domain, soft skills; infers relevant extras if the posting is thin), and writes a tailored resume + cover letter
+3. The app scrapes each posting, extracts 25–35 JD keywords, then generates a resume and cover letter from the candidate profile plus that structured JD (not the raw posting text).
 
 ## Output
 

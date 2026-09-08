@@ -62,14 +62,14 @@ export async function processOneJob(options: {
   const extracted = await extractJobDescription(rawText, pageTitle, jobUrl);
 
   onStep("generating", "Generating resume & cover letter…");
-  let tailored = await generateTailoredPackage(profile, extracted, rawText);
+  let tailored = await generateTailoredPackage(profile, extracted);
 
   onStep("validating", "Validating resume format and content…");
   let validation = validateAndFixResume(tailored, profile, extracted);
 
   if (!validation.ok) {
     onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText);
+    tailored = await generateTailoredPackage(profile, extracted);
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 

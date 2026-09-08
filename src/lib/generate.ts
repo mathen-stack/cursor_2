@@ -7,34 +7,87 @@ import type {
 } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
-import { jdTechKeywords } from "./jd-fields";
+import { collectedJdKeywords, jdTechKeywords } from "./jd-fields";
 import { sanitizePlainText } from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
-Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
-Hard rules:
-1. Resume sections: Summary, Skills, Experience, Education.
-2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
-   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
-   Each group has a short category name and 4-10 comma-ready item strings.
-3. Each experience MUST include:
-   - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
-   - exactly 7 bullet points of accomplishments.
-4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
-5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
-6. Include slightly MORE relevant experience breadth than the JD strictly requires.
-7. Mirror JD terminology from extracted required skills, repeated technologies, preferred skills, domain knowledge, and core responsibilities.
-8. keywords: array of important JD keywords/phrases that should be bolded (required skills and repeated technologies first).
-9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-10. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
-11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+Create a tailored resume and cover letter for the target role using only the candidate background and structured JD. Optimize for ATS keyword match, recruiter readability, and factual credibility.
 
-JSON shape:
+The user message JSON has:
+- candidate: factual background (personal, experiences, education)
+- structuredJd: extracted JD keywords (company, targetRole, requiredSkills, coreResponsibilities, repeatedTechnologies, preferredSkills, domainKnowledge, softSkills)
+
+Treat structuredJd as the JD source of truth. Treat candidate as the only factual source of work history.
+
+HARD RULES
+
+1. HEADLINE
+- Start with the exact target role.
+- Add 3–4 highest-priority hard skills.
+- If the recent role is different but meaningfully relevant:
+  [Target Role] & [Recent Role] | [Skill 1] | [Skill 2] | [Skill 3]
+- Otherwise:
+  [Target Role] | [Skill 1] | [Skill 2] | [Skill 3] | [Skill 4]
+
+2. SUMMARY
+- 70–85 words, 3–4 sentences.
+- Include target role, relevant years, core specialization, 3–6 priority JD skills, relevant production/domain context, and optionally one supported quantified result.
+- Use JD terminology naturally. Avoid keyword stuffing and generic claims.
+
+3. SKILLS
+- Use 5–6 compact groups, 5–10 skills each.
+- Prioritize required JD skills first, then preferred skills, then relevant background skills.
+- Roughly 60% JD skills and 40% supported transferable skills.
+- Avoid duplicates and unsupported technologies.
+
+4. EXPERIENCE
+For each role:
+- Preserve company, period, and location exactly.
+- Refine title only if accurate and plausible.
+- Add a 25–45 word overview.
+- Write exactly 5–6 bullets.
+- The first bullet of the first role must closely align with the highest-priority JD responsibility.
+- Cover remaining JD responsibilities in priority order.
+- Use compressed STAR: context/task + action + technology/method + result.
+- Prefer concrete supported metrics such as users, datasets, latency, throughput, cost, time, counts, or percentages.
+- Never invent metrics.
+- Show senior-level ownership, architecture, execution, scale, production impact, and collaboration where supported.
+- Avoid repeated verbs and phrases.
+
+5. EDUCATION
+- Preserve school, degree, period, and location exactly.
+- Do not invent coursework, certifications, honors, or achievements.
+
+6. KEYWORD ALIGNMENT
+- Mirror important JD terminology where factually supported.
+- Include high-priority skills in Skills and, when supported, Experience.
+- Do not claim direct experience with technologies not present in the candidate background.
+- For transferable experience, describe the underlying capability without overstating it.
+
+7. COVER LETTER
+- 3–4 short paragraphs in one string separated by \\n\\n.
+- Focus on the target role, strongest matching experience, priority JD responsibilities, technologies, and supported impact.
+- Keep concise, natural, professional, and non-generic.
+- No icons or emojis.
+
+8. FACTUAL INTEGRITY
+- Candidate background is the only factual source of truth.
+- You may reframe, reorder, consolidate, and strengthen wording.
+- Do not invent employers, dates, locations, projects, technologies, metrics, responsibilities, certifications, education, or years of experience.
+
+9. OUTPUT
+Return ONLY valid compact JSON.
+No markdown, commentary, notes, or code fences.
+Ensure the JSON parses successfully.
+NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+Escape all double quotes inside strings.
+
+skills.items, experiences.bullets, and keywords MUST be JSON arrays of strings.
+
 {
   "resume": {
+    "headline": string,
     "summary": string,
     "skills": [{ "category": string, "items": string[] }],
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
@@ -44,17 +97,37 @@ JSON shape:
   "coverLetter": string
 }`;
 
+function defaultHeadline(
+  extracted: ExtractedJD,
+  profile: CandidateProfile,
+): string {
+  const skills = extracted.requiredSkills
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const target = extracted.targetRole.trim() || "Software Engineer";
+  const recent = profile.experiences[0]?.title.trim() || "";
+  const recentDiffers =
+    Boolean(recent) && recent.toLowerCase() !== target.toLowerCase();
+
+  if (recentDiffers) {
+    return [`${target} & ${recent}`, ...skills.slice(0, 3)]
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  return [target, ...skills].filter(Boolean).join(" | ");
+}
+
 export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
-  rawJd: string,
 ): Promise<TailoredPackage> {
   const client = getLlmClient();
   const model = getLlmModel();
   const userPayload = JSON.stringify({
     candidate: profile,
-    extractedJd: extracted,
-    rawJobDescription: rawJd.slice(0, 12000),
+    structuredJd: extracted,
   });
 
   let content = await requestJson(client, model, [
@@ -122,7 +195,6 @@ function normalizeSkills(
   extracted: ExtractedJD,
 ): SkillGroup[] {
   if (Array.isArray(skills) && skills.length) {
-    // New grouped format
     if (
       typeof skills[0] === "object" &&
       skills[0] !== null &&
@@ -141,7 +213,6 @@ function normalizeSkills(
         .filter((group) => group.items.length > 0);
     }
 
-    // Legacy flat string list -> one compact Technical Skills group
     const items = skills
       .map(String)
       .map((s) => sanitizePlainText(s))
@@ -175,6 +246,7 @@ function normalizeResume(
   extracted: ExtractedJD,
 ): TailoredResume {
   const safe = resume || {
+    headline: "",
     summary: "",
     skills: [],
     experiences: [],
@@ -183,16 +255,16 @@ function normalizeResume(
   };
 
   const skillGroups = normalizeSkills(safe.skills, extracted);
+  const headline =
+    sanitizePlainText(String(safe.headline || "")) ||
+    defaultHeadline(extracted, profile);
 
   const keywords = Array.from(
     new Set(
       [
         ...(safe.keywords || []),
         ...skillGroups.flatMap((g) => g.items),
-        ...jdTechKeywords(extracted),
-        ...extracted.softSkills,
-        ...extracted.coreResponsibilities,
-        extracted.targetRole,
+        ...collectedJdKeywords(extracted),
       ]
         .map((k) => String(k).trim())
         .filter(Boolean),
@@ -205,13 +277,7 @@ function normalizeResume(
       .map(String)
       .map((b) => sanitizePlainText(b))
       .filter(Boolean);
-
-    while (bullets.length < 7) {
-      bullets.push(
-        `Partnered with cross-functional stakeholders to deliver production-ready solutions involving ${jdTechKeywords(extracted).slice(0, 3).join(", ") || "core platform technologies"}, improving reliability and delivery speed for business-critical workflows.`,
-      );
-    }
-    bullets = bullets.slice(0, 8);
+    bullets = bullets.slice(0, 6);
 
     const overview = sanitizePlainText(
       String(
@@ -234,6 +300,7 @@ function normalizeResume(
   });
 
   return {
+    headline,
     summary: sanitizePlainText(String(safe.summary || "")),
     skills: skillGroups,
     experiences,
