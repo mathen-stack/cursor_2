@@ -172,10 +172,13 @@ export function harvestJdPhrases(rawJd: string, limit = 40): string[] {
 
   for (const line of text.split(/[\n|;]+/)) {
     push(line);
+    for (const part of line.split(/,(?=\s)/)) {
+      push(part);
+    }
   }
 
   for (const match of text.matchAll(
-    /\b(?:[A-Z][A-Za-z0-9.+#]{1,24}|[A-Za-z]{2,}(?:\.js|SQL)?|C\+\+|C#|CI\/CD|REST|GraphQL|TypeScript|JavaScript|Next\.js|Node\.js)\b/g,
+    /\b(?:[A-Z][A-Za-z0-9.+#]{1,24}|[A-Za-z]{3,}(?:\.js|SQL)?|C\+\+|C#|CI\/CD|REST|GraphQL|TypeScript|JavaScript|Next\.js|Node\.js)\b/g,
   )) {
     push(match[0]);
   }
@@ -191,6 +194,7 @@ export function padExtractedFromText(
   let next = dedupeJdLists(extracted);
   if (countJdKeywords(next) >= min) return next;
 
+  const harvested = harvestJdPhrases(rawJd);
   for (const phrase of harvested) {
     if (countJdKeywords(next) >= min) break;
     const looksTech =
