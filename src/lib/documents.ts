@@ -140,7 +140,6 @@ function buildResumeHeader(
             new TextRun({
               text: seg.text,
               bold: true,
-              italics: true,
               size: 22,
               font: "Calibri",
               color: "1F4E79",
@@ -549,7 +548,7 @@ export async function buildResumePdf(
     if (resume.headline.trim()) {
       doc.moveDown(0.15);
       doc
-        .font("Helvetica-Oblique")
+        .font("Helvetica-Bold")
         .fontSize(11)
         .fillColor("#1F4E79")
         .text(resume.headline, {
