@@ -19,6 +19,15 @@ cp .env.example .env.local
 Set `OPENROUTER_API_KEY` from [openrouter.ai/keys](https://openrouter.ai/keys).  
 Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`).
 
+For **Vercel**, also set:
+
+- `DATABASE_URL` — Neon connection string (pooled / serverless is fine)
+- `AUTH_SECRET` — a long random string
+
+Create a Neon project at [console.neon.tech](https://console.neon.tech), copy the connection string, and paste it into `.env.local` and the Vercel project env vars. Tables are created automatically on the first request. You can also run `src/lib/schema.sql` in the Neon SQL editor.
+
+Without `DATABASE_URL`, local development still uses `data/users.json` and `data/tailor-records.json`.
+
 3. Run the app:
 
 ```bash

@@ -3,6 +3,12 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { CandidateProfile } from "./types";
 import { emptyProfile, parseProfileDraft } from "./profile";
+import {
+  asIsoDate,
+  hasDatabase,
+  isUniqueViolation,
+  withDatabase,
+} from "./db";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -30,6 +36,17 @@ export type PublicUser = {
 
 type UserStore = {
   users: StoredUser[];
+};
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  created_at: string | Date;
+  role: string;
+  priority: string;
+  profile: unknown;
 };
 
 function storePath() {
@@ -105,6 +122,30 @@ function toPublicUser(user: StoredUser): PublicUser {
   };
 }
 
+function rowToUser(row: UserRow): StoredUser {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    passwordHash: row.password_hash,
+    createdAt: asIsoDate(row.created_at),
+    role: asRole(row.role),
+    priority: asPriority(row.priority),
+    profile: parseProfileDraft(row.profile) ?? undefined,
+  };
+}
+
+async function ensureOldestAdmin() {
+  const sql = await withDatabase();
+  const admins = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
+  if (admins.length) return;
+  const oldest = await sql`
+    SELECT id FROM users ORDER BY created_at ASC LIMIT 1
+  `;
+  if (!oldest[0]?.id) return;
+  await sql`UPDATE users SET role = 'admin', priority = 'able' WHERE id = ${oldest[0].id}`;
+}
+
 export function userRole(user: StoredUser | null | undefined): UserRole {
   return user?.role === "admin" ? "admin" : "user";
 }
@@ -113,26 +154,52 @@ export function isAdminUser(user: StoredUser | null | undefined): boolean {
   return userRole(user) === "admin";
 }
 
-export function userPriority(user: StoredUser | PublicUser | null | undefined): UserPriority {
+export function userPriority(
+  user: StoredUser | PublicUser | null | undefined,
+): UserPriority {
   return user?.priority === "disable" ? "disable" : "able";
 }
 
-export function isUserAble(user: StoredUser | PublicUser | null | undefined): boolean {
+export function isUserAble(
+  user: StoredUser | PublicUser | null | undefined,
+): boolean {
   return userPriority(user) === "able";
 }
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
-  const store = await readStore();
   const needle = email.trim().toLowerCase();
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT * FROM users WHERE email = ${needle} LIMIT 1
+    `) as UserRow[];
+    return rows[0] ? rowToUser(rows[0]) : null;
+  }
+  const store = await readStore();
   return store.users.find((user) => user.email === needle) ?? null;
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT * FROM users WHERE id = ${id} LIMIT 1
+    `) as UserRow[];
+    return rows[0] ? rowToUser(rows[0]) : null;
+  }
   const store = await readStore();
   return store.users.find((user) => user.id === id) ?? null;
 }
 
 export async function listPublicUsers(): Promise<PublicUser[]> {
+  if (hasDatabase()) {
+    await ensureOldestAdmin();
+    const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT * FROM users ORDER BY created_at ASC
+    `) as UserRow[];
+    return rows.map((row) => toPublicUser(rowToUser(row)));
+  }
   const store = await readStore();
   return store.users
     .slice()
@@ -147,9 +214,71 @@ export async function createUser(input: {
   role?: UserRole;
   priority?: UserPriority;
 }): Promise<StoredUser> {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  const profile = {
+    ...emptyProfile(),
+    personal: {
+      ...emptyProfile().personal,
+      name,
+      email,
+    },
+  };
+
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const existing = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
+    if (existing.length) {
+      throw new Error("An account with that email already exists.");
+    }
+    const admins = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
+    const hasAdmin = admins.length > 0;
+    const role: UserRole = !hasAdmin
+      ? "admin"
+      : input.role === "admin"
+        ? "admin"
+        : "user";
+    const priority: UserPriority = !hasAdmin
+      ? "able"
+      : input.priority === "disable"
+        ? "disable"
+        : "able";
+    const user: StoredUser = {
+      id: randomUUID(),
+      name,
+      email,
+      passwordHash: input.passwordHash,
+      createdAt: new Date().toISOString(),
+      role,
+      priority,
+      profile,
+    };
+    try {
+      await sql`
+        INSERT INTO users (
+          id, name, email, password_hash, created_at, role, priority, profile
+        ) VALUES (
+          ${user.id},
+          ${user.name},
+          ${user.email},
+          ${user.passwordHash},
+          ${user.createdAt},
+          ${user.role},
+          ${user.priority},
+          ${user.profile ?? null}
+        )
+      `;
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new Error("An account with that email already exists.");
+      }
+      throw err;
+    }
+    return user;
+  }
+
   return enqueue(async () => {
     const store = await readStore();
-    const email = input.email.trim().toLowerCase();
     if (store.users.some((user) => user.email === email)) {
       throw new Error("An account with that email already exists.");
     }
@@ -159,7 +288,6 @@ export async function createUser(input: {
       : input.role === "admin"
         ? "admin"
         : "user";
-    const name = input.name.trim();
     const user: StoredUser = {
       id: randomUUID(),
       name,
@@ -172,14 +300,7 @@ export async function createUser(input: {
         : input.priority === "disable"
           ? "disable"
           : "able",
-      profile: {
-        ...emptyProfile(),
-        personal: {
-          ...emptyProfile().personal,
-          name,
-          email,
-        },
-      },
+      profile,
     };
     store.users.push(user);
     await writeStore(store);
@@ -197,19 +318,85 @@ export async function updateUserAccount(
     passwordHash?: string;
   },
 ): Promise<PublicUser> {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  const nextRole = input.role === "admin" ? "admin" : "user";
+  const nextPriority = input.priority === "disable" ? "disable" : "able";
+
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT * FROM users WHERE id = ${userId} LIMIT 1
+    `) as UserRow[];
+    const current = rows[0] ? rowToUser(rows[0]) : null;
+    if (!current) throw new Error("Account not found.");
+
+    const taken = await sql`
+      SELECT id FROM users WHERE email = ${email} AND id <> ${userId} LIMIT 1
+    `;
+    if (taken.length) {
+      throw new Error("An account with that email already exists.");
+    }
+
+    if (current.role === "admin" && nextRole !== "admin") {
+      const otherAdmins = await sql`
+        SELECT id FROM users WHERE role = 'admin' AND id <> ${userId} LIMIT 1
+      `;
+      if (!otherAdmins.length) {
+        throw new Error("Keep at least one administrator.");
+      }
+    }
+
+    const profile = current.profile?.personal
+      ? {
+          ...current.profile,
+          personal: {
+            ...current.profile.personal,
+            name,
+            email,
+          },
+        }
+      : current.profile;
+
+    if (input.passwordHash) {
+      await sql`
+        UPDATE users
+        SET name = ${name},
+            email = ${email},
+            role = ${nextRole},
+            priority = ${nextPriority},
+            password_hash = ${input.passwordHash},
+            profile = ${profile ?? null}
+        WHERE id = ${userId}
+      `;
+    } else {
+      await sql`
+        UPDATE users
+        SET name = ${name},
+            email = ${email},
+            role = ${nextRole},
+            priority = ${nextPriority},
+            profile = ${profile ?? null}
+        WHERE id = ${userId}
+      `;
+    }
+
+    const updated = await findUserById(userId);
+    if (!updated) throw new Error("Account not found.");
+    return toPublicUser(updated);
+  }
+
   return enqueue(async () => {
     const store = await readStore();
     const user = store.users.find((entry) => entry.id === userId);
     if (!user) throw new Error("Account not found.");
 
-    const email = input.email.trim().toLowerCase();
     if (
       store.users.some((entry) => entry.id !== userId && entry.email === email)
     ) {
       throw new Error("An account with that email already exists.");
     }
 
-    const nextRole = input.role === "admin" ? "admin" : "user";
     if (user.role === "admin" && nextRole !== "admin") {
       const otherAdmins = store.users.filter(
         (entry) => entry.id !== userId && entry.role === "admin",
@@ -219,10 +406,10 @@ export async function updateUserAccount(
       }
     }
 
-    user.name = input.name.trim();
+    user.name = name;
     user.email = email;
     user.role = nextRole;
-    user.priority = input.priority === "disable" ? "disable" : "able";
+    user.priority = nextPriority;
     if (input.passwordHash) user.passwordHash = input.passwordHash;
     if (user.profile?.personal) {
       user.profile = {
@@ -240,6 +427,24 @@ export async function updateUserAccount(
 }
 
 export async function deleteUser(userId: string): Promise<void> {
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT role FROM users WHERE id = ${userId} LIMIT 1
+    `) as Array<{ role: string }>;
+    if (!rows[0]) throw new Error("Account not found.");
+    if (asRole(rows[0].role) === "admin") {
+      const otherAdmins = await sql`
+        SELECT id FROM users WHERE role = 'admin' AND id <> ${userId} LIMIT 1
+      `;
+      if (!otherAdmins.length) {
+        throw new Error("Keep at least one administrator.");
+      }
+    }
+    await sql`DELETE FROM users WHERE id = ${userId}`;
+    return;
+  }
+
   await enqueue(async () => {
     const store = await readStore();
     const user = store.users.find((entry) => entry.id === userId);
@@ -261,11 +466,20 @@ export async function saveUserProfile(
   userId: string,
   profile: CandidateProfile,
 ): Promise<void> {
+  const next = parseProfileDraft(profile) ?? emptyProfile();
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!exists.length) throw new Error("Account not found.");
+    await sql`UPDATE users SET profile = ${next} WHERE id = ${userId}`;
+    return;
+  }
+
   await enqueue(async () => {
     const store = await readStore();
     const user = store.users.find((entry) => entry.id === userId);
     if (!user) throw new Error("Account not found.");
-    user.profile = parseProfileDraft(profile) ?? emptyProfile();
+    user.profile = next;
     await writeStore(store);
   });
 }
