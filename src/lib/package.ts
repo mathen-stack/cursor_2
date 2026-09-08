@@ -87,7 +87,7 @@ export async function saveJobPackage(options: {
   const coverDocx = await buildCoverLetterDocx(
     personal,
     extracted.company,
-    extracted.jobTitle,
+    extracted.targetRole,
     tailored.coverLetter,
     tailored.resume.keywords,
   );
@@ -107,7 +107,7 @@ export async function saveJobPackage(options: {
     "utf8",
   );
 
-  const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
+  const zipName = buildZipFileName(extracted.company, extracted.targetRole);
   const zipPath = path.join(outputRoot, zipName);
   await zipDirectory(folderPath, zipPath);
 

@@ -1,38 +1,12 @@
-import type { ExtractedJD, JobType, WorkMode } from "./types";
+import type { ExtractedJD } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
 
-const JOB_TYPES: JobType[] = [
-  "AI Engineer",
-  "Data Engineer",
-  "Software Engineer",
-  "Data Analyst",
-  "Data Scientist",
-];
-
-function normalizeType(value: string): JobType {
-  const match = JOB_TYPES.find(
-    (t) => t.toLowerCase() === value.toLowerCase().trim(),
-  );
-  if (match) return match;
-
-  const lower = value.toLowerCase();
-  if (lower.includes("ai") || lower.includes("ml") || lower.includes("llm")) {
-    return "AI Engineer";
-  }
-  if (lower.includes("data engineer") || lower.includes("etl")) {
-    return "Data Engineer";
-  }
-  if (lower.includes("analyst")) return "Data Analyst";
-  if (lower.includes("scientist")) return "Data Scientist";
-  return "Software Engineer";
-}
-
-function normalizeWorkMode(value: string): WorkMode {
-  const lower = value.toLowerCase();
-  if (lower.includes("remote")) return "Remote";
-  if (lower.includes("hybrid")) return "Hybrid";
-  return "Onsite";
+function asStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item).trim())
+    .filter(Boolean);
 }
 
 export async function extractJobDescription(
@@ -49,19 +23,22 @@ export async function extractJobDescription(
     messages: [
       {
         role: "system",
-        content: `You extract structured hiring information from job postings.
+        content: `You extract hiring keywords from a job posting.
 Return ONLY valid JSON (no markdown) with keys:
-- company (string)
-- jobTitle (string)
-- summary (2-4 sentence overview of the role and responsibilities)
-- type (exactly one of: "AI Engineer", "Data Engineer", "Software Engineer", "Data Analyst", "Data Scientist")
-- salaryExpectation (string; use "Not specified" if unknown)
-- workMode (exactly one of: "Remote", "Hybrid", "Onsite")
-- hardTechnicalSkills (string array of concrete technologies/tools/domains)
-- softSkills (string array)
+- company (string; infer from page title or URL if missing)
+- targetRole (string; official job title)
+- requiredSkills (string array; must-have skills from requirements / qualifications)
+- coreResponsibilities (string array; main duties as short phrases)
+- repeatedTechnologies (string array; tools/languages/platforms mentioned often or emphasized)
+- preferredSkills (string array; nice-to-have / plus / bonus skills)
+- domainKnowledge (string array; industry or problem-domain terms, e.g. fintech, healthcare, ads, payments)
+- softSkills (string array; communication, leadership, collaboration, etc.)
 
-Infer company from the page title or URL when missing. Prefer specific skill names.
-Escape quotes inside strings.`,
+Rules:
+- Prefer specific names (React, Kubernetes, SQL) over vague phrases.
+- Split required vs preferred when the posting distinguishes them; if it does not, put skills in requiredSkills.
+- Do not include salary, work mode, or a prose summary.
+- Escape quotes inside strings.`,
       },
       {
         role: "user",
@@ -81,25 +58,28 @@ ${rawJd.slice(0, 20000)}`,
 
   const parsed = parseModelJson<
     Partial<ExtractedJD> & {
-      hardTechnicalSkills?: unknown;
+      jobTitle?: unknown;
+      requiredSkills?: unknown;
+      coreResponsibilities?: unknown;
+      repeatedTechnologies?: unknown;
+      preferredSkills?: unknown;
+      domainKnowledge?: unknown;
       softSkills?: unknown;
     }
   >(content);
 
+  const targetRole = String(
+    parsed.targetRole || parsed.jobTitle || "Software Engineer",
+  ).trim();
+
   return {
     company: String(parsed.company || "Unknown Company").trim(),
-    jobTitle: String(parsed.jobTitle || "Software Engineer").trim(),
-    summary: String(parsed.summary || "").trim(),
-    type: normalizeType(String(parsed.type || "Software Engineer")),
-    salaryExpectation: String(
-      parsed.salaryExpectation || "Not specified",
-    ).trim(),
-    workMode: normalizeWorkMode(String(parsed.workMode || "Onsite")),
-    hardTechnicalSkills: Array.isArray(parsed.hardTechnicalSkills)
-      ? parsed.hardTechnicalSkills.map(String).filter(Boolean)
-      : [],
-    softSkills: Array.isArray(parsed.softSkills)
-      ? parsed.softSkills.map(String).filter(Boolean)
-      : [],
+    targetRole,
+    requiredSkills: asStringList(parsed.requiredSkills),
+    coreResponsibilities: asStringList(parsed.coreResponsibilities),
+    repeatedTechnologies: asStringList(parsed.repeatedTechnologies),
+    preferredSkills: asStringList(parsed.preferredSkills),
+    domainKnowledge: asStringList(parsed.domainKnowledge),
+    softSkills: asStringList(parsed.softSkills),
   };
 }

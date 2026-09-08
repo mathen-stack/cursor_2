@@ -128,7 +128,7 @@ function markJobDone(
     resumeDocxName: data.resumeDocxName,
     resumePdfName: data.resumePdfName,
     coverLetterDocxName: data.coverLetterDocxName,
-    jobTitle: data.extracted.jobTitle,
+    jobTitle: data.extracted.targetRole,
     atsScore: data.atsScore,
     error: undefined,
     downloadUrls,

@@ -1,3 +1,5 @@
+import type { ExtractedJD } from "./types";
+
 /** Split text into segments, bolding keyword matches (case-insensitive, longer first). */
 export function segmentWithKeywords(
   text: string,
@@ -39,30 +41,25 @@ export function segmentWithKeywords(
     });
 }
 
-export function formatExtractedJd(extracted: {
-  company: string;
-  jobTitle: string;
-  summary: string;
-  type: string;
-  salaryExpectation: string;
-  workMode: string;
-  hardTechnicalSkills: string[];
-  softSkills: string[];
-}): string {
+function bulletList(label: string, items: string[]): string[] {
+  return [label, ...(items.length ? items.map((s) => `- ${s}`) : ["- None"])];
+}
+
+export function formatExtractedJd(extracted: ExtractedJD): string {
   return [
     `Company: ${extracted.company}`,
-    `Job Title: ${extracted.jobTitle}`,
-    `Type: ${extracted.type}`,
-    `Work Mode: ${extracted.workMode}`,
-    `Salary Expectation: ${extracted.salaryExpectation}`,
+    `Target role / title: ${extracted.targetRole}`,
     "",
-    "Summary:",
-    extracted.summary,
+    ...bulletList("Required skills:", extracted.requiredSkills),
     "",
-    "Hard Technical Skills:",
-    ...extracted.hardTechnicalSkills.map((s) => `- ${s}`),
+    ...bulletList("Core responsibilities:", extracted.coreResponsibilities),
     "",
-    "Soft Skills:",
-    ...extracted.softSkills.map((s) => `- ${s}`),
+    ...bulletList("Frequently repeated technologies:", extracted.repeatedTechnologies),
+    "",
+    ...bulletList("Preferred skills:", extracted.preferredSkills),
+    "",
+    ...bulletList("Domain knowledge:", extracted.domainKnowledge),
+    "",
+    ...bulletList("Soft skills:", extracted.softSkills),
   ].join("\n");
 }

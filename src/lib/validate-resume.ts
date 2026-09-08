@@ -5,6 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
+import { jdTechKeywords } from "./jd-fields";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -152,7 +153,7 @@ export function validateAndFixResume(
 
   const experiences = profile.experiences.map((exp, index) => {
     const generated = resume.experiences[index];
-    let title = sanitizePlainText(generated?.title || exp.title);
+    const title = sanitizePlainText(generated?.title || exp.title);
     let overview = sanitizePlainText(generated?.overview || "");
     let bullets = (generated?.bullets || [])
       .map((b) => sanitizePlainText(b))
@@ -194,7 +195,7 @@ export function validateAndFixResume(
       });
       while (bullets.length < 7) {
         bullets.push(
-          `Collaborated with cross-functional partners to deliver ${extracted.hardTechnicalSkills.slice(0, 2).join(" and ") || "production software"} improvements that strengthened reliability and delivery outcomes for ${exp.company} customers.`,
+          `Collaborated with cross-functional partners to deliver ${jdTechKeywords(extracted).slice(0, 2).join(" and ") || "production software"} improvements that strengthened reliability and delivery outcomes for ${exp.company} customers.`,
         );
       }
     }

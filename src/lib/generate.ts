@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
+import { jdTechKeywords } from "./jd-fields";
 import { sanitizePlainText } from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
@@ -23,8 +24,8 @@ Hard rules:
 4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
 5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
 6. Include slightly MORE relevant experience breadth than the JD strictly requires.
-7. Mirror JD terminology and hard skills heavily for ATS scoring.
-8. keywords: array of important JD keywords/phrases that should be bolded.
+7. Mirror JD terminology from extracted required skills, repeated technologies, preferred skills, domain knowledge, and core responsibilities.
+8. keywords: array of important JD keywords/phrases that should be bolded (required skills and repeated technologies first).
 9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
 10. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
 11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
@@ -150,7 +151,7 @@ function normalizeSkills(
     }
   }
 
-  const fallback = extracted.hardTechnicalSkills.filter(Boolean);
+  const fallback = jdTechKeywords(extracted).filter(Boolean);
   if (!fallback.length) {
     return [
       {
@@ -188,11 +189,10 @@ function normalizeResume(
       [
         ...(safe.keywords || []),
         ...skillGroups.flatMap((g) => g.items),
-        ...extracted.hardTechnicalSkills,
+        ...jdTechKeywords(extracted),
         ...extracted.softSkills,
-        extracted.jobTitle,
-        extracted.type,
-        extracted.workMode,
+        ...extracted.coreResponsibilities,
+        extracted.targetRole,
       ]
         .map((k) => String(k).trim())
         .filter(Boolean),
@@ -208,7 +208,7 @@ function normalizeResume(
 
     while (bullets.length < 7) {
       bullets.push(
-        `Partnered with cross-functional stakeholders to deliver production-ready solutions involving ${extracted.hardTechnicalSkills.slice(0, 3).join(", ") || "core platform technologies"}, improving reliability and delivery speed for business-critical workflows.`,
+        `Partnered with cross-functional stakeholders to deliver production-ready solutions involving ${jdTechKeywords(extracted).slice(0, 3).join(", ") || "core platform technologies"}, improving reliability and delivery speed for business-critical workflows.`,
       );
     }
     bullets = bullets.slice(0, 8);

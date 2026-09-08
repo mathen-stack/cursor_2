@@ -1,12 +1,3 @@
-export type JobType =
-  | "AI Engineer"
-  | "Data Engineer"
-  | "Software Engineer"
-  | "Data Analyst"
-  | "Data Scientist";
-
-export type WorkMode = "Remote" | "Hybrid" | "Onsite";
-
 export interface PersonalInfo {
   name: string;
   phone: string;
@@ -37,12 +28,12 @@ export interface CandidateProfile {
 
 export interface ExtractedJD {
   company: string;
-  jobTitle: string;
-  summary: string;
-  type: JobType;
-  salaryExpectation: string;
-  workMode: WorkMode;
-  hardTechnicalSkills: string[];
+  targetRole: string;
+  requiredSkills: string[];
+  coreResponsibilities: string[];
+  repeatedTechnologies: string[];
+  preferredSkills: string[];
+  domainKnowledge: string[];
   softSkills: string[];
 }
 

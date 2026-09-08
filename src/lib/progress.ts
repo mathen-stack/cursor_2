@@ -40,12 +40,12 @@ export type ProgressEvent =
       atsSummary: string;
       extracted: {
         company: string;
-        jobTitle: string;
-        summary: string;
-        type: string;
-        salaryExpectation: string;
-        workMode: string;
-        hardTechnicalSkills: string[];
+        targetRole: string;
+        requiredSkills: string[];
+        coreResponsibilities: string[];
+        repeatedTechnologies: string[];
+        preferredSkills: string[];
+        domainKnowledge: string[];
         softSkills: string[];
       };
       /** Inline file bytes when the server filesystem is ephemeral (e.g. Vercel). */

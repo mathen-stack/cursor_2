@@ -1,4 +1,5 @@
 import type { ExtractedJD, TailoredResume } from "./types";
+import { jdTechKeywords } from "./jd-fields";
 
 export interface AtsScoreResult {
   score: number;
@@ -72,12 +73,10 @@ export function scoreAtsMatch(
   rawJd: string,
 ): AtsScoreResult {
   const corpus = resumeCorpus(resume);
-  const hardSkills = uniqueKeywords(extracted.hardTechnicalSkills);
+  const hardSkills = uniqueKeywords(jdTechKeywords(extracted));
   const softSkills = uniqueKeywords(extracted.softSkills);
   const titleTerms = uniqueKeywords(
-    [extracted.jobTitle, extracted.type].flatMap((v) =>
-      v.split(/[|/,—,-]/).map((part) => part.trim()),
-    ),
+    extracted.targetRole.split(/[|/,—,-]/).map((part) => part.trim()),
   );
 
   const jdTerms = uniqueKeywords(
