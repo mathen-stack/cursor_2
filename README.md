@@ -1,6 +1,6 @@
 # Resume Tailor
 
-Web app that extracts structured JD fields via OpenRouter (DeepSeek V4 Flash by default) from pasted job descriptions, and generates ATS-oriented resumes + cover letters as DOCX/PDF packages.
+Web app that extracts structured JD fields via the OpenAI API from pasted job descriptions, and generates ATS-oriented resumes + cover letters as DOCX/PDF packages.
 
 ## Setup
 
@@ -10,14 +10,14 @@ Web app that extracts structured JD fields via OpenRouter (DeepSeek V4 Flash by 
 npm install
 ```
 
-2. Copy env and add your OpenRouter key:
+2. Copy env and add your OpenAI key:
 
 ```bash
 copy .env.example .env.local
 ```
 
-Set `OPENROUTER_API_KEY` from [openrouter.ai/keys](https://openrouter.ai/keys).  
-Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`).
+Set `OPENAI_API_KEY` from [platform.openai.com/api-keys](https://platform.openai.com/api-keys).  
+Default model is `gpt-5.4-mini` (override with `OPENAI_MODEL`).
 
 3. Run the app:
 
