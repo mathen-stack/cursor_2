@@ -7,6 +7,7 @@ import {
   capJdKeywords,
   countJdKeywords,
   dedupeJdLists,
+  padExtractedFromText,
 } from "./jd-fields";
 
 const EXTRACT_SYSTEM = `You extract hiring keywords from a job posting.
@@ -77,6 +78,28 @@ async function requestExtract(
   return normalizeExtracted(parseModelJson<ExtractRaw>(content));
 }
 
+function seedExtracted(pageTitle: string, jobUrl: string): ExtractedJD {
+  let host = "";
+  try {
+    host = new URL(jobUrl).hostname.replace(/^www\./, "");
+  } catch {
+    host = "";
+  }
+  const company = host.split(".")[0] || "Unknown Company";
+  const targetRole =
+    pageTitle.split(/[|\-–]/)[0]?.trim() || "Software Engineer";
+  return {
+    company,
+    targetRole,
+    requiredSkills: [],
+    coreResponsibilities: [],
+    repeatedTechnologies: [],
+    preferredSkills: [],
+    domainKnowledge: [],
+    softSkills: [],
+  };
+}
+
 export async function extractJobDescription(
   rawJd: string,
   pageTitle: string,
@@ -93,24 +116,40 @@ ${rawJd.slice(0, 20000)}`;
     { role: "user" as const, content: userContent },
   ];
 
-  let extracted = await requestExtract(baseMessages);
+  let extracted: ExtractedJD;
+  try {
+    extracted = await requestExtract(baseMessages);
+  } catch {
+    extracted = seedExtracted(pageTitle, jobUrl);
+  }
   let count = countJdKeywords(extracted);
 
   if (count < JD_KEYWORD_MIN) {
-    extracted = await requestExtract([
-      ...baseMessages,
-      {
-        role: "assistant",
-        content: JSON.stringify(extracted),
-      },
-      {
-        role: "user",
-        content: `You returned only ${count} distinct keywords. Expand to ${JD_KEYWORD_MIN}-${JD_KEYWORD_MAX} distinct keywords.
+    extracted = padExtractedFromText(extracted, rawJd);
+    count = countJdKeywords(extracted);
+  }
+
+  if (count < JD_KEYWORD_MIN) {
+    try {
+      extracted = await requestExtract([
+        ...baseMessages,
+        {
+          role: "assistant",
+          content: JSON.stringify(extracted),
+        },
+        {
+          role: "user",
+          content: `You returned only ${count} distinct keywords. Expand to ${JD_KEYWORD_MIN}-${JD_KEYWORD_MAX} distinct keywords.
 Keep every useful term you already extracted.
 Add relevant keywords for this targetRole that fit the posting (related technologies, typical stack, domain knowledge, soft skills).
 Return the full JSON object only.`,
-      },
-    ]);
+        },
+      ]);
+      count = countJdKeywords(extracted);
+    } catch {
+      /* keep the padded extract */
+    }
+    extracted = padExtractedFromText(extracted, rawJd);
     count = countJdKeywords(extracted);
   }
 

@@ -103,6 +103,113 @@ export function capJdKeywords(
   return next;
 }
 
+const HARVEST_STOP = new Set(
+  [
+    "the",
+    "and",
+    "for",
+    "with",
+    "this",
+    "that",
+    "from",
+    "your",
+    "you",
+    "are",
+    "will",
+    "our",
+    "job",
+    "role",
+    "team",
+    "work",
+    "plus",
+    "must",
+    "have",
+    "ability",
+    "experience",
+    "years",
+    "including",
+    "using",
+    "across",
+    "about",
+    "into",
+    "other",
+    "such",
+    "than",
+    "their",
+    "they",
+    "them",
+    "type",
+    "title",
+    "location",
+    "remote",
+    "contractor",
+    "full",
+    "time",
+    "part",
+  ].map((w) => w.toLowerCase()),
+);
+
+/** Pull short skill/duty phrases from scraped JD text when the LLM undershoots. */
+export function harvestJdPhrases(rawJd: string, limit = 40): string[] {
+  const text = rawJd
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/[•·]/g, "\n");
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+
+  const push = (value: string) => {
+    const trimmed = value.replace(/\s+/g, " ").trim().replace(/^[-*•\d.)\s]+/, "");
+    if (trimmed.length < 2 || trimmed.length > 60) return;
+    const words = trimmed.split(" ");
+    if (words.length > 8) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key) || HARVEST_STOP.has(key)) return;
+    if (words.length === 1 && HARVEST_STOP.has(key)) return;
+    seen.add(key);
+    phrases.push(trimmed);
+  };
+
+  for (const line of text.split(/[\n|;]+/)) {
+    push(line);
+  }
+
+  for (const match of text.matchAll(
+    /\b(?:[A-Z][A-Za-z0-9.+#]{1,24}|[A-Za-z]{2,}(?:\.js|SQL)?|C\+\+|C#|CI\/CD|REST|GraphQL|TypeScript|JavaScript|Next\.js|Node\.js)\b/g,
+  )) {
+    push(match[0]);
+  }
+
+  return phrases.slice(0, limit);
+}
+
+export function padExtractedFromText(
+  extracted: ExtractedJD,
+  rawJd: string,
+  min = JD_KEYWORD_MIN,
+): ExtractedJD {
+  let next = dedupeJdLists(extracted);
+  if (countJdKeywords(next) >= min) return next;
+
+  for (const phrase of harvested) {
+    if (countJdKeywords(next) >= min) break;
+    const looksTech =
+      /[A-Z]|\.js|\+|#|SQL|CSS|HTML|API|UI|UX|CI/i.test(phrase) &&
+      phrase.split(" ").length <= 3;
+    next = dedupeJdLists({
+      ...next,
+      requiredSkills: looksTech
+        ? next.requiredSkills
+        : [...next.requiredSkills, phrase],
+      repeatedTechnologies: looksTech
+        ? [...next.repeatedTechnologies, phrase]
+        : next.repeatedTechnologies,
+    });
+  }
+
+  return next;
+}
+
 /** Tech/domain terms used for ATS matching and skill fallbacks. */
 export function jdTechKeywords(extracted: ExtractedJD): string[] {
   return [
