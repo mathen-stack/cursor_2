@@ -19,14 +19,21 @@ export type AuthFormState = {
     name?: string[];
     email?: string[];
     password?: string[];
+    confirmPassword?: string[];
   };
 };
 
-const signupSchema = z.object({
-  name: z.string().trim().min(2, "Name must be at least 2 characters."),
-  email: z.email("Enter a valid email."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
-});
+const signupSchema = z
+  .object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters."),
+    email: z.email("Enter a valid email."),
+    password: z.string().min(8, "Password must be at least 8 characters."),
+    confirmPassword: z.string().min(1, "Confirm your password."),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  });
 
 const signinSchema = z.object({
   email: z.email("Enter a valid email."),
@@ -71,6 +78,7 @@ export async function signup(
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
   });
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors };

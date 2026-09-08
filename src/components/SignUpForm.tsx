@@ -54,6 +54,21 @@ export default function SignUpForm() {
           <p className="field-error">{state.errors.password[0]}</p>
         )}
       </div>
+      <div className="field">
+        <label htmlFor="confirmPassword">Confirm password</label>
+        <input
+          id="confirmPassword"
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Re-enter your password"
+          required
+          minLength={8}
+        />
+        {state?.errors?.confirmPassword && (
+          <p className="field-error">{state.errors.confirmPassword[0]}</p>
+        )}
+      </div>
       {state?.message && <p className="error">{state.message}</p>}
       <button className="primary" type="submit" disabled={pending}>
         {pending ? "Creating account…" : "Sign up"}
