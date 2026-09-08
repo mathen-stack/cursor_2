@@ -8,6 +8,13 @@ import {
   type ProgressEvent,
 } from "@/lib/progress";
 import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
+import {
+  emptyProfile,
+  isProfileReady,
+  normalizeProfile,
+} from "@/lib/profile";
+import CandidateForm from "@/components/CandidateForm";
+import type { CandidateProfile } from "@/lib/types";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -196,6 +203,7 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
 }
 
 export default function ResumeForm() {
+  const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
   const [jobTexts, setJobTexts] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
@@ -215,6 +223,7 @@ export default function ResumeForm() {
     [jobEntries],
   );
   const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
+  const profileReady = isProfileReady(profile);
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -291,6 +300,7 @@ export default function ResumeForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          profile: normalizeProfile(profile),
           jobDescriptions: targets.map((t) => t.jobDescription),
           indices: targets.map((t) => t.index),
         }),
@@ -363,6 +373,13 @@ export default function ResumeForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (!isProfileReady(profile)) {
+      setError(
+        "Fill your name and at least one complete work experience (company, title, period, location).",
+      );
+      return;
+    }
+
     if (!readyJobs.length) {
       const longest = Math.max(0, ...jobEntries.map((e) => e.text.length));
       setError(
@@ -394,6 +411,22 @@ export default function ResumeForm() {
     <div className="workspace">
       <form className="composer" onSubmit={onSubmit}>
         <div className="section-head">
+          <div>
+            <h2>Your background</h2>
+            <p className="hint">
+              Generation uses this profile: company names, dates, and
+              education stay as you enter them.
+            </p>
+          </div>
+        </div>
+
+        <CandidateForm
+          profile={profile}
+          onChange={setProfile}
+          disabled={batchBusy}
+        />
+
+        <div className="section-head section-head-follow">
           <div>
             <h2>Job descriptions</h2>
             <p className="hint">
@@ -450,7 +483,7 @@ export default function ResumeForm() {
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || !hasAnyJd}
+            disabled={batchBusy || !hasAnyJd || !profileReady}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>
@@ -482,7 +515,7 @@ export default function ResumeForm() {
 
         {jobs.length === 0 ? (
           <div className="empty-board">
-            <p>Paste a job description and generate to start.</p>
+            <p>Add your background, paste a job description, and generate.</p>
             <ol>
               <li>Extract JD fields</li>
               <li>Write resume + cover letter</li>

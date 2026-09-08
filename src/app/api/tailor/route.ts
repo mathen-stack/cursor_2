@@ -1,6 +1,5 @@
 import { ZodError } from "zod";
 import { processOneJob } from "@/lib/process-job";
-import { CANDIDATE_PROFILE } from "@/lib/profile";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
 
@@ -19,7 +18,7 @@ export async function POST(request: Request) {
   } catch (err) {
     const message =
       err instanceof ZodError
-        ? "Invalid request"
+        ? err.issues[0]?.message || "Invalid request"
         : err instanceof Error
           ? err.message
           : "Invalid request";
@@ -29,7 +28,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const profile = CANDIDATE_PROFILE;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -47,8 +45,8 @@ export async function POST(request: Request) {
               const result = await processOneJob({
                 index,
                 jobDescription,
-                profile,
-                personal: profile.personal,
+                profile: payload.profile,
+                personal: payload.profile.personal,
                 onStep: (step, message) => {
                   currentStep = step;
                   send({

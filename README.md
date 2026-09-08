@@ -29,9 +29,9 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Flow
 
-1. Profile is fixed in code (`src/lib/profile.ts`) for Saul D. Trujillo
+1. Enter your background (contact, experience, education)
 2. Paste one or more job descriptions
-3. The app extracts each JD and writes a tailored resume + cover letter
+3. The app extracts each JD and writes a tailored resume + cover letter using **your** background
 
 ## Output
 
@@ -42,10 +42,10 @@ output/
   Company_Name/
     jd.txt
     extracted_jd.txt
-    Resume-Saul.docx
-    Resume-Saul.pdf
-    Coverletter-Saul.docx
-    Coverletter-Saul.txt
+    Resume-{FirstName}.docx
+    Resume-{FirstName}.pdf
+    Coverletter-{FirstName}.docx
+    Coverletter-{FirstName}.txt
   Clara-Software Engineer.zip
     ...
 ```

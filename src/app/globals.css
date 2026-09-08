@@ -179,6 +179,87 @@ a {
   line-height: 1.45;
 }
 
+.section-head-follow {
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.profile-form {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.profile-block {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.profile-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.profile-card {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 0.75rem 0.85rem 0.9rem;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 0.75rem;
+}
+
+.field-grid > .field:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus {
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
+}
+
+input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-grid > .field:nth-child(5) {
+    grid-column: auto;
+  }
+}
+
 .link-count {
   flex-shrink: 0;
   color: var(--accent);

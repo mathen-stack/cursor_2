@@ -85,5 +85,6 @@ export interface JobResult {
 }
 
 export interface TailorRequest {
+  profile: CandidateProfile;
   jobDescriptions: string[];
 }

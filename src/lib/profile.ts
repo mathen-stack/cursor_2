@@ -1,41 +1,103 @@
-import type { CandidateProfile } from "./types";
+import type {
+  CandidateProfile,
+  EducationInput,
+  ExperienceInput,
+  PersonalInfo,
+} from "./types";
 
-export const CANDIDATE_PROFILE: CandidateProfile = {
-  personal: {
-    name: "Saul D. Trujillo",
-    phone: "+57 313 6512121",
-    linkedin: "https://www.linkedin.com/in/saul-d-trujillo-58aa623b7",
-    email: "saul2001trujillo@gmail.com",
-    location: "Valledupar, Colombia",
-  },
-  experiences: [
-    {
-      company: "ChartMogul",
-      title: "Senior Software Engineer",
-      period: "Oct 2022 – Mar 2026",
-      location: "Remote",
-    },
-    {
-      company: "Tpaga",
-      title: "Software Engineer",
-      period: "Aug 2017 – Aug 2022",
-      location: "Remote",
-    },
-    {
-      company: "Nearshore Software Development Agency",
-      title: "Software Developer",
-      period: "May 2013 – Jul 2017",
-      location: "OnSite",
-    },
-  ],
-  education: [
-    {
-      school: "Universidad Popular del César",
-      degree: "Bachelor of Degree in Systems Engineering",
-      period: "2009 – 2013",
-      location: "Valledupar, Colombia",
-    },
-  ],
-};
+export function emptyPersonal(): PersonalInfo {
+  return {
+    name: "",
+    phone: "",
+    linkedin: "",
+    email: "",
+    location: "",
+  };
+}
 
-export const CANDIDATE_HEADLINE = "Senior Software Engineer";
+export function emptyExperience(): ExperienceInput {
+  return {
+    company: "",
+    title: "",
+    period: "",
+    location: "",
+  };
+}
+
+export function emptyEducation(): EducationInput {
+  return {
+    school: "",
+    degree: "",
+    period: "",
+    location: "",
+  };
+}
+
+export function emptyProfile(): CandidateProfile {
+  return {
+    personal: emptyPersonal(),
+    experiences: [emptyExperience()],
+    education: [emptyEducation()],
+  };
+}
+
+export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
+  const personal: PersonalInfo = {
+    name: profile.personal.name.trim(),
+    phone: profile.personal.phone.trim(),
+    linkedin: profile.personal.linkedin.trim(),
+    email: profile.personal.email.trim(),
+    location: profile.personal.location.trim(),
+  };
+
+  const experiences = profile.experiences
+    .map((exp) => ({
+      company: exp.company.trim(),
+      title: exp.title.trim(),
+      period: exp.period.trim(),
+      location: exp.location.trim(),
+    }))
+    .filter((exp) => exp.company || exp.title || exp.period || exp.location);
+
+  const education = profile.education
+    .map((edu) => ({
+      school: edu.school.trim(),
+      degree: edu.degree.trim(),
+      period: edu.period.trim(),
+      location: edu.location.trim(),
+    }))
+    .filter((edu) => edu.school || edu.degree || edu.period || edu.location);
+
+  return { personal, experiences, education };
+}
+
+export function isExperienceComplete(exp: ExperienceInput): boolean {
+  return Boolean(
+    exp.company.trim() &&
+      exp.title.trim() &&
+      exp.period.trim() &&
+      exp.location.trim(),
+  );
+}
+
+export function isEducationComplete(edu: EducationInput): boolean {
+  return Boolean(
+    edu.school.trim() &&
+      edu.degree.trim() &&
+      edu.period.trim() &&
+      edu.location.trim(),
+  );
+}
+
+export function isProfileReady(profile: CandidateProfile): boolean {
+  const normalized = normalizeProfile(profile);
+  if (normalized.personal.name.length < 2) return false;
+  if (!normalized.experiences.some(isExperienceComplete)) return false;
+  if (
+    normalized.education.length > 0 &&
+    !normalized.education.every(isEducationComplete)
+  ) {
+    return false;
+  }
+  return true;
+}
