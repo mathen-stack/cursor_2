@@ -85,7 +85,14 @@ function seedExtracted(pageTitle: string, jobUrl: string): ExtractedJD {
   } catch {
     host = "";
   }
-  const company = host.split(".")[0] || "Unknown Company";
+  const skip = new Set(["www", "jobs", "careers", "app", "boards", "apply"]);
+  const tlds = new Set(["com", "ai", "io", "co", "org", "net", "dev"]);
+  const company =
+    host
+      .split(".")
+      .find((part) => !skip.has(part) && !tlds.has(part)) ||
+    host.split(".")[0] ||
+    "Unknown Company";
   const targetRole =
     pageTitle.split(/[|\-–]/)[0]?.trim() || "Software Engineer";
   return {
