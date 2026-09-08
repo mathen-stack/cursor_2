@@ -130,7 +130,7 @@ function defaultSummary(
   return [
     `Senior engineer targeting ${role} at ${company}, with a background as ${recent?.title || "Software Engineer"} at ${recent?.company || "product companies"}.`,
     `Recent work focused on shipping production software, collaborating with remote teams, and keeping delivery quality high from design through launch.`,
-    `Hands-on strengths include ${skills || "full-stack product development, testing, and stakeholder communication"}.`,
+    `Hands-on strengths include ${skills || "full-stack product development, testing, and stakeholder communication"}, used in production features rather than as a keyword list.`,
     `Known for clear communication, pragmatic technical decisions, and owning features that hold up in production.`,
   ].join(" ");
 }
