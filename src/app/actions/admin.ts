@@ -4,9 +4,17 @@ import { z } from "zod";
 import { requireAdmin } from "@/app/actions/auth";
 import { hashPassword } from "@/lib/password";
 import { parseProfileDraft } from "@/lib/profile";
+import { deleteJobOutput } from "@/lib/package";
+import {
+  deleteTailorRecord,
+  deleteTailorRecordsForUser,
+  listTailorRecords,
+  type TailorRecord,
+} from "@/lib/tailor-records";
 import {
   createUser,
   deleteUser,
+  listPublicUsers,
   profileFromUser,
   saveUserProfile,
   updateUserAccount,
@@ -14,6 +22,26 @@ import {
   type UserRole,
 } from "@/lib/users";
 import type { CandidateProfile } from "@/lib/types";
+
+export type AdminTailorRecord = TailorRecord & {
+  userName: string;
+  userEmail: string;
+};
+
+async function toAdminRecords(
+  records: TailorRecord[],
+): Promise<AdminTailorRecord[]> {
+  const users = await listPublicUsers();
+  const byId = new Map(users.map((user) => [user.id, user]));
+  return records.map((record) => {
+    const user = byId.get(record.userId);
+    return {
+      ...record,
+      userName: user?.name || "Deleted user",
+      userEmail: user?.email || "",
+    };
+  });
+}
 
 const accountSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters."),
@@ -88,7 +116,31 @@ export async function removeAccount(userId: string): Promise<void> {
   if (admin.id === userId) {
     throw new Error("You cannot delete your own account.");
   }
+  const records = await deleteTailorRecordsForUser(userId);
+  await Promise.all(
+    records.map((record) =>
+      deleteJobOutput({
+        folderName: record.folderName,
+        zipName: record.zipName,
+      }),
+    ),
+  );
   await deleteUser(userId);
+}
+
+export async function listAdminTailorRecords(): Promise<AdminTailorRecord[]> {
+  await requireAdmin();
+  return toAdminRecords(await listTailorRecords());
+}
+
+export async function removeTailorRecord(recordId: string): Promise<void> {
+  await requireAdmin();
+  const record = await deleteTailorRecord(recordId);
+  if (!record) throw new Error("Tailoring record not found.");
+  await deleteJobOutput({
+    folderName: record.folderName,
+    zipName: record.zipName,
+  });
 }
 
 export async function saveAccountProfile(

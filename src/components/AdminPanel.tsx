@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import CandidateForm from "@/components/CandidateForm";
+import TailoringRecords from "@/components/TailoringRecords";
 import {
   createAccount,
   removeAccount,
   saveAccountProfile,
   updateAccount,
+  type AdminTailorRecord,
 } from "@/app/actions/admin";
 import { isProfileReady } from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
@@ -44,7 +46,8 @@ function AccountEditor({
         <div>
           <h2>Account</h2>
           <p className="hint">
-            Change login details or this user’s saved profile.
+            Login and sign-up details for this account. Tailoring history is on
+            the Tailoring tab.
           </p>
         </div>
       </div>
@@ -129,9 +132,10 @@ function AccountEditor({
               return;
             }
             void onBusy("Account deleted.", async () => {
-              await removeAccount(selected.id);
+              const removedId = selected.id;
+              await removeAccount(removedId);
               onUsersChange(
-                (current) => current.filter((user) => user.id !== selected.id),
+                (current) => current.filter((user) => user.id !== removedId),
                 undefined,
               );
             });
@@ -182,11 +186,15 @@ function AccountEditor({
 export default function AdminPanel({
   adminId,
   initialUsers,
+  initialRecords,
 }: {
   adminId: string;
   initialUsers: PublicUser[];
+  initialRecords: AdminTailorRecord[];
 }) {
+  const [tab, setTab] = useState<"accounts" | "tailoring">("accounts");
   const [users, setUsers] = useState(initialUsers);
+  const [records, setRecords] = useState(initialRecords);
   const [selectedId, setSelectedId] = useState(initialUsers[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [newName, setNewName] = useState("");
@@ -229,6 +237,9 @@ export default function AdminPanel({
   ) {
     const next = update(users);
     setUsers(next);
+    setRecords((current) =>
+      current.filter((record) => next.some((user) => user.id === record.userId)),
+    );
     if (nextSelectedId !== undefined) {
       setSelectedId(nextSelectedId);
     } else if (!next.some((user) => user.id === selectedId)) {
@@ -236,8 +247,54 @@ export default function AdminPanel({
     }
   }
 
+  const recordCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const record of records) {
+      counts.set(record.userId, (counts.get(record.userId) || 0) + 1);
+    }
+    return counts;
+  }, [records]);
+
   return (
     <div className="admin-page">
+      <div className="tabs" role="tablist" aria-label="Administrator">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "accounts"}
+          className={`tab${tab === "accounts" ? " active" : ""}`}
+          onClick={() => setTab("accounts")}
+        >
+          Accounts
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "tailoring"}
+          className={`tab${tab === "tailoring" ? " active" : ""}`}
+          onClick={() => setTab("tailoring")}
+        >
+          Tailoring
+          <span className="tab-meta">{records.length}</span>
+        </button>
+      </div>
+
+      {tab === "tailoring" && (
+        <>
+          <TailoringRecords
+            records={records}
+            users={users}
+            busy={busy}
+            onBusy={run}
+            onRecordsChange={(update) => setRecords(update(records))}
+          />
+          {message && <p className="inline-status">{message}</p>}
+          {error && <p className="error">{error}</p>}
+        </>
+      )}
+
+      {tab === "accounts" && (
+        <>
       <section className="composer">
         <div className="section-head">
           <div>
@@ -360,6 +417,7 @@ export default function AdminPanel({
                       {isProfileReady(user.profile)
                         ? " · Ready"
                         : " · Incomplete"}
+                      {` · ${recordCounts.get(user.id) || 0} jobs`}
                     </span>
                   </button>
                 </li>
@@ -386,6 +444,8 @@ export default function AdminPanel({
           {error && <p className="error">{error}</p>}
         </section>
       </div>
+        </>
+      )}
     </div>
   );
 }

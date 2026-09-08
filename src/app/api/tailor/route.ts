@@ -5,6 +5,11 @@ import { parseTailorRequest } from "@/lib/validate";
 import { getSession } from "@/app/actions/auth";
 import { saveUserProfile } from "@/lib/users";
 import { normalizeProfile } from "@/lib/profile";
+import {
+  addTailorRecord,
+  newTailorRecordId,
+  recordOutputSuffix,
+} from "@/lib/tailor-records";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,11 +64,13 @@ export async function POST(request: Request) {
             let currentStep: JobStep = JOB_STEPS[0];
 
             try {
+              const recordId = newTailorRecordId();
               const result = await processOneJob({
                 index,
                 jobDescription,
                 profile: payload.profile,
                 personal: payload.profile.personal,
+                outputSuffix: recordOutputSuffix(recordId),
                 onStep: (step, message) => {
                   currentStep = step;
                   send({
@@ -74,6 +81,26 @@ export async function POST(request: Request) {
                   });
                 },
               });
+
+              try {
+                await addTailorRecord({
+                  id: recordId,
+                  userId: session.userId,
+                  status: "done",
+                  jobDescription,
+                  company: result.company,
+                  jobTitle: result.extracted.jobTitle,
+                  extracted: result.extracted,
+                  atsScore: result.atsScore,
+                  zipName: result.zipName,
+                  folderName: result.folderName,
+                  resumeDocxName: result.resumeDocxName,
+                  resumePdfName: result.resumePdfName,
+                  coverLetterDocxName: result.coverLetterDocxName,
+                });
+              } catch {
+                // Keep generation successful even if the admin ledger fails.
+              }
 
               send({
                 type: "job_done",
@@ -96,6 +123,19 @@ export async function POST(request: Request) {
                 err instanceof Error
                   ? err.message
                   : "Unknown error for this job.";
+              try {
+                await addTailorRecord({
+                  id: newTailorRecordId(),
+                  userId: session.userId,
+                  status: "error",
+                  jobDescription,
+                  company: "",
+                  jobTitle: "",
+                  error: message,
+                });
+              } catch {
+                // Keep the job error visible even if the admin ledger fails.
+              }
               send({
                 type: "job_error",
                 index,

@@ -4,6 +4,8 @@ import path from "path";
 import { Readable } from "stream";
 import { getOutputRoot } from "@/lib/package";
 import { getSession } from "@/app/actions/auth";
+import { findUserById, isAdminUser } from "@/lib/users";
+import { findTailorRecordByOutput } from "@/lib/tailor-records";
 
 export const runtime = "nodejs";
 
@@ -52,11 +54,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
+  const user = await findUserById(session.userId);
+  if (!user) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
+  const admin = isAdminUser(user);
+
   const { searchParams } = new URL(request.url);
   const zipName = searchParams.get("file");
   const folder = searchParams.get("folder");
   const name = searchParams.get("name");
   const outputRoot = getOutputRoot();
+
+  const record = await findTailorRecordByOutput({
+    zipName,
+    folderName: folder,
+  });
+  if (record && !admin && record.userId !== session.userId) {
+    return NextResponse.json({ error: "File not found" }, { status: 404 });
+  }
 
   if (zipName) {
     if (!isSafeZipName(zipName)) {

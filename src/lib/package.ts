@@ -1,6 +1,6 @@
 import { ZipArchive } from "archiver";
-import { createWriteStream } from "fs";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { createWriteStream, existsSync } from "fs";
+import { mkdir, readFile, rm, unlink, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import type { ExtractedJD, PersonalInfo, TailoredPackage } from "./types";
@@ -54,6 +54,7 @@ export async function saveJobPackage(options: {
   extracted: ExtractedJD;
   personal: PersonalInfo;
   tailored: TailoredPackage;
+  suffix?: string;
 }): Promise<{
   folderPath: string;
   zipPath: string;
@@ -70,12 +71,14 @@ export async function saveJobPackage(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, rawJd, extracted, personal, tailored } = options;
+  const { index, rawJd, extracted, personal, tailored, suffix } = options;
   const outputRoot = getOutputRoot();
   await mkdir(outputRoot, { recursive: true });
 
   const baseName = sanitizeCompanyFolderName(extracted.company);
-  const folderName = `${baseName}_${index}`;
+  const folderName = suffix
+    ? `${baseName}_${index}_${suffix}`
+    : `${baseName}_${index}`;
   const folderPath = path.join(outputRoot, folderName);
   await mkdir(folderPath, { recursive: true });
 
@@ -102,7 +105,11 @@ export async function saveJobPackage(options: {
     "utf8",
   );
 
-  const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
+  const zipName = buildZipFileName(
+    extracted.company,
+    extracted.jobTitle,
+    suffix,
+  );
   const zipPath = path.join(outputRoot, zipName);
   await zipDirectory(folderPath, zipPath);
 
@@ -125,4 +132,31 @@ export async function saveJobPackage(options: {
     coverLetterDocxName: files.coverLetterDocx,
     downloads,
   };
+}
+
+export async function deleteJobOutput(input: {
+  folderName?: string;
+  zipName?: string;
+}) {
+  const outputRoot = path.resolve(getOutputRoot());
+
+  if (input.folderName && /^[A-Za-z0-9_-]+$/.test(input.folderName)) {
+    const folderPath = path.resolve(outputRoot, input.folderName);
+    if (folderPath.startsWith(outputRoot) && existsSync(folderPath)) {
+      await rm(folderPath, { recursive: true, force: true });
+    }
+  }
+
+  if (
+    input.zipName &&
+    input.zipName.toLowerCase().endsWith(".zip") &&
+    !input.zipName.includes("..") &&
+    !input.zipName.includes("/") &&
+    !input.zipName.includes("\\")
+  ) {
+    const zipPath = path.resolve(outputRoot, input.zipName);
+    if (zipPath.startsWith(outputRoot) && existsSync(zipPath)) {
+      await unlink(zipPath);
+    }
+  }
 }
