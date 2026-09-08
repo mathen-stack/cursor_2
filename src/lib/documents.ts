@@ -198,6 +198,11 @@ export async function buildResumeDocx(
 
   const children: Paragraph[] = [
     ...buildResumeHeader(personal),
+    sectionHeading("Headline"),
+    new Paragraph({
+      spacing: { after: 140, line: 276 },
+      children: runsFromText(resume.headline, kw, 22),
+    }),
     sectionHeading("Summary"),
     new Paragraph({
       spacing: { after: 140, line: 276 },
@@ -575,6 +580,10 @@ export async function buildResumePdf(
       doc.y = ruleY + 12;
       doc.fillColor("#000000");
     };
+
+    heading("Headline");
+    drawSegmentedLine(doc, resume.headline, kw, { fontSize: 11 });
+    doc.moveDown(0.7);
 
     heading("Summary");
     drawSegmentedLine(doc, resume.summary, kw, { fontSize: 10.5 });

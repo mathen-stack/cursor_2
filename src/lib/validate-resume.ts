@@ -93,6 +93,7 @@ export function validateAndFixResume(
   const issues: ValidationIssue[] = [];
   const resume = tailored.resume;
 
+  issues.push(...collectMarkdownIssues("headline", resume.headline || ""));
   issues.push(...collectMarkdownIssues("summary", resume.summary));
   for (const [i, exp] of resume.experiences.entries()) {
     if (exp.overview) {
@@ -106,6 +107,7 @@ export function validateAndFixResume(
   }
   issues.push(...collectMarkdownIssues("cover letter", tailored.coverLetter));
 
+  const headline = sanitizePlainText(resume.headline || "");
   const summary = sanitizePlainText(resume.summary);
   const coverLetter = sanitizePlainText(tailored.coverLetter);
   const skills = sanitizeSkills(resume.skills);
@@ -113,11 +115,26 @@ export function validateAndFixResume(
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 20) {
+  if (!headline) {
     issues.push({
       level: "error",
-      message: "Summary is missing or too short.",
+      message: "Headline is missing.",
     });
+  }
+
+  if (!summary || wordCount(summary) < 40) {
+    issues.push({
+      level: "error",
+      message: "Summary is missing or too short (about 90 words expected).",
+    });
+  } else {
+    const summaryWords = wordCount(summary);
+    if (summaryWords < 70 || summaryWords > 120) {
+      issues.push({
+        level: "warning",
+        message: `Summary is ${summaryWords} words; about 90 words is expected.`,
+      });
+    }
   }
 
   if (!coverLetter || wordCount(coverLetter) < 40) {
@@ -152,7 +169,7 @@ export function validateAndFixResume(
 
   const experiences = profile.experiences.map((exp, index) => {
     const generated = resume.experiences[index];
-    let title = sanitizePlainText(generated?.title || exp.title);
+    const title = sanitizePlainText(generated?.title || exp.title);
     let overview = sanitizePlainText(generated?.overview || "");
     let bullets = (generated?.bullets || [])
       .map((b) => sanitizePlainText(b))
@@ -187,24 +204,24 @@ export function validateAndFixResume(
       overview = `${exp.company} delivers software products for its customers in a ${exp.location.toLowerCase()} environment; as ${title}, owned feature delivery and technical execution across core product workflows.`;
     }
 
-    if (bullets.length < 7) {
+    if (bullets.length < 6) {
       issues.push({
         level: "fixed",
-        message: `Added missing bullets for ${exp.company} (need 7–8).`,
+        message: `Added missing bullets for ${exp.company} (need 6–7).`,
       });
-      while (bullets.length < 7) {
+      while (bullets.length < 6) {
         bullets.push(
           `Collaborated with cross-functional partners to deliver ${extracted.hardTechnicalSkills.slice(0, 2).join(" and ") || "production software"} improvements that strengthened reliability and delivery outcomes for ${exp.company} customers.`,
         );
       }
     }
 
-    if (bullets.length > 8) {
+    if (bullets.length > 7) {
       issues.push({
         level: "fixed",
-        message: `Trimmed ${exp.company} experience to 8 bullets.`,
+        message: `Trimmed ${exp.company} experience to 7 bullets.`,
       });
-      bullets = bullets.slice(0, 8);
+      bullets = bullets.slice(0, 7);
     }
 
     for (const [j, bullet] of bullets.entries()) {
@@ -269,7 +286,11 @@ export function validateAndFixResume(
     };
   });
 
-  if (/\*\*|__|```/.test(summary) || /\*\*|__|```/.test(coverLetter)) {
+  if (
+    /\*\*|__|```/.test(headline) ||
+    /\*\*|__|```/.test(summary) ||
+    /\*\*|__|```/.test(coverLetter)
+  ) {
     issues.push({
       level: "error",
       message: "Markdown markers remain after cleanup.",
@@ -277,6 +298,7 @@ export function validateAndFixResume(
   }
 
   const cleanedResume: TailoredResume = {
+    headline: headline || extracted.jobTitle,
     summary,
     skills,
     experiences,
@@ -286,7 +308,11 @@ export function validateAndFixResume(
 
   const critical = issues.filter((i) => i.level === "error");
   return {
-    ok: critical.length === 0 && Boolean(summary) && Boolean(coverLetter),
+    ok:
+      critical.length === 0 &&
+      Boolean(headline || extracted.jobTitle) &&
+      Boolean(summary) &&
+      Boolean(coverLetter),
     issues,
     package: {
       resume: cleanedResume,

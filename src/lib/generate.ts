@@ -13,13 +13,13 @@ const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
 Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
-1. Resume sections: Summary, Skills, Experience, Education.
+1. Resume sections: Headline, Summary(about 90 words), Skills, Experience, Education.
 2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
    Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
    Each group has a short category name and 4-10 comma-ready item strings.
 3. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
-   - exactly 7 bullet points of accomplishments.
+   - 6-7 bullet points of accomplishments.
 4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
 5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
 6. Include slightly MORE relevant experience breadth than the JD strictly requires.
@@ -34,6 +34,7 @@ Hard rules:
 JSON shape:
 {
   "resume": {
+    "headline": string,
     "summary": string,
     "skills": [{ "category": string, "items": string[] }],
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
@@ -87,6 +88,9 @@ export async function generateTailoredPackage(
   const resume = normalizeResume(parsed.resume, profile, extracted);
   const coverLetter = String(parsed.coverLetter || "").trim();
 
+  if (!resume.headline) {
+    throw new Error("Resume headline generation failed.");
+  }
   if (!resume.summary) {
     throw new Error("Resume summary generation failed.");
   }
@@ -174,6 +178,7 @@ function normalizeResume(
   extracted: ExtractedJD,
 ): TailoredResume {
   const safe = resume || {
+    headline: "",
     summary: "",
     skills: [],
     experiences: [],
@@ -186,6 +191,7 @@ function normalizeResume(
   const keywords = Array.from(
     new Set(
       [
+        ...(safe.headline ? [safe.headline] : []),
         ...(safe.keywords || []),
         ...skillGroups.flatMap((g) => g.items),
         ...extracted.hardTechnicalSkills,
@@ -206,12 +212,12 @@ function normalizeResume(
       .map((b) => sanitizePlainText(b))
       .filter(Boolean);
 
-    while (bullets.length < 7) {
+    while (bullets.length < 6) {
       bullets.push(
         `Partnered with cross-functional stakeholders to deliver production-ready solutions involving ${extracted.hardTechnicalSkills.slice(0, 3).join(", ") || "core platform technologies"}, improving reliability and delivery speed for business-critical workflows.`,
       );
     }
-    bullets = bullets.slice(0, 8);
+    bullets = bullets.slice(0, 7);
 
     const overview = sanitizePlainText(
       String(
@@ -234,6 +240,9 @@ function normalizeResume(
   });
 
   return {
+    headline: sanitizePlainText(
+      String(safe.headline || extracted.jobTitle || ""),
+    ),
     summary: sanitizePlainText(String(safe.summary || "")),
     skills: skillGroups,
     experiences,
