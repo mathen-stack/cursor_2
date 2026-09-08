@@ -1,4 +1,5 @@
 import type { ExtractedJD } from "./types";
+import { countJdKeywords } from "./jd-fields";
 
 /** Split text into segments, bolding keyword matches (case-insensitive, longer first). */
 export function segmentWithKeywords(
@@ -46,9 +47,11 @@ function bulletList(label: string, items: string[]): string[] {
 }
 
 export function formatExtractedJd(extracted: ExtractedJD): string {
+  const count = countJdKeywords(extracted);
   return [
     `Company: ${extracted.company}`,
     `Target role / title: ${extracted.targetRole}`,
+    `Keyword count: ${count}`,
     "",
     ...bulletList("Required skills:", extracted.requiredSkills),
     "",
