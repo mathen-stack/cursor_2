@@ -19,6 +19,7 @@ import {
   saveUserProfile,
   updateUserAccount,
   type PublicUser,
+  type UserPriority,
   type UserRole,
 } from "@/lib/users";
 import type { CandidateProfile } from "@/lib/types";
@@ -47,6 +48,7 @@ const accountSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters."),
   email: z.email("Enter a valid email."),
   role: z.enum(["admin", "user"]),
+  priority: z.enum(["able", "disable"]),
   password: z.string().optional(),
 });
 
@@ -55,6 +57,7 @@ export async function createAccount(input: {
   email: string;
   password: string;
   role: UserRole;
+  priority: UserPriority;
 }): Promise<PublicUser> {
   await requireAdmin();
   const parsed = accountSchema
@@ -70,12 +73,14 @@ export async function createAccount(input: {
     email: parsed.data.email,
     passwordHash: await hashPassword(parsed.data.password),
     role: parsed.data.role,
+    priority: parsed.data.priority,
   });
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    priority: user.priority,
     createdAt: user.createdAt,
     profile: profileFromUser(user),
   };
@@ -87,6 +92,7 @@ export async function updateAccount(
     name: string;
     email: string;
     role: UserRole;
+    priority: UserPriority;
     password?: string;
   },
 ): Promise<PublicUser> {
@@ -101,10 +107,14 @@ export async function updateAccount(
   if (admin.id === userId && parsed.data.role !== "admin") {
     throw new Error("You cannot remove your own administrator access.");
   }
+  if (admin.id === userId && parsed.data.priority === "disable") {
+    throw new Error("You cannot disable your own account.");
+  }
   return updateUserAccount(userId, {
     name: parsed.data.name,
     email: parsed.data.email,
     role: parsed.data.role,
+    priority: parsed.data.priority,
     passwordHash: parsed.data.password
       ? await hashPassword(parsed.data.password)
       : undefined,

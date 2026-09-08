@@ -5,6 +5,7 @@ import type { CandidateProfile } from "./types";
 import { emptyProfile, parseProfileDraft } from "./profile";
 
 export type UserRole = "admin" | "user";
+export type UserPriority = "able" | "disable";
 
 export type StoredUser = {
   id: string;
@@ -13,6 +14,7 @@ export type StoredUser = {
   passwordHash: string;
   createdAt: string;
   role: UserRole;
+  priority: UserPriority;
   profile?: CandidateProfile;
 };
 
@@ -21,6 +23,7 @@ export type PublicUser = {
   name: string;
   email: string;
   role: UserRole;
+  priority: UserPriority;
   createdAt: string;
   profile: CandidateProfile;
 };
@@ -48,12 +51,17 @@ function asRole(value: unknown): UserRole {
   return value === "admin" ? "admin" : "user";
 }
 
+function asPriority(value: unknown): UserPriority {
+  return value === "disable" ? "disable" : "able";
+}
+
 function normalizeStore(store: UserStore): { store: UserStore; changed: boolean } {
   let changed = false;
   const users = store.users.map((user) => {
     const role = asRole(user.role);
-    if (user.role !== role) changed = true;
-    return { ...user, role };
+    const priority = asPriority(user.priority);
+    if (user.role !== role || user.priority !== priority) changed = true;
+    return { ...user, role, priority };
   });
 
   if (users.length && !users.some((user) => user.role === "admin")) {
@@ -91,6 +99,7 @@ function toPublicUser(user: StoredUser): PublicUser {
     name: user.name,
     email: user.email,
     role: user.role,
+    priority: user.priority,
     createdAt: user.createdAt,
     profile: profileFromUser(user),
   };
@@ -102,6 +111,14 @@ export function userRole(user: StoredUser | null | undefined): UserRole {
 
 export function isAdminUser(user: StoredUser | null | undefined): boolean {
   return userRole(user) === "admin";
+}
+
+export function userPriority(user: StoredUser | PublicUser | null | undefined): UserPriority {
+  return user?.priority === "disable" ? "disable" : "able";
+}
+
+export function isUserAble(user: StoredUser | PublicUser | null | undefined): boolean {
+  return userPriority(user) === "able";
 }
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
@@ -128,6 +145,7 @@ export async function createUser(input: {
   email: string;
   passwordHash: string;
   role?: UserRole;
+  priority?: UserPriority;
 }): Promise<StoredUser> {
   return enqueue(async () => {
     const store = await readStore();
@@ -149,6 +167,11 @@ export async function createUser(input: {
       passwordHash: input.passwordHash,
       createdAt: new Date().toISOString(),
       role,
+      priority: !hasAdmin
+        ? "able"
+        : input.priority === "disable"
+          ? "disable"
+          : "able",
       profile: {
         ...emptyProfile(),
         personal: {
@@ -170,6 +193,7 @@ export async function updateUserAccount(
     name: string;
     email: string;
     role: UserRole;
+    priority: UserPriority;
     passwordHash?: string;
   },
 ): Promise<PublicUser> {
@@ -198,6 +222,7 @@ export async function updateUserAccount(
     user.name = input.name.trim();
     user.email = email;
     user.role = nextRole;
+    user.priority = input.priority === "disable" ? "disable" : "able";
     if (input.passwordHash) user.passwordHash = input.passwordHash;
     if (user.profile?.personal) {
       user.profile = {

@@ -12,7 +12,7 @@ import {
 } from "@/app/actions/admin";
 import { isProfileReady } from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
-import type { PublicUser, UserRole } from "@/lib/users";
+import type { PublicUser, UserPriority, UserRole } from "@/lib/users";
 
 type UserTab = "account" | "profile" | "tailoring";
 
@@ -39,6 +39,7 @@ function AccountTab({
   const [name, setName] = useState(selected.name);
   const [email, setEmail] = useState(selected.email);
   const [role, setRole] = useState<UserRole>(selected.role);
+  const [priority, setPriority] = useState<UserPriority>(selected.priority);
   const [password, setPassword] = useState("");
 
   return (
@@ -46,7 +47,9 @@ function AccountTab({
       <div className="section-head">
         <div>
           <h2>Account</h2>
-          <p className="hint">Login and sign-up details for this user.</p>
+          <p className="hint">
+            Login details and priority. Disable blocks sign-in.
+          </p>
         </div>
       </div>
 
@@ -83,6 +86,20 @@ function AccountTab({
           </select>
         </div>
         <div className="field">
+          <label htmlFor="account-priority">Priority</label>
+          <select
+            id="account-priority"
+            value={priority}
+            disabled={busy || selected.id === adminId}
+            onChange={(event) =>
+              setPriority(event.target.value as UserPriority)
+            }
+          >
+            <option value="able">able</option>
+            <option value="disable">disable</option>
+          </select>
+        </div>
+        <div className="field">
           <label htmlFor="account-password">New password</label>
           <input
             id="account-password"
@@ -106,6 +123,7 @@ function AccountTab({
                 name,
                 email,
                 role,
+                priority,
                 password: password || undefined,
               });
               onUsersChange((current) =>
@@ -222,6 +240,7 @@ export default function AdminPanel({
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("user");
+  const [newPriority, setNewPriority] = useState<UserPriority>("able");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -335,6 +354,20 @@ export default function AdminPanel({
               <option value="admin">admin</option>
             </select>
           </div>
+          <div className="field">
+            <label htmlFor="new-priority">Priority</label>
+            <select
+              id="new-priority"
+              value={newPriority}
+              disabled={busy}
+              onChange={(event) =>
+                setNewPriority(event.target.value as UserPriority)
+              }
+            >
+              <option value="able">able</option>
+              <option value="disable">disable</option>
+            </select>
+          </div>
         </div>
         <div className="composer-footer">
           <button
@@ -348,6 +381,7 @@ export default function AdminPanel({
                   email: newEmail,
                   password: newPassword,
                   role: newRole,
+                  priority: newPriority,
                 });
                 changeUsers((current) => [...current, created], created.id);
                 setUserTab("account");
@@ -355,6 +389,7 @@ export default function AdminPanel({
                 setNewEmail("");
                 setNewPassword("");
                 setNewRole("user");
+                setNewPriority("able");
               });
             }}
           >
@@ -391,7 +426,7 @@ export default function AdminPanel({
                     type="button"
                     className={`admin-user-item${
                       user.id === selectedId ? " active" : ""
-                    }`}
+                    }${user.priority === "disable" ? " disabled-user" : ""}`}
                     disabled={busy}
                     onClick={() => {
                       setSelectedId(user.id);
@@ -403,6 +438,7 @@ export default function AdminPanel({
                     <span className="admin-user-email">{user.email}</span>
                     <span className="admin-user-meta">
                       {user.role}
+                      {` · ${user.priority}`}
                       {isProfileReady(user.profile)
                         ? " · Ready"
                         : " · Incomplete"}

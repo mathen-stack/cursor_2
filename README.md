@@ -32,6 +32,7 @@ The first account created on a site is an **administrator**. Admins see an **Adm
 - Create accounts at the top of the page
 - Select a user from the left list
 - Open that user’s **Account**, **Profile**, or **Tailoring record** tab
+- Set priority to **able** or **disable** (disabled users cannot sign in)
 - Download or delete that user’s generate runs
 
 ## Flow
