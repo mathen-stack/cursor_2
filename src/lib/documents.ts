@@ -77,7 +77,11 @@ function plainContactRun(text: string) {
   });
 }
 
-function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
+function buildResumeHeader(
+  personal: PersonalInfo,
+  headline: string,
+  keywords: string[],
+): Paragraph[] {
   const contactChildren: Array<TextRun | ExternalHyperlink> = [];
 
   const pushSep = () => {
@@ -110,10 +114,10 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
     contactChildren.push(plainContactRun(personal.location));
   }
 
-  return [
+  const header: Paragraph[] = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
+      spacing: { after: headline.trim() ? 60 : 100 },
       children: [
         new TextRun({
           text: personal.name.toUpperCase(),
@@ -124,6 +128,29 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
         }),
       ],
     }),
+  ];
+
+  if (headline.trim()) {
+    header.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 80 },
+        children: segmentWithKeywords(headline, keywords).map(
+          (seg) =>
+            new TextRun({
+              text: seg.text,
+              bold: true,
+              italics: true,
+              size: 22,
+              font: "Calibri",
+              color: "1F4E79",
+            }),
+        ),
+      }),
+    );
+  }
+
+  header.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 160 },
@@ -137,7 +164,9 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
       },
       children: contactChildren,
     }),
-  ];
+  );
+
+  return header;
 }
 
 function runsFromText(text: string, keywords: string[], size = 20) {
@@ -197,12 +226,7 @@ export async function buildResumeDocx(
   const kw = resume.keywords;
 
   const children: Paragraph[] = [
-    ...buildResumeHeader(personal),
-    sectionHeading("Headline"),
-    new Paragraph({
-      spacing: { after: 140, line: 276 },
-      children: runsFromText(resume.headline, kw, 22),
-    }),
+    ...buildResumeHeader(personal, resume.headline, kw),
     sectionHeading("Summary"),
     new Paragraph({
       spacing: { after: 140, line: 276 },
@@ -337,7 +361,7 @@ export async function buildCoverLetterDocx(
           },
         },
         children: [
-          ...buildResumeHeader(personal),
+          ...buildResumeHeader(personal, "", []),
           new Paragraph({
             spacing: { before: 160, after: 200 },
             children: [
@@ -521,6 +545,21 @@ export async function buildResumePdf(
         align: "center",
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
       });
+
+    if (resume.headline.trim()) {
+      doc.moveDown(0.15);
+      doc
+        .font("Helvetica-Oblique")
+        .fontSize(11)
+        .fillColor("#1F4E79")
+        .text(resume.headline, {
+          align: "center",
+          width:
+            doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        });
+      doc.fillColor("#000000");
+    }
+
     doc.moveDown(0.3);
 
     const contactParts: Array<{ label: string; href?: string }> = [];
@@ -580,10 +619,6 @@ export async function buildResumePdf(
       doc.y = ruleY + 12;
       doc.fillColor("#000000");
     };
-
-    heading("Headline");
-    drawSegmentedLine(doc, resume.headline, kw, { fontSize: 11 });
-    doc.moveDown(0.7);
 
     heading("Summary");
     drawSegmentedLine(doc, resume.summary, kw, { fontSize: 10.5 });
