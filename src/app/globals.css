@@ -199,6 +199,8 @@ textarea {
   line-height: 1.55;
   outline: none;
   resize: vertical;
+  overflow-wrap: anywhere;
+  word-break: break-all;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 

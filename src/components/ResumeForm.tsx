@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { parseJobUrls } from "@/lib/job-urls";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -209,14 +210,8 @@ export default function ResumeForm() {
   const [status, setStatus] = useState<string | null>(null);
   const [manualJds, setManualJds] = useState<Record<number, string>>({});
 
-  const linkCount = useMemo(
-    () =>
-      jobLinks
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter(Boolean).length,
-    [jobLinks],
-  );
+  const jobUrls = useMemo(() => parseJobUrls(jobLinks), [jobLinks]);
+  const linkCount = jobUrls.length;
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -348,11 +343,6 @@ export default function ResumeForm() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-
-    const jobUrls = jobLinks
-      .split(/\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean);
 
     if (!jobUrls.length) {
       setError("Add at least one job URL.");
