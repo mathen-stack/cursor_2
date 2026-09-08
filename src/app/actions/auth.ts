@@ -11,7 +11,13 @@ import {
   sessionCookieOptions,
   type SessionPayload,
 } from "@/lib/session";
-import { createUser, findUserByEmail, findUserById } from "@/lib/users";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  isAdminUser,
+  type StoredUser,
+} from "@/lib/users";
 
 export type AuthFormState = {
   message?: string;
@@ -68,6 +74,16 @@ export async function requireSession(): Promise<SessionPayload> {
   const user = await findUserById(session.userId);
   if (!user) redirect("/signin");
   return session;
+}
+
+export async function requireAdmin(): Promise<{
+  session: SessionPayload;
+  user: StoredUser;
+}> {
+  const session = await requireSession();
+  const user = await findUserById(session.userId);
+  if (!user || !isAdminUser(user)) redirect("/");
+  return { session, user };
 }
 
 export async function signup(

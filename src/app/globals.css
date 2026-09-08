@@ -162,6 +162,18 @@ a {
   font-size: 0.82rem;
 }
 
+.session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.session-actions form {
+  margin: 0;
+}
+
 .auth-main {
   position: relative;
   z-index: 1;
@@ -362,9 +374,27 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
 }
 
-input:disabled {
+input:disabled,
+select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+select {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+select:focus {
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
 }
 
 @media (max-width: 640px) {
@@ -438,6 +468,11 @@ input:disabled {
 .text-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.text-btn.danger-btn:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .text-btn.add-job {
@@ -849,6 +884,65 @@ button {
   }
 }
 
+.admin-main {
+  width: min(1100px, calc(100% - 2rem));
+}
+
+.admin-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-users {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-user-item {
+  width: 100%;
+  display: grid;
+  gap: 0.12rem;
+  text-align: left;
+  padding: 0.65rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.admin-user-item:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.admin-user-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-deep);
+}
+
+.admin-user-name {
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+
+.admin-user-email,
+.admin-user-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.admin-user-item.active .admin-user-meta {
+  color: var(--accent);
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -861,9 +955,18 @@ button {
 }
 
 @media (max-width: 900px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
   .topbar-inner {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .session-box {
+    justify-items: start;
+    text-align: left;
   }
 
   .identity {

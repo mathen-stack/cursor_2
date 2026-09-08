@@ -27,12 +27,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and **sign up** or **sign in**. The app is private until you have an account.
 
+The first account created on a site is an **administrator**. Admins see an **Admin** link and can open `/admin` to create accounts, change roles or passwords, delete users, and edit saved profiles.
+
 ## Flow
 
 1. Create an account or sign in
 2. **Profile** tab: enter your background (contact, experience, education)
 3. **Generate resume** tab: paste one or more job descriptions
 4. The app extracts each JD and writes a tailored resume + cover letter using **your** background
+5. Administrators can manage accounts on `/admin`
 
 ## Output
 
