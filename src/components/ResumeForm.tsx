@@ -16,6 +16,7 @@ import {
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import type { CandidateProfile } from "@/lib/types";
+import { saveProfile } from "@/app/actions/profile";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -203,9 +204,15 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
   return <span className={`badge badge-${status}`}>{label}</span>;
 }
 
-export default function ResumeForm() {
+export default function ResumeForm({
+  initialProfile,
+}: {
+  initialProfile?: CandidateProfile;
+}) {
   const [tab, setTab] = useState<"profile" | "generate">("profile");
-  const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
+  const [profile, setProfile] = useState<CandidateProfile>(
+    () => initialProfile ?? emptyProfile(),
+  );
   const [jobTexts, setJobTexts] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
@@ -478,6 +485,9 @@ export default function ResumeForm() {
                   return;
                 }
                 setError(null);
+                void saveProfile(normalizeProfile(profile)).catch(() => {
+                  setError("Could not save your profile.");
+                });
                 setTab("generate");
               }}
             >

@@ -43,4 +43,5 @@ next-env.d.ts
 
 # generated resume packages
 /output
+/data
 next-debug.log

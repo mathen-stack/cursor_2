@@ -2,6 +2,9 @@ import { ZodError } from "zod";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
+import { getSession } from "@/app/actions/auth";
+import { saveUserProfile } from "@/lib/users";
+import { normalizeProfile } from "@/lib/profile";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -11,6 +14,14 @@ function encodeSse(event: ProgressEvent): string {
 }
 
 export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return new Response(JSON.stringify({ ok: false, error: "Sign in required" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   let payload;
   try {
     const body = await request.json();
@@ -26,6 +37,12 @@ export async function POST(request: Request) {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  try {
+    await saveUserProfile(session.userId, normalizeProfile(payload.profile));
+  } catch {
+    // Generation can still proceed if the profile write fails.
   }
 
   const encoder = new TextEncoder();

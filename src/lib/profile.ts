@@ -41,6 +41,53 @@ export function emptyProfile(): CandidateProfile {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+export function parseProfileDraft(value: unknown): CandidateProfile | null {
+  if (!isRecord(value) || !isRecord(value.personal)) return null;
+
+  const experiences = Array.isArray(value.experiences)
+    ? value.experiences.map((item) => {
+        if (!isRecord(item)) return emptyExperience();
+        return {
+          company: asString(item.company),
+          title: asString(item.title),
+          period: asString(item.period),
+          location: asString(item.location),
+        };
+      })
+    : [];
+  const education = Array.isArray(value.education)
+    ? value.education.map((item) => {
+        if (!isRecord(item)) return emptyEducation();
+        return {
+          school: asString(item.school),
+          degree: asString(item.degree),
+          period: asString(item.period),
+          location: asString(item.location),
+        };
+      })
+    : [];
+
+  return {
+    personal: {
+      name: asString(value.personal.name),
+      phone: asString(value.personal.phone),
+      linkedin: asString(value.personal.linkedin),
+      email: asString(value.personal.email),
+      location: asString(value.personal.location),
+    },
+    experiences: experiences.length ? experiences : [emptyExperience()],
+    education: education.length ? education : [emptyEducation()],
+  };
+}
+
 export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
   const personal: PersonalInfo = {
     name: profile.personal.name.trim(),

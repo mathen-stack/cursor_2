@@ -25,13 +25,14 @@ Default model is `deepseek/deepseek-v4-flash` (override with `OPENROUTER_MODEL`)
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) and **sign up** or **sign in**. The app is private until you have an account.
 
 ## Flow
 
-1. **Profile** tab: enter your background (contact, experience, education)
-2. **Generate resume** tab: paste one or more job descriptions
-3. The app extracts each JD and writes a tailored resume + cover letter using **your** background
+1. Create an account or sign in
+2. **Profile** tab: enter your background (contact, experience, education)
+3. **Generate resume** tab: paste one or more job descriptions
+4. The app extracts each JD and writes a tailored resume + cover letter using **your** background
 
 ## Output
 

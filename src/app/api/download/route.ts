@@ -3,6 +3,7 @@ import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { Readable } from "stream";
 import { getOutputRoot } from "@/lib/package";
+import { getSession } from "@/app/actions/auth";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,11 @@ function isSafeZipName(name: string): boolean {
 }
 
 export async function GET(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const zipName = searchParams.get("file");
   const folder = searchParams.get("folder");
