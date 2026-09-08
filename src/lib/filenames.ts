@@ -34,8 +34,15 @@ export function buildDocumentFileNames(fullName: string) {
   };
 }
 
-export function buildZipFileName(company: string, role: string): string {
+export function buildZipFileName(
+  company: string,
+  role: string,
+  suffix?: string,
+): string {
   const companyPart = sanitizeZipSegment(company);
   const rolePart = sanitizeZipSegment(role);
-  return `${companyPart}-${rolePart}.zip`;
+  const suffixPart = suffix
+    ? `-${sanitizeZipSegment(suffix).replace(/\s+/g, "")}`
+    : "";
+  return `${companyPart}-${rolePart}${suffixPart}.zip`;
 }

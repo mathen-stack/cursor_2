@@ -12,6 +12,7 @@ export async function processOneJob(options: {
   jobDescription: string;
   profile: CandidateProfile;
   personal: PersonalInfo;
+  outputSuffix?: string;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
@@ -30,7 +31,7 @@ export async function processOneJob(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, profile, personal, onStep } = options;
+  const { index, profile, personal, outputSuffix, onStep } = options;
   const rawText = options.jobDescription.trim().slice(0, 50000);
 
   if (rawText.length < MIN_JOB_DESCRIPTION_CHARS) {
@@ -79,6 +80,7 @@ export async function processOneJob(options: {
     extracted,
     personal,
     tailored,
+    suffix: outputSuffix,
   });
 
   return {

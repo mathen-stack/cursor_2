@@ -11,7 +11,14 @@ import {
   sessionCookieOptions,
   type SessionPayload,
 } from "@/lib/session";
-import { createUser, findUserByEmail, findUserById } from "@/lib/users";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  isAdminUser,
+  isUserAble,
+  type StoredUser,
+} from "@/lib/users";
 
 export type AuthFormState = {
   message?: string;
@@ -67,7 +74,22 @@ export async function requireSession(): Promise<SessionPayload> {
   if (!session) redirect("/signin");
   const user = await findUserById(session.userId);
   if (!user) redirect("/signin");
+  if (!isUserAble(user)) {
+    const jar = await cookies();
+    jar.delete(SESSION_COOKIE);
+    redirect("/signin");
+  }
   return session;
+}
+
+export async function requireAdmin(): Promise<{
+  session: SessionPayload;
+  user: StoredUser;
+}> {
+  const session = await requireSession();
+  const user = await findUserById(session.userId);
+  if (!user || !isAdminUser(user)) redirect("/");
+  return { session, user };
 }
 
 export async function signup(
@@ -117,6 +139,9 @@ export async function signin(
   const user = await findUserByEmail(parsed.data.email);
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
     return { message: "Email or password is incorrect." };
+  }
+  if (!isUserAble(user)) {
+    return { message: "This account is disabled." };
   }
 
   await setSessionCookie(user);
