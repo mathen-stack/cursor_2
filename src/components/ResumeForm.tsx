@@ -217,6 +217,8 @@ export default function ResumeForm({
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -467,32 +469,37 @@ export default function ResumeForm({
 
           <CandidateForm
             profile={profile}
-            onChange={setProfile}
-            disabled={batchBusy}
+            onChange={(next) => {
+              setSaveMessage(null);
+              setProfile(next);
+            }}
+            disabled={saving || batchBusy}
           />
 
           <div className="composer-footer">
             <button
               type="button"
               className="primary"
+              disabled={saving || batchBusy}
               onClick={() => {
-                if (!isProfileReady(profile)) {
-                  setError(
-                    profileBlockReason(profile) ||
-                      "Fill your profile, then generate.",
-                  );
-                  document.getElementById("candidate-name")?.focus();
-                  return;
-                }
-                setError(null);
-                void saveProfile(normalizeProfile(profile)).catch(() => {
-                  setError("Could not save your profile.");
-                });
-                setTab("generate");
+                void (async () => {
+                  setError(null);
+                  setSaveMessage(null);
+                  setSaving(true);
+                  try {
+                    await saveProfile(profile);
+                    setSaveMessage("Profile saved.");
+                  } catch {
+                    setError("Could not save your profile.");
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
               }}
             >
-              Continue to generate
+              {saving ? "Saving…" : "Save"}
             </button>
+            {saveMessage && <p className="inline-status">{saveMessage}</p>}
             {error && tab === "profile" && <p className="error">{error}</p>}
           </div>
         </section>
