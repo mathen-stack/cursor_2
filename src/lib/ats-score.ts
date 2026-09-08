@@ -33,6 +33,7 @@ function uniqueKeywords(values: string[]): string[] {
 
 function resumeCorpus(resume: TailoredResume): string {
   const parts = [
+    resume.headline,
     resume.summary,
     ...resume.skills.flatMap((g) => [g.category, ...g.items]),
     ...resume.experiences.flatMap((exp) => [

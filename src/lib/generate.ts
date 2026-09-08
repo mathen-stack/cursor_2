@@ -7,13 +7,15 @@ import type {
 } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
+import { buildResumeHeadline } from "./headline";
 import { sanitizePlainText } from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
 Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
-1. Resume sections: Summary, Skills, Experience, Education.
+1. Resume sections: Headline (one line under the name, not a heading), Summary, Skills, Experience, Education.
+   headline format: "Target Role | Skill, Skill, Skill" or four skills. Use the JD job title as the target role and 3-4 concrete hard skills from the JD. No markdown.
 2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
    Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
    Each group has a short category name and 4-10 comma-ready item strings.
@@ -34,6 +36,7 @@ Hard rules:
 JSON shape:
 {
   "resume": {
+    "headline": string,
     "summary": string,
     "skills": [{ "category": string, "items": string[] }],
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
@@ -174,6 +177,7 @@ function normalizeResume(
   extracted: ExtractedJD,
 ): TailoredResume {
   const safe = resume || {
+    headline: "",
     summary: "",
     skills: [],
     experiences: [],
@@ -234,6 +238,11 @@ function normalizeResume(
   });
 
   return {
+    headline: buildResumeHeadline(
+      extracted,
+      skillGroups,
+      String(safe.headline || ""),
+    ),
     summary: sanitizePlainText(String(safe.summary || "")),
     skills: skillGroups,
     experiences,

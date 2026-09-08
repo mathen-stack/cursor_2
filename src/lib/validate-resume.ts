@@ -5,6 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
+import { buildResumeHeadline } from "./headline";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -93,6 +94,7 @@ export function validateAndFixResume(
   const issues: ValidationIssue[] = [];
   const resume = tailored.resume;
 
+  issues.push(...collectMarkdownIssues("headline", resume.headline || ""));
   issues.push(...collectMarkdownIssues("summary", resume.summary));
   for (const [i, exp] of resume.experiences.entries()) {
     if (exp.overview) {
@@ -106,6 +108,11 @@ export function validateAndFixResume(
   }
   issues.push(...collectMarkdownIssues("cover letter", tailored.coverLetter));
 
+  const headline = buildResumeHeadline(
+    extracted,
+    resume.skills,
+    resume.headline,
+  );
   const summary = sanitizePlainText(resume.summary);
   const coverLetter = sanitizePlainText(tailored.coverLetter);
   const skills = sanitizeSkills(resume.skills);
@@ -277,6 +284,7 @@ export function validateAndFixResume(
   }
 
   const cleanedResume: TailoredResume = {
+    headline,
     summary,
     skills,
     experiences,

@@ -62,6 +62,7 @@ export interface SkillGroup {
 }
 
 export interface TailoredResume {
+  headline: string;
   summary: string;
   skills: SkillGroup[];
   experiences: TailoredExperience[];
