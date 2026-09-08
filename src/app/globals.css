@@ -900,6 +900,10 @@ button {
   align-items: start;
 }
 
+.admin-editor .tabs {
+  margin-bottom: 1rem;
+}
+
 .admin-users {
   list-style: none;
   margin: 0.85rem 0 0;

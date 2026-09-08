@@ -14,11 +14,13 @@ import { isProfileReady } from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
 import type { PublicUser, UserRole } from "@/lib/users";
 
+type UserTab = "account" | "profile" | "tailoring";
+
 function actionError(err: unknown) {
   return err instanceof Error ? err.message : "Administrator action failed.";
 }
 
-function AccountEditor({
+function AccountTab({
   adminId,
   selected,
   busy,
@@ -38,17 +40,13 @@ function AccountEditor({
   const [email, setEmail] = useState(selected.email);
   const [role, setRole] = useState<UserRole>(selected.role);
   const [password, setPassword] = useState("");
-  const [profile, setProfile] = useState<CandidateProfile>(selected.profile);
 
   return (
     <>
       <div className="section-head">
         <div>
           <h2>Account</h2>
-          <p className="hint">
-            Login and sign-up details for this account. Tailoring history is on
-            the Tailoring tab.
-          </p>
+          <p className="hint">Login and sign-up details for this user.</p>
         </div>
       </div>
 
@@ -112,7 +110,9 @@ function AccountEditor({
               });
               onUsersChange((current) =>
                 current.map((user) =>
-                  user.id === updated.id ? { ...updated, profile } : user,
+                  user.id === updated.id
+                    ? { ...updated, profile: selected.profile }
+                    : user,
                 ),
               );
               setPassword("");
@@ -144,8 +144,29 @@ function AccountEditor({
           Delete account
         </button>
       </div>
+    </>
+  );
+}
 
-      <div className="section-head section-head-follow">
+function ProfileTab({
+  selected,
+  busy,
+  onBusy,
+  onUsersChange,
+}: {
+  selected: PublicUser;
+  busy: boolean;
+  onBusy: (label: string, work: () => Promise<void>) => Promise<void>;
+  onUsersChange: (
+    update: (current: PublicUser[]) => PublicUser[],
+    nextSelectedId?: string,
+  ) => void;
+}) {
+  const [profile, setProfile] = useState<CandidateProfile>(selected.profile);
+
+  return (
+    <>
+      <div className="section-head">
         <div>
           <h2>Profile</h2>
           <p className="hint">
@@ -192,7 +213,7 @@ export default function AdminPanel({
   initialUsers: PublicUser[];
   initialRecords: AdminTailorRecord[];
 }) {
-  const [tab, setTab] = useState<"accounts" | "tailoring">("accounts");
+  const [userTab, setUserTab] = useState<UserTab>("account");
   const [users, setUsers] = useState(initialUsers);
   const [records, setRecords] = useState(initialRecords);
   const [selectedId, setSelectedId] = useState(initialUsers[0]?.id ?? "");
@@ -216,6 +237,19 @@ export default function AdminPanel({
         user.email.toLowerCase().includes(needle),
     );
   }, [query, users]);
+
+  const selectedRecords = useMemo(
+    () => records.filter((record) => record.userId === selectedId),
+    [records, selectedId],
+  );
+
+  const recordCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const record of records) {
+      counts.set(record.userId, (counts.get(record.userId) || 0) + 1);
+    }
+    return counts;
+  }, [records]);
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(true);
@@ -247,54 +281,8 @@ export default function AdminPanel({
     }
   }
 
-  const recordCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const record of records) {
-      counts.set(record.userId, (counts.get(record.userId) || 0) + 1);
-    }
-    return counts;
-  }, [records]);
-
   return (
     <div className="admin-page">
-      <div className="tabs" role="tablist" aria-label="Administrator">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "accounts"}
-          className={`tab${tab === "accounts" ? " active" : ""}`}
-          onClick={() => setTab("accounts")}
-        >
-          Accounts
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "tailoring"}
-          className={`tab${tab === "tailoring" ? " active" : ""}`}
-          onClick={() => setTab("tailoring")}
-        >
-          Tailoring
-          <span className="tab-meta">{records.length}</span>
-        </button>
-      </div>
-
-      {tab === "tailoring" && (
-        <>
-          <TailoringRecords
-            records={records}
-            users={users}
-            busy={busy}
-            onBusy={run}
-            onRecordsChange={(update) => setRecords(update(records))}
-          />
-          {message && <p className="inline-status">{message}</p>}
-          {error && <p className="error">{error}</p>}
-        </>
-      )}
-
-      {tab === "accounts" && (
-        <>
       <section className="composer">
         <div className="section-head">
           <div>
@@ -362,6 +350,7 @@ export default function AdminPanel({
                   role: newRole,
                 });
                 changeUsers((current) => [...current, created], created.id);
+                setUserTab("account");
                 setNewName("");
                 setNewEmail("");
                 setNewPassword("");
@@ -428,14 +417,67 @@ export default function AdminPanel({
 
         <section className="composer admin-editor">
           {selected ? (
-            <AccountEditor
-              key={selected.id}
-              adminId={adminId}
-              selected={selected}
-              busy={busy}
-              onBusy={run}
-              onUsersChange={changeUsers}
-            />
+            <>
+              <div className="tabs" role="tablist" aria-label="User details">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={userTab === "account"}
+                  className={`tab${userTab === "account" ? " active" : ""}`}
+                  onClick={() => setUserTab("account")}
+                >
+                  Account
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={userTab === "profile"}
+                  className={`tab${userTab === "profile" ? " active" : ""}`}
+                  onClick={() => setUserTab("profile")}
+                >
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={userTab === "tailoring"}
+                  className={`tab${userTab === "tailoring" ? " active" : ""}`}
+                  onClick={() => setUserTab("tailoring")}
+                >
+                  Tailoring record
+                  <span className="tab-meta">{selectedRecords.length}</span>
+                </button>
+              </div>
+
+              {userTab === "account" && (
+                <AccountTab
+                  key={`${selected.id}-account`}
+                  adminId={adminId}
+                  selected={selected}
+                  busy={busy}
+                  onBusy={run}
+                  onUsersChange={changeUsers}
+                />
+              )}
+              {userTab === "profile" && (
+                <ProfileTab
+                  key={`${selected.id}-profile`}
+                  selected={selected}
+                  busy={busy}
+                  onBusy={run}
+                  onUsersChange={changeUsers}
+                />
+              )}
+              {userTab === "tailoring" && (
+                <TailoringRecords
+                  key={`${selected.id}-tailoring`}
+                  records={selectedRecords}
+                  busy={busy}
+                  onBusy={run}
+                  onRecordsChange={(update) => setRecords(update(records))}
+                />
+              )}
+            </>
           ) : (
             <p className="hint">Create an account to start the user list.</p>
           )}
@@ -444,8 +486,6 @@ export default function AdminPanel({
           {error && <p className="error">{error}</p>}
         </section>
       </div>
-        </>
-      )}
     </div>
   );
 }

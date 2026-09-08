@@ -29,9 +29,10 @@ Open [http://localhost:3000](http://localhost:3000) and **sign up** or **sign in
 
 The first account created on a site is an **administrator**. Admins see an **Admin** link and can open `/admin` to:
 
-- Create and delete accounts, change roles or passwords
-- Edit any user’s saved profile
-- Browse, download, and delete every tailoring run (success or failure)
+- Create accounts at the top of the page
+- Select a user from the left list
+- Open that user’s **Account**, **Profile**, or **Tailoring record** tab
+- Download or delete that user’s generate runs
 
 ## Flow
 
